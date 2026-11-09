@@ -31,7 +31,7 @@ for (const phase of ['read-dispatch', 'approval-dispatch', 'completion']) {
 		'Actual Tool ledger ' + phase + ' commit with lost acknowledgement never repeats the original operation',
 		async (t) => {
 			const directory = await mkdtemp(
-				join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-tool-ledger-'),
+				join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-tool-ledger-'),
 			);
 			let sshd;
 			let f;

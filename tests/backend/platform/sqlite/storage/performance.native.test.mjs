@@ -16,7 +16,7 @@ import { RunChanges } from '../../../../../packages/backend/dist/modules/agent/r
 import { providerStorageDouble, threadStorageDouble } from '../../../../support/agent-storage-doubles.mjs';
 
 async function database(t, version = applicationMigrations.length) {
-	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACTS_ROOT ?? tmpdir(), 'nexus-performance-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-performance-'));
 	const db = SqliteRuntime.open(join(root, 'test.sqlite'));
 	t.after(async () => {
 		try {

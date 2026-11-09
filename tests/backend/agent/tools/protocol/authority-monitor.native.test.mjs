@@ -33,7 +33,7 @@ await test(
 	'Shell Job authority reuses only the current completed effect and its committed dispatch proof',
 	{ timeout: 60000 },
 	async (t) => {
-		const directory = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'effect-authority-'));
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'effect-authority-'));
 		const sshd = await openSshd(directory);
 		t.after(() => sshd.close());
 		const f = await openAgentExecution(directory, sshd, {

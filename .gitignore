@@ -42,25 +42,6 @@ build/Release
 /.agent-tmp/
 node_modules/
 jspm_packages/
-scripts/*
-!scripts/check-package-management.mjs
-!scripts/checks/
-!scripts/checks/**
-!scripts/e2e/
-!scripts/e2e/**
-!scripts/docker/
-!scripts/docker/**
-!scripts/agent-runner/
-!scripts/agent-runner/**
-!scripts/backend/
-!scripts/backend/**
-!scripts/check-test-policy.mjs
-!scripts/format/
-!scripts/format/**
-!scripts/patches/
-!scripts/patches/**
-!scripts/maintenance/
-!scripts/maintenance/**
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -150,10 +131,6 @@ dist
 .pnp.*
 *.db
 /packages/data
-*.db
-/packages/data
-*.db
-*.db
 *.jpg
 /packages/backend/uploads/backgrounds
 /temp_iterm_schemes
@@ -186,8 +163,6 @@ electron-app/dist_electron/
 # Framework reports, databases and generated test environments
 /tests/.artifacts/
 /tests/.cache/
-
-# Agent plugin source/build tooling (generated signed packages stay outside the repo)
 
 # Generated immutable Host validation build descriptor.
 /packages/host-test-artifact.json

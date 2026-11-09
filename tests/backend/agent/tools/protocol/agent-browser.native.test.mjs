@@ -13,7 +13,7 @@ import { openSshd, until, expectStatus } from '../../../../support/protocols/ope
 import { openPuppeteerBrowser } from '../../../../support/protocols/puppeteer-browser.mjs';
 
 await test('B10 actual CDP Browser ownership and governed operations', { timeout: 90000 }, async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-browser-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-browser-'));
 	let sshd;
 	let browser;
 	let browserOwner;

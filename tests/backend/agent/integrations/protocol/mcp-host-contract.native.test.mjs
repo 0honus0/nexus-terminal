@@ -12,12 +12,7 @@ import { openSshd, expectStatus, until } from '../../../../support/protocols/ope
 const methods = ['tool', 'resource', 'prompt'];
 
 async function fixture(t) {
-	const root = await mkdtemp(
-		join(
-			process.env.NEXUS_TEST_ARTIFACT_DIR ?? process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(),
-			'mcp-contract-',
-		),
-	);
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'mcp-contract-'));
 	const sshd = await openSshd(root);
 	t.after(() => sshd.close());
 	const external = await openMcp();

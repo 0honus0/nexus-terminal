@@ -16,7 +16,7 @@ import { hasToolIdentity } from '../../../../support/package-tool-catalog.mjs';
 import { openSshd, until, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
 await test('B10 actual SSH ACP provider and independent permission lifecycle', { timeout: 120000 }, async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-acp-provider-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-acp-provider-'));
 	const sshd = await openSshd(root);
 	t.after(() => sshd.close());
 	let sequence = 0;

@@ -116,7 +116,7 @@ async function fixture() {
 }
 
 test('OIDC v3 -> v4 preserves data, records migration once and reopens', async () => {
-	const base = process.env.NEXUS_TEST_ARTIFACTS_ROOT ?? tmpdir();
+	const base = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 	await mkdir(base, { recursive: true });
 	const root = await mkdtemp(join(base, 'oidc-migration-'));
 	const path = join(root, 'upgrade.sqlite');

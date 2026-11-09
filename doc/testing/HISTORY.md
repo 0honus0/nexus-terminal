@@ -2776,3 +2776,37 @@ push与手动workflow_dispatch完整通过后均自动回写耗时估算，不�
 [main amd64 dev发布42574293384](https://github.com/0honus0/nexus-terminal/actions/runs/42574293384)成功，来源`ca29a62f8b43fb7a176b3cb12b205729866a39c5`。`dev`与`sha-ca29a62f8b43`摘要均为`sha256:36b8882590f13bd40b2e03b4c9404566e1178f3ac87edc62aa59be3d10b8fc9f`；只读核对产品平台linux/amd64、manifest/config摘要及OCI revision/source，未下载镜像层或部署生产。发布提交相对被测版本仅包含本次成功门禁自动回写的耗时估算，已逐文件复核；运行包源码与SDK未变，不重发相同不可变插件版本；插件市场正式组合继续为catalog-20261108-3。随后文档收口提交不改变运行源码。
 
 本轮可读证据根`/dev/shm/nexus-performance-ci-20261108`包含两仓最终原始zip、逐项审核JSON、作业元数据与发布manifest/config；本地证据根`/dev/shm/nexus-performance-20261109-optimization`保留首次失败、定向回归及预检产物。源码仓不保留生成报告。
+
+## 测试重构全仓维护复核（2026-11-09）
+
+本轮按用户要求复核整个测试体系，包含两仓发现/入口、workflow、runner、产物与清理、静态夹具和文档。继续遵守不追加耗时优化、不改产品UI、不部署或执行线上删除；SQL/Shared/SDK及正式插件运行包未变。H-09核对USAGE现有行为说明仍准确。
+
+| 审核表   | 复核结论                                                                                                                                                        |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 功能对应 | 迁移索引326份来源、86个展开场景、55处外仓owner均有目标；本体浏览器430、ingress2，Node120文件。固定签包源码仍有正式消费者，保留；没有把旧Agent业务重复放回Host。 |
+| 职责归属 | 框架持发现/断言；CI装配与成品分发；runner脚本持内容身份和周刷新；维护脚本持manifest/Actions保留；smoke脚本持项目与数据库生命周期。未新增调度服务或测试框架。    |
+| 类型归属 | 环境产物沿用同一Host resolver，按真实job执行时间选择；ZIP摘要、source SHA、fingerprint及本仓runner digest在边界核对，两仓固定Node。未修改产品协议或增加限制。   |
+| 完成证据 | 本地静态与定向结果见下表；最终本体完整E2E和插件独立Validate另行记录，上一轮PASS只作原基线。本轮未执行线上维护删除。                                             |
+
+修正的遗漏：
+
+- E2E触发补齐scripts、补丁、assets和workflow/格式配置；删除无生产者的旧诊断路径。
+- Runner指纹补齐dockerignore、递归补丁与vendor；内容身份跨周稳定，准备阶段固定周标签、指纹和digest，latest仅为便利别名，避免跨分支或跨周误用。
+- 清理保留默认分支成功完整E2E及准确Host环境/runner闭包；按真实job读取ZIP并核对摘要，缺失/过期/来源错误即停止。删除前复查main身份；不把其它分支latest替代成功main。
+- Compose smoke覆盖宿主同名环境变量，固定自身数据目录；清理错误使作业失败，测试失败保留数据库/日志/退出事实。上传仅限诊断和失败数据，不上传临时`.env`密钥。
+- 31个测试/辅助文件统一`NEXUS_TEST_ARTIFACT_DIR`，移除旧Agent/复数别名；ingress使用独立报告目录并在CI拒绝only与flaky通过。
+- 移除gitignore旧scripts总屏蔽、失效allowlist与重复条目；插件Node从浮动node改为精确26.13.0，检查与发布同版本，Host准备核对版本并复用环境resolver。
+- 更新测试/维护/部署架构、本体与插件README及过时SQLite测试路径；性能目标未达与暂停决定如实保留，资源采集已实现的内容不再误写为未完成。
+
+| 本地验证     | 实测与证据                                                                          |
+| ------------ | ----------------------------------------------------------------------------------- |
+| 根check      | 38.66秒通过，含布局索引、Backend/Frontend/测试类型和全仓ESLint。                    |
+| fast         | 120文件307项通过，14.52秒；含新增runner3项、smoke4项及环境resolver回归。            |
+| 维护脚本     | 36项通过，0.42秒；覆盖超期空queued、主分支环境闭包、损坏/失效来源及维护中main变化。 |
+| 全仓格式     | 35.57秒通过；两仓workflow actionlint与bash语法通过。                                |
+| 文档链接     | 本体doc/README及两仓测试README共26文件、293个本地路径/锚点，无失效。                |
+| 真实环境只读 | 新解析器成功核对Host42572220179的真实ZIP及runner digest；只读，不执行删除。         |
+
+首次维护回归31项中1项失败：旧main-only fixture把成功main环境指向已删除候选，暴露旧预期与新保护规则冲突；修正来源fixture后原删除断言保留，31项通过，再补5项queued回归至36项。首次插件check因本地已清除可重建backend/index.mjs而失败，保留原日志；按正式入口先构建，再执行检查，不能将缺构建误判为代码通过。
+
+证据根：`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，保留首次失败、原始报告、资源指标、发现盘点及文档链接结果。最终远程门禁待回填。

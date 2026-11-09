@@ -144,6 +144,37 @@ test('API failures propagate without publishing partial IDs', async () => {
 	);
 });
 
+test('test environments reuse only the original successful environment job artifact on partial reruns', async () => {
+	const environment = { ...job(1, 1), name: 'Prepare shared test runner image', run_attempt: 2 };
+	const artifacts = [
+		{ ...artifact(31, 1, 1), name: 'test-environment-test-sha-1' },
+		{ ...artifact(32, 1, 2), name: 'test-environment-test-sha-2' },
+	];
+	assert.equal(
+		await resolveBuildArtifact({ ...source([environment], artifacts), sha: 'test-sha', kind: 'environment' }),
+		'31',
+	);
+	await assert.rejects(
+		resolveBuildArtifact({
+			...source(
+				[{ ...environment, started_at: timestamp(2, 0), completed_at: timestamp(2, 10) }],
+				artifacts.slice(0, 1),
+			),
+			sha: 'test-sha',
+			kind: 'environment',
+		}),
+		/environment artifact unavailable/,
+	);
+	await assert.rejects(
+		resolveBuildArtifact({
+			...source([{ ...environment, conclusion: 'failure' }], artifacts),
+			sha: 'test-sha',
+			kind: 'environment',
+		}),
+		/One successful application build job is required/,
+	);
+});
+
 // Job dependencies replace readiness polling; source failure must not start shard work.
 test('artifact resolution rejects missing, pending, failed or ambiguous build jobs immediately', async () => {
 	const build = { ...job(1, 1), name: 'Checks and format' };

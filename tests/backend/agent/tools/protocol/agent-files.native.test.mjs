@@ -13,7 +13,7 @@ import { openAgentExecution } from '../../runs/support/agent-execution-fixture.m
 import { openSshd, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
 await test('B10 Agent file operations and HTTP refusal boundaries', async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-agent-files-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-agent-files-'));
 	let sshd;
 	let sequence = 0;
 

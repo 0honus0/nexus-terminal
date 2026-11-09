@@ -14,9 +14,7 @@ await test(
 	'Readonly tool participant: SDK4 Child effects retain exact live dispatch authority',
 	{ timeout: 60000 },
 	async (t) => {
-		const directory = await mkdtemp(
-			join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'readonly-authority-'),
-		);
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'readonly-authority-'));
 		const sshd = await openSshd(directory);
 		t.after(() => sshd.close());
 		const f = await openAgentExecution(directory, sshd, {

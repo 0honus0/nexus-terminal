@@ -20,7 +20,7 @@ const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 // Exercise the real service with actual files and byte streams. Resource translation
 // is local to this fixture; no mock hashes, fake snapshots or shell-side mutations.
 async function fixture() {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-file-capacity-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-file-capacity-'));
 	const signal = new AbortController().signal;
 	let streams = 0;
 	let reads = 0;

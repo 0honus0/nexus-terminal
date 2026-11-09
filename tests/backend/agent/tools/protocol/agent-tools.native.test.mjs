@@ -14,7 +14,7 @@ import {
 import { ModelNetworkFailure } from '../../../../../packages/backend/dist/platform/ai/model-port.js';
 import { AGENT_CAPABILITIES } from '../../../../../packages/shared/dist/agent/governance/values.js';
 
-const artifactRoot = process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 
 await test(
 	'Agent tools: live catalog, large conversation and model adapter budgets stay independent',

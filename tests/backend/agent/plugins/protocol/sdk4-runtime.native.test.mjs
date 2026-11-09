@@ -9,7 +9,7 @@ import { PluginCallableRefusal } from '../../../../../packages/backend/dist/modu
 import { NodeModuleRuntime } from '../../../../../packages/backend/dist/platform/isolation/adapters/node-module-runtime.js';
 
 await test('SDK4 isolation publishes registrations, preserves typed refusal, and releases with no capabilities', async (t) => {
-	const root = process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+	const root = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 	const directory = await mkdtemp(join(root, 'isolated-sdk4-'));
 	const modules = new NodeModuleRuntime(directory);
 	await modules.recover();

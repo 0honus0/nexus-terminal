@@ -11,7 +11,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 suffix="${suffix//[^A-Za-z0-9_.-]/-}"
 project="nexus-deployment-smoke-${suffix,,}"
-work="$(mktemp -d)"
+artifact_root="${NEXUS_TEST_ARTIFACT_DIR:-$repo_root/tests/.artifacts/docker-smoke}"
+mkdir -p "$artifact_root"
+artifact_root="$(cd "$artifact_root" && pwd)"
+work="$(mktemp -d "$artifact_root/work.XXXXXX")"
+diagnostics="$artifact_root/diagnostics"
+mkdir -p "$diagnostics"
+unset COMPOSE_PROFILES
 compose_file="$work/docker-compose.yml"
 override="$work/docker-compose.override.yml"
 env_file="$work/.env"
@@ -21,12 +27,40 @@ failed=1
 
 repo="${image%:*}"; tag="${image##*:}"
 compose() { docker compose --project-name "$project" --project-directory "$work" --env-file "$env_file" -f "$compose_file" -f "$override" "$@"; }
-set_env() { local k="$1" v="$2" t="$env_file.tmp"; grep -v "^${k}=" "$env_file" >"$t" || true; printf '%s=%s\n' "$k" "$v" >>"$t"; mv "$t" "$env_file"; }
+set_env() {
+  local k="$1" v="$2" t="$env_file.tmp" status=0
+  grep -v "^${k}=" "$env_file" >"$t" || status=$?
+  [[ "$status" -le 1 ]] || return "$status"
+  printf '%s=%s\n' "$k" "$v" >>"$t"
+  mv "$t" "$env_file"
+  # Compose gives process variables precedence over --env-file.
+  export "$k=$v"
+}
+capture_diagnostics() {
+  compose ps -a >>"$diagnostics/containers.log" 2>&1 || echo "Unable to collect container state." >&2
+  compose logs --no-color >>"$diagnostics/compose.log" 2>&1 || echo "Unable to collect Compose logs." >&2
+}
 cleanup() {
-  local status=$?
-  if [[ "$failed" -ne 0 || "$status" -ne 0 ]]; then compose ps -a >&2 || true; compose logs --no-color >&2 || true; fi
-  compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
-  rm -rf "$work" >/dev/null 2>&1 || true
+  local status=$? cleanup_status=0
+  trap - EXIT
+  if [[ "$failed" -ne 0 || "$status" -ne 0 ]]; then capture_diagnostics; fi
+  compose down --volumes --remove-orphans --timeout 10 >"$diagnostics/cleanup.log" 2>&1 || cleanup_status=$?
+  if [[ "$cleanup_status" -ne 0 ]]; then
+    capture_diagnostics
+    echo "Docker cleanup failed; retained workspace: $work" >&2
+    cat "$diagnostics/cleanup.log" >&2
+    [[ "$status" -ne 0 ]] || status="$cleanup_status"
+  fi
+  if [[ "$failed" -eq 0 && "$status" -eq 0 ]]; then
+    rm -rf "$work" || status=$?
+  else
+    echo "Deployment smoke failed; retained workspace: $work" >&2
+    # Full logs remain in the artifact; keep the Actions console concise.
+    tail -n 80 "$diagnostics/compose.log" >&2
+    [[ "$status" -ne 0 ]] || status=1
+  fi
+  printf 'test_completed=%s\nexit_status=%s\ncleanup_status=%s\nworkspace=%s\n' \
+    "$((1 - failed))" "$status" "$cleanup_status" "$work" >"$diagnostics/result.txt"
   exit "$status"
 }
 trap cleanup EXIT
@@ -47,6 +81,7 @@ mkdir -p "$data_dir"
 chmod 0700 "$data_dir"
 # Ephemeral test key, injected through the same required setting as deployment.
 set_env NEXUS_ENCRYPTION_KEY "$(node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))")"
+set_env NEXUS_DATA_DIR "$data_dir"
 set_env NEXUS_IMAGE_REPOSITORY "$repo"
 set_env NEXUS_IMAGE_TAG "$tag"
 set_env NEXUS_HTTP_PORT 0

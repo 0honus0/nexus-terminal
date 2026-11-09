@@ -12,7 +12,7 @@ await test(
 	{ timeout: 60000 },
 	async (t) => {
 		const root = await mkdtemp(
-			join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-batch-preflight-'),
+			join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-agent-batch-preflight-'),
 		);
 		let sshd;
 		try {

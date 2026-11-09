@@ -10,7 +10,7 @@ import { listAgentApprovalHistory } from '../../runs/support/agent-approval-fixt
 import { openMcp } from '../../runs/support/mcp-server-fixture.mjs';
 import { openSshd, until, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
-const artifactRoot = process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 
 async function configureMcp(f, external) {
 	const base = '/api/v1/agent/plugins/apps/' + f.appId + '/instances';

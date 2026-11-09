@@ -65,7 +65,7 @@ await test(
 	'Agent signed contribution uses real isolated RPC and single-use tool approvals',
 	{ timeout: 90000 },
 	async (t) => {
-		const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-extension-'));
+		const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-agent-extension-'));
 		const sshd = await openSshd(root);
 		t.after(() => sshd.close());
 		let sequence = 0;

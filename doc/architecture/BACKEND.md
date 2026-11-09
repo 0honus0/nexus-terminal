@@ -1006,4 +1006,4 @@ Job 日志与模型预览分离，沿 Agent Model 调用 Platform TextLogStore�
 5. **入口与安装**：页面共享 `/ws/agent-runs` 的 Run 状态源在状态页与心跳权限核对时调用 `withState`；SDK Run 事件和 Memory 失效各使用安装注册的具名源，不把通用 WS 层变成跨领域业务查询器。普通写入仍用 `transaction`，普通嵌套事务仍拒绝。迁移继续由 `bootstrap/schema.ts` 顺序安装。
 6. **数据、事务与并发**：显式组合只占一次排队和一次提交；身份在事务前后复查，所有参与者共享快照。审批读取的惰性过期写入参与原事务。迁移 5–9 分别增加预算 Root、审批 Run/Tool、决议 approval、上下文压缩 Run 索引；迁移 10 新增通知 pending 表并转换尚无 fanout 回执的审计记录，已发布迁移不改写。审计新增与 pending 同事务，fanout 回执与 pending 删除同事务；快照验证 pending/processed 恰好分割保留审计，恢复时抑制历史通知。并发发布共用裁剪任务，裁剪只删除已分发记录。
 7. **生命周期与失败**：参与者失败即使被上层捕获也阻止提交；未等待的参与工作先收敛再回滚，失效 scope 的迟到访问拒绝。提交未知保持原数据库不可用围栏，不自动重试；组合不授予独立后台工作临时权限。发布与清理仍由 AuditEventOwner 跟踪至关闭完成；请求和发布集合按实际任务增长，不叠加独立数量门槛，quiesce 后拒绝新请求，已接纳请求仍可发布其审计。
-8. **当前能力与验收**：`backend-next-performance.integration.mjs` 纳入正式 Agent E2E，覆盖升级、回滚、撤权、迟到参与者、通知恢复及同秒历史保留。排队耗时包含前序任务等待，执行耗时包含整个操作与提交，commit 统计提交尝试（含失败）；它们不等于逐条 SQL 耗时或线上性能提升比例。实际执行证据见 testing。
+8. **当前能力与验收**：`tests/backend/platform/sqlite/storage/performance.native.test.mjs`由Node原生测试直接执行，覆盖升级、回滚、撤权、迟到参与者、通知恢复及同秒历史保留。排队耗时包含前序任务等待，执行耗时包含整个操作与提交，commit 统计提交尝试（含失败）；它们不等于逐条 SQL 耗时或线上性能提升比例。实际执行证据见 testing。

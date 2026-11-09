@@ -1,3 +1,5 @@
+import { readTestEnvironment } from './test-environment.mjs';
+
 /** Manual repository maintenance. No product data or unrelated packages are touched. */
 export default async function cleanup({ github, context, core }) {
 	const { owner, repo } = context.repo;
@@ -110,6 +112,18 @@ export default async function cleanup({ github, context, core }) {
 	);
 	const initialRuns = await phase('Classify unfinished runs', () => classifyUnfinishedRuns(runs));
 
+	const isSuccessfulE2e = (run) =>
+		run.path === '.github/workflows/e2e.yml' && run.status === 'completed' && run.conclusion === 'success';
+
+	const newestMainE2e = runs.find(
+		(run) => isSuccessfulE2e(run) && run.head_branch === repository.data.default_branch,
+	);
+	const testEnvironment = newestMainE2e
+		? await phase('Inspect successful main test environment', () =>
+				readTestEnvironment({ github, owner, repo, run: newestMainE2e }),
+			)
+		: null;
+
 	const protectedTags = ['main', 'dev', 'latest'];
 	const retainedRevisions = new Set();
 
@@ -123,6 +137,9 @@ export default async function cleanup({ github, context, core }) {
 			});
 		} catch (error) {
 			if (error.status === 404) {
+				if (packageName === 'nexus-terminal-e2e-runner' && testEnvironment) {
+					throw new Error('The successful main test runner package is missing; rerun E2E before cleanup.');
+				}
 				core.info(`Skip package ${packageName}: not published.`);
 				return null;
 			}
@@ -137,6 +154,9 @@ export default async function cleanup({ github, context, core }) {
 			per_page: 100,
 		});
 		if (!versions.length) {
+			if (packageName === 'nexus-terminal-e2e-runner' && testEnvironment) {
+				throw new Error('The successful main test runner package is empty; rerun E2E before cleanup.');
+			}
 			core.info(`Skip package ${packageName}: no versions.`);
 			return null;
 		}
@@ -189,6 +209,13 @@ export default async function cleanup({ github, context, core }) {
 		}
 
 		for (const version of channels.values()) await retainManifest(version.name);
+		if (packageName === 'nexus-terminal-e2e-runner' && testEnvironment) {
+			if (!versions.some((version) => version.name === testEnvironment.digest)) {
+				throw new Error('The successful main test runner is missing; rerun E2E before cleanup.');
+			}
+			await retainManifest(testEnvironment.digest);
+			core.info(`Keep runner for successful main E2E ${newestMainE2e.id}: ${testEnvironment.image}`);
+		}
 		core.info(
 			`Package ${packageName}: ${versions.length} versions, ${channels.size} protected tags, ${retainedDigests.size} retained manifests, ${versions.filter((version) => !retainedDigests.has(version.name)).length} deletion candidates.`,
 		);
@@ -228,8 +255,24 @@ export default async function cleanup({ github, context, core }) {
 	});
 
 	// Recheck both packages before every image deletion; package DELETE has no conditional digest guard.
+	async function verifyMainE2e() {
+		const { data } = await github.rest.actions.listWorkflowRuns({
+			owner,
+			repo,
+			workflow_id: 'e2e.yml',
+			branch: repository.data.default_branch,
+			status: 'success',
+			per_page: 1,
+		});
+		const [fresh] = data.workflow_runs;
+		if (fresh?.id !== newestMainE2e?.id || fresh?.run_attempt !== newestMainE2e?.run_attempt) {
+			throw new Error('The successful main E2E changed during cleanup. Stop and rerun.');
+		}
+	}
+
 	async function verifyChannels() {
 		for (const item of packages) await item.verifyChannels();
+		await verifyMainE2e();
 	}
 
 	await verifyChannels();
@@ -245,10 +288,14 @@ export default async function cleanup({ github, context, core }) {
 		}
 	}
 	// A timing-only bot commit may separate a published revision from its verified E2E source.
-	const newestGreenE2e = runs.find((run) => run.path === '.github/workflows/e2e.yml' && run.conclusion === 'success');
+	const newestGreenE2e = runs.find(isSuccessfulE2e);
 	if (newestGreenE2e) {
 		retainedRuns.add(newestGreenE2e.id);
 		core.info(`Keep run ${newestGreenE2e.id}: newest successful E2E.`);
+	}
+	if (newestMainE2e) {
+		retainedRuns.add(newestMainE2e.id);
+		core.info(`Keep run ${newestMainE2e.id}: successful main Host build and pinned test environment.`);
 	}
 	const artifacts = await phase('Inspect Actions artifacts', () =>
 		github.paginate(github.rest.actions.listArtifactsForRepo, { owner, repo, per_page: 100 }),
@@ -346,6 +393,7 @@ export default async function cleanup({ github, context, core }) {
 					core.info(`Keep artifact ${artifact.id}: run ${runId} is ${fresh.status}.`);
 					continue;
 				}
+				await verifyMainE2e();
 				if (
 					await deleteIfPresent(`artifact ${artifact.id}`, () =>
 						github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifact.id }),
@@ -370,6 +418,7 @@ export default async function cleanup({ github, context, core }) {
 					core.info(`Keep restarted run ${run.id}: ${fresh.status}`);
 					continue;
 				}
+				await verifyMainE2e();
 				if (
 					await deleteIfPresent(`run ${run.id}`, () =>
 						github.rest.actions.deleteWorkflowRun({ owner, repo, run_id: run.id }),
@@ -455,7 +504,7 @@ export default async function cleanup({ github, context, core }) {
 	await core.summary
 		.addHeading(deferred ? 'Cleanup finished with deferred deletions' : 'Manual cleanup complete')
 		.addRaw(
-			`Kept main/dev/latest and their manifest closure, successful evidence, newest green E2E and this run. Active/restarted runs and all retained artifacts remain protected. ${finalRuns.staleQueued.length} stale queued records do not block cleanup and were not deleted. ${deferred ? 'Image/cache cleanup was deferred because other runs are active; rerun after they finish.' : 'Image/cache cleanup was not deferred.'}\n`,
+			`Kept main/dev/latest and their manifest closure, successful evidence, newest green E2E, successful main Host build/test runner and this run. Active/restarted runs and all retained artifacts remain protected. ${finalRuns.staleQueued.length} stale queued records do not block cleanup and were not deleted. ${deferred ? 'Image/cache cleanup was deferred because other runs are active; rerun after they finish.' : 'Image/cache cleanup was not deferred.'}\n`,
 		)
 		.addTable([
 			['Resource', 'Deleted', 'Planned candidates', 'Deferred / kept after recheck'],

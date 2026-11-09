@@ -9,18 +9,16 @@ on:
       - '.dockerignore'
       - 'packages/**'
       - 'tests/**'
-      - 'scripts/e2e/**'
-      - 'scripts/docker/**'
-      - 'scripts/checks/**'
-      - 'scripts/format/**'
-      - 'scripts/build/build.sh'
+      - 'scripts/**'
+      - 'assets/**'
+      - 'eslint.config.mjs'
+      - '.prettierrc'
       - '.prettierignore'
       - '.node-version'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
-      - '.github/workflows/e2e.yml'
-      - '.github/workflows/publish-ghcr.yml'
+      - '.github/workflows/**'
   pull_request:
     paths:
       - 'Dockerfile'
@@ -29,18 +27,16 @@ on:
       - '.dockerignore'
       - 'packages/**'
       - 'tests/**'
-      - 'scripts/e2e/**'
-      - 'scripts/docker/**'
-      - 'scripts/checks/**'
-      - 'scripts/format/**'
-      - 'scripts/build/build.sh'
+      - 'scripts/**'
+      - 'assets/**'
+      - 'eslint.config.mjs'
+      - '.prettierrc'
       - '.prettierignore'
       - '.node-version'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
-      - '.github/workflows/e2e.yml'
-      - '.github/workflows/publish-ghcr.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       test_runners:
@@ -84,6 +80,7 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.pinned-image.outputs.image }}
+      fingerprint: ${{ steps.image.outputs.fingerprint }}
       matrix: ${{ steps.matrix.outputs.value }}
     steps:
       - name: Checkout repository
@@ -99,9 +96,14 @@ jobs:
         env:
           E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
         run: |
-          image="$E2E_RUNNER_REPOSITORY:latest"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-          echo "Using E2E runner image $image"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { getRunnerImageInfo } from './scripts/e2e/runner-image-info.mjs';
+          const { fingerprint, tag } = getRunnerImageInfo();
+          const image = `${process.env.E2E_RUNNER_REPOSITORY}:${tag}`;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `image=${image}\ntag=${tag}\nfingerprint=${fingerprint}\n`);
+          console.log(`Using E2E runner image ${image}`);
+          JS
 
       - name: Distribute all test layers across runners
         id: matrix
@@ -119,9 +121,10 @@ jobs:
         id: check
         env:
           E2E_RUNNER_IMAGE: ${{ steps.image.outputs.image }}
+          EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
           CAN_UPDATE_RUNNER_IMAGE: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: |
-          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
+          expected="$EXPECTED_FINGERPRINT"
           current="$(docker buildx imagetools inspect "$E2E_RUNNER_IMAGE" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' 2>/dev/null | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p' || true)"
           if [ "$current" = "$expected" ]; then
             echo "build=false" >> "$GITHUB_OUTPUT"
@@ -132,7 +135,7 @@ jobs:
             exit 1
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "E2E runner image is missing or outdated; building latest now."
+            echo "E2E runner image is missing or outdated; building this input/week tag now."
           fi
 
       - name: Log in to GHCR
@@ -147,26 +150,30 @@ jobs:
         if: steps.check.outputs.build == 'true'
         env:
           E2E_RUNNER_REPOSITORY: ghcr.io/${{ github.repository_owner }}/nexus-terminal-e2e-runner
+          E2E_RUNNER_TAG: ${{ steps.image.outputs.tag }}
         run: scripts/e2e/build-runner-image.sh
 
       - name: Pin the immutable runner image for every shard
         id: pinned-image
         env:
           RUNNER_IMAGE: ${{ steps.image.outputs.image }}
+          EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
         run: |
           digest="$(docker buildx imagetools inspect "$RUNNER_IMAGE" --format '{{json .Manifest}}' | node -e 'let s=""; for await (const c of process.stdin) s+=c; const d=JSON.parse(s).digest; if (!/^sha256:[a-f0-9]{64}$/.test(d)) throw Error("Invalid image digest"); process.stdout.write(d)' --input-type=module)"
+          current="$(docker buildx imagetools inspect "${RUNNER_IMAGE%:*}@$digest" --format '{{range .Image.Config.Env}}{{println .}}{{end}}' | sed -n 's/^E2E_RUNNER_FINGERPRINT=//p')"
+          test "$current" = "$EXPECTED_FINGERPRINT"
           echo "image=${RUNNER_IMAGE%:*}@$digest" >> "$GITHUB_OUTPUT"
           echo "Pinned runner $RUNNER_IMAGE@$digest"
 
       - name: Record exact test environment
         env:
           PINNED_RUNNER_IMAGE: ${{ steps.pinned-image.outputs.image }}
+          EXPECTED_FINGERPRINT: ${{ steps.image.outputs.fingerprint }}
         run: |
           mkdir -p tests/.artifacts/environment
           node --input-type=module <<'JS'
           import fs from 'node:fs';
-          import { execFileSync } from 'node:child_process';
-          const fingerprint = execFileSync(process.execPath, ['scripts/e2e/runner-image-info.mjs', 'fingerprint'], { encoding: 'utf8' }).trim();
+          const fingerprint = process.env.EXPECTED_FINGERPRINT;
           fs.writeFileSync('tests/.artifacts/environment/environment.json', JSON.stringify({
             sha: process.env.GITHUB_SHA, image: process.env.PINNED_RUNNER_IMAGE, fingerprint,
           }, null, 2));
@@ -333,8 +340,8 @@ jobs:
         ${{ matrix.shard == 1 && '--cap-add=SYS_ADMIN --security-opt=apparmor=unconfined' || '' }}
         ${{ matrix.shard == 1 && '--volume=/var/run/docker.sock:/var/run/docker.sock' || '' }}
     env:
+      PINNED_RUNNER_FINGERPRINT: ${{ needs.test-runner-image.outputs.fingerprint }}
       NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/layers
-      NEXUS_AGENT_ACCEPTANCE_ROOT: ${{ github.workspace }}/tests/.artifacts/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
       NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
@@ -387,8 +394,7 @@ jobs:
         id: plugin-source
         shell: bash
         run: |
-          expected="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
-          test "${E2E_RUNNER_FINGERPRINT:-}" = "$expected"
+          test "${E2E_RUNNER_FINGERPRINT:-}" = "$PINNED_RUNNER_FINGERPRINT"
           pnpm install --frozen-lockfile --offline
           revision="$(cat tests/.artifacts/plugin-validation-artifact/plugin-candidates/source.sha)"
           [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
@@ -472,7 +478,6 @@ jobs:
           name: e2e-shard-${{ matrix.shard }}-${{ github.run_attempt }}
           include-hidden-files: true
           path: |
-            tests/.artifacts/shard-server.log
             tests/.artifacts/layers/
           if-no-files-found: ignore
           retention-days: 7
@@ -610,3 +615,14 @@ jobs:
 
       - name: Run deployment health smoke
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
+
+      - name: Upload deployment smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: docker-smoke-${{ github.run_attempt }}
+          path: |
+            tests/.artifacts/docker-smoke/diagnostics/
+            tests/.artifacts/docker-smoke/work.*/data/
+          if-no-files-found: warn
+          retention-days: 7

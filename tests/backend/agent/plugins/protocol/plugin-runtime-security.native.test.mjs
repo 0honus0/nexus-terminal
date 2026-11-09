@@ -52,9 +52,7 @@ export default definePlugin((plugin) => plugin.register(${JSON.stringify(definit
 }
 
 async function isolated(t, backend) {
-	const directory = await mkdtemp(
-		join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-runtime-security-'),
-	);
+	const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-runtime-security-'));
 	const runtime = new NativePluginBackendRuntime(new NodeModuleRuntime(directory));
 	await runtime.recover();
 	const sdk = await readFile(
@@ -77,7 +75,7 @@ async function isolated(t, backend) {
 	});
 	t.after(async () => {
 		await instance.close();
-		if (!process.env.NEXUS_AGENT_ACCEPTANCE_ROOT) await rm(directory, { recursive: true, force: true });
+		if (!process.env.NEXUS_TEST_ARTIFACT_DIR) await rm(directory, { recursive: true, force: true });
 	});
 	await instance.activate();
 	return {
@@ -94,7 +92,7 @@ await test(
 	{ timeout: 60000 },
 	async (t) => {
 		const directory = await mkdtemp(
-			join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-module-security-'),
+			join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-module-security-'),
 		);
 		const root = join(directory, 'modules');
 		const written = join(directory, 'forbidden-write');
@@ -117,7 +115,7 @@ await test(
 			]);
 			const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
 			try {
-				if (!process.env.NEXUS_AGENT_ACCEPTANCE_ROOT) await rm(directory, { recursive: true, force: true });
+				if (!process.env.NEXUS_TEST_ARTIFACT_DIR) await rm(directory, { recursive: true, force: true });
 			} catch (error) {
 				failures.push(error);
 			}

@@ -1,70 +1,71 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(scriptDir, '../..');
-const rootPackage = readJson('package.json');
-const e2ePackage = readJson('tests/package.json');
+export function getRunnerImageInfo({ root = path.resolve(import.meta.dirname, '../..'), now = Date.now() } = {}) {
+	const readJson = (relativePath) => JSON.parse(fs.readFileSync(path.join(root, relativePath), 'utf8'));
 
-const nodeVersion = fs.readFileSync(path.join(repoRoot, '.node-version'), 'utf8').trim();
+	const rootPackage = readJson('package.json');
+	const e2ePackage = readJson('tests/package.json');
+	const nodeVersion = fs.readFileSync(path.join(root, '.node-version'), 'utf8').trim();
+	const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
+	const playwrightVersion = e2ePackage.devDependencies?.['@playwright/test'];
+	if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) throw new Error(`Invalid .node-version: ${nodeVersion}`);
+	if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
+	if (!/^\d+\.\d+\.\d+$/.test(String(playwrightVersion))) {
+		throw new Error(`Invalid Playwright version: ${playwrightVersion}`);
+	}
+	if (!Number.isFinite(now) || now < 0) throw new Error('Invalid runner refresh time');
 
-if (!/^\d+\.\d+\.\d+$/.test(nodeVersion)) {
-	throw new Error(`Invalid .node-version: ${nodeVersion}`);
-}
-const pnpmVersion = /^pnpm@(.+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
-const playwrightVersion = e2ePackage.devDependencies?.['@playwright/test'];
+	const definitionFiles = [
+		'.node-version',
+		'.dockerignore',
+		'package.json',
+		'pnpm-lock.yaml',
+		'pnpm-workspace.yaml',
+		'packages/backend/package.json',
+		'packages/shared/package.json',
+		'packages/frontend/package.json',
+		'tests/package.json',
+		'tests/fixtures/runner/Dockerfile',
+		'scripts/e2e/build-runner-image.sh',
+		'scripts/e2e/runner-image-info.mjs',
+	];
 
-if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
-if (!/^\d+\.\d+\.\d+$/.test(String(playwrightVersion))) {
-	throw new Error(`Invalid Playwright version: ${playwrightVersion}`);
-}
+	function collectFiles(directory) {
+		for (const entry of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
+			const name = directory + '/' + entry.name;
+			if (entry.isDirectory()) collectFiles(name);
+			else if (entry.isFile()) definitionFiles.push(name);
+			else throw new Error('Runner inputs must be regular files: ' + name);
+		}
+	}
 
-const definitionFiles = [
-	'.node-version',
-	'package.json',
-	'pnpm-lock.yaml',
-	'pnpm-workspace.yaml',
-	'packages/backend/package.json',
-	'packages/shared/package.json',
-	'packages/frontend/package.json',
-	'tests/package.json',
-	'tests/fixtures/runner/Dockerfile',
-	'scripts/e2e/build-runner-image.sh',
-	'scripts/e2e/runner-image-info.mjs',
-	...fs
-		.readdirSync(path.join(repoRoot, 'scripts/patches'))
-		.sort()
-		.map((name) => `scripts/patches/${name}`),
-];
-const hash = crypto.createHash('sha256');
-hash.update(`node=${nodeVersion}\nplaywright=${playwrightVersion}\npnpm=${pnpmVersion}\n`);
-// Refresh the Node image and OS packages at least once per UTC week
-// when CI runs, even if the workspace dependency files have not changed.
-hash.update(`refreshWeek=${Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))}\n`);
-for (const relativePath of definitionFiles) {
-	hash.update(`file=${relativePath}\n`);
-	hash.update(fs.readFileSync(path.join(repoRoot, relativePath)));
-	hash.update('\n');
-}
-
-const info = {
-	node: nodeVersion,
-	playwright: playwrightVersion,
-	pnpm: pnpmVersion,
-	fingerprint: hash.digest('hex'),
-};
-
-const field = process.argv[2];
-if (!field || field === 'json') {
-	process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
-} else if (Object.hasOwn(info, field)) {
-	process.stdout.write(`${info[field]}\n`);
-} else {
-	throw new Error(`Unknown runner image info field: ${field}`);
+	collectFiles('scripts/patches');
+	collectFiles('packages/frontend/vendor');
+	const hash = crypto.createHash('sha256');
+	for (const name of definitionFiles.sort()) {
+		hash.update(`file=${name}\n`);
+		hash.update(fs.readFileSync(path.join(root, name)));
+		hash.update('\n');
+	}
+	const fingerprint = hash.digest('hex');
+	// Refresh the base image/OS weekly; the dependency identity stays valid across a week boundary.
+	const refreshWeek = Math.floor(now / (7 * 24 * 60 * 60 * 1000));
+	return {
+		node: nodeVersion,
+		playwright: playwrightVersion,
+		pnpm: pnpmVersion,
+		fingerprint,
+		tag: `cache-${refreshWeek}-${fingerprint}`,
+	};
 }
 
-function readJson(relativePath) {
-	return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+	const info = getRunnerImageInfo();
+	const field = process.argv[2];
+	if (!field || field === 'json') process.stdout.write(`${JSON.stringify(info, null, 2)}\n`);
+	else if (Object.hasOwn(info, field)) process.stdout.write(`${info[field]}\n`);
+	else throw new Error(`Unknown runner image info field: ${field}`);
 }

@@ -35,9 +35,7 @@ function contains(error, target) {
 }
 
 async function fixture(t) {
-	const directory = await mkdtemp(
-		join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-module-host-'),
-	);
+	const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-module-host-'));
 	const runtime = new NodeModuleRuntime(directory);
 	const opened = new Set();
 	const gates = [];
@@ -46,7 +44,7 @@ async function fixture(t) {
 		const results = await Promise.allSettled([...opened].map((instance) => instance.close()));
 		const errors = results.filter((value) => value.status === 'rejected').map((value) => value.reason);
 		try {
-			if (!process.env.NEXUS_AGENT_ACCEPTANCE_ROOT) await rm(directory, { recursive: true, force: true });
+			if (!process.env.NEXUS_TEST_ARTIFACT_DIR) await rm(directory, { recursive: true, force: true });
 		} catch (error) {
 			errors.push(error);
 		}

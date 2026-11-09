@@ -25,7 +25,7 @@ const refused = (code) => (error) => error instanceof AgentFailure && error.code
 
 async function configurationFixture(t) {
 	const directory = await mkdtemp(
-		join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-plugin-config-races-'),
+		join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-plugin-config-races-'),
 	);
 	const sshd = await openSshd(directory);
 	t.after(() => sshd.close());

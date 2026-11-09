@@ -10,7 +10,7 @@ import { openAgentExecution } from '../../runs/support/agent-execution-fixture.m
 import { listAgentApprovalHistory } from '../../runs/support/agent-approval-fixture.mjs';
 import { expectStatus, openSshd, until } from '../../../../support/protocols/openssh-fixture.mjs';
 
-const artifactRoot = process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 const base = '/api/v1/agent/plugins';
 
 const contribution = (ui) => ({

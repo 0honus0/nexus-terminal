@@ -15,7 +15,7 @@ import {
 } from '../../../../../packages/shared/dist/agent/tools/http-codec.js';
 import { InvalidAgentPayload } from '../../../../../packages/shared/dist/agent/http-codec.js';
 
-const artifactRoot = process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 
 await test('SDK4 App executes without Provider and replays the same create intent', { timeout: 60000 }, async (t) => {
 	const directory = await mkdtemp(join(artifactRoot, 'deterministic-'));

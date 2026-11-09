@@ -26,7 +26,7 @@ await test(
 	'Dispatched Run intents replay exactly, reject conflicts, cancel once and retain scoped event cursors',
 	{ timeout: 60000 },
 	async (t) => {
-		const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir();
+		const artifactRoot = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 		await mkdir(artifactRoot, { recursive: true });
 		const root = await mkdtemp(join(artifactRoot, 'run-intents-'));
 		const key = randomBytes(32);

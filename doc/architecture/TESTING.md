@@ -1,6 +1,6 @@
 # 本体与插件测试体系
 
-> 2026-11-08完成测试分层迁移和两仓完整门禁；整轮3–5分钟目标未达，冷/热同基线性能对照仍待实测。本文维护当前owner、框架入口与扩展约定；实际结果及耗时见[测试入口](../testing/E2E.md)，待验范围见[PLAN D35](../PLAN.md#d35本体与插件测试体系重设计2026-11-08)。
+> 已完成测试分层迁移和两仓完整门禁；整轮3–5分钟目标未达，进一步耗时优化与同基线冷/热对照按用户决定暂停。本文维护当前owner、框架入口与扩展约定；实际结果及耗时见[测试入口](../testing/E2E.md)，待验范围见[PLAN D35](../PLAN.md#d35本体与插件测试体系重设计2026-11-08)。
 
 逐用例耗时保存在框架原始报告；本体浏览器的 `spec-durations.json` 同时保留按耗时降序的 `cases`，包含项目、完整分组标题、状态和每次 retry，首次失败不会被后续通过覆盖。质量作业也保留Host fast的Vitest JSON、插件Vitest JSON及原生Node JUnit；统计逐case时与资源metrics分开解析，按层注明覆盖范围。文件级估算仍仅消费最终全部通过的 `specs`，不将相同标题或重试耗时混作独立场景。
 
@@ -97,7 +97,7 @@ tests/
 
 后端子功能按需使用`logic/storage/http/protocol`，例如终端输入规则在`backend/remote/terminal/logic/`，真实SSH交互在同一负责模块的`protocol/`；纯Registry规则不因旧文件位于`storage/`就继续测完整数据库。各子功能私有helper放就近的`support/`，只有实际跨领域复用的环境能力才提升到根`support/`。跨模块可执行受控服务放`support/protocols/`，静态镜像/配置/密钥与样本放`fixtures/`；不能把模型、仓库或桌面服务代码因其被测试使用就混入静态数据。Actions仅提供runner/容器与预装依赖，服务的启动、就绪、故障控制和关闭归测试fixture；常规门禁不依赖人工提供的公网主机。
 
-前端`<feature>`对应当前真实目录：`agent`、`appearance`、`audit`、`auth`、`backup`、`command-history`、`connections`、`docker`、`file-editor`、`file-preview`、`filesystem`、`logging`、`mutation-recovery`、`notifications`、`preferences`、`proxies`、`quick-commands`、`remote-desktop`、`remote-tools`、`security`、`ssh-keys`、`ssh-suspend`、`status-monitor`、`system-overview`、`tags`、`targets-next`、`terminal`、`transfers`；不是要求每个功能都创建两层空目录。测试归`targets/`并按真实行为分层，不借测试布局改产品模块。
+前端`<feature>`对应当前真实目录：`agent`、`appearance`、`audit`、`auth`、`backup`、`command-history`、`connections`、`docker`、`file-editor`、`file-preview`、`filesystem`、`logging`、`mutation-recovery`、`notifications`、`preferences`、`proxies`、`quick-commands`、`remote-desktop`、`remote-tools`、`security`、`ssh-keys`、`ssh-suspend`、`status-monitor`、`system-overview`、`tags`、`targets`、`terminal`、`transfers`；不是要求每个功能都创建两层空目录。Targets测试按真实行为分层，不借测试布局改产品模块。
 
 浏览器`<feature>`使用`access/connections/terminal/filesystem/transfers/remote-desktop/preferences/system/agent-host/shell/ingress`等功能归属。密钥/代理/标签归连接，预览/编辑归文件，趋势/Docker可按实际用例拆独立功能目录。移动端差异写成所属功能下的`touch-input.spec.ts`、`compact-layout.spec.ts`等，用project/tag声明能力；不再并列维护一套`mobile/`业务副本。公共导航/全局弹窗归`shell/`。
 
@@ -297,6 +297,14 @@ PR在依赖映射未经验证前仍完整执行；映射成熟后，可用框架
 
 共享runner定义归`tests/fixtures/runner/Dockerfile`，预装Node、协议服务及Chromium headless shell；实际服务继续由所属fixture按需启动。`test_runners`统一控制分层分片数量，旧Playwright专用输入和Dockerfile入口移除。Docker部署冒烟只构建生产镜像、执行Compose健康等待和实际HTTP契约，不安装测试工作区或浏览器。CI构建候选、分层报告与失败数据库统一位于`tests/.artifacts/`；本地浏览器默认`tests/.artifacts/browser/`，Vitest模块产物默认`tests/.artifacts/modules/`并在发现前建立根目录，Vitest缓存默认`tests/.cache/vitest/`，可用现有环境变量指定任务目录。
 
+分片执行各阶段时，控制台仅显示阶段开始、结束、实际耗时、退出结果和日志位置；模块/协议/本体浏览器/插件互操作/插件浏览器的完整双流追加保存为本轮`logs/<phase>.log`，复用原报告上传。逐用例结果仍在原框架JSON/JUnit/HTML，失败、未知结果和取消状态不变；日志不截断，不再把两条链的全部输出tee到控制台。质量作业的报告器模拟失败单测输出按用户要求保留。
+
+Runner内容指纹覆盖Node/包清单/锁文件、Dockerfile、构建与指纹脚本、`.dockerignore`及递归补丁和vendor输入。周刷新仅改变`cache-<UTC epoch week>-<fingerprint>`标签；每轮准备阶段固定标签、指纹与digest，分片不按当前周重算。`latest`仅作便利别名，不能作为分片身份。插件独立门禁复用成功main的test-environment；维护清理同时保留该运行、构建、环境产物及runner manifest闭包，防止其它分支更新latest后误删。
+
+`NEXUS_TEST_ARTIFACT_DIR`是Vitest、Node和浏览器产物的统一覆盖入口，不再维护Agent专用或复数旧别名。Ingress明确指定受验入口，默认报告归`tests/.artifacts/ingress/`，不混入普通浏览器报告，也不因发现用例而发起生产验收。
+
+Docker部署smoke隔离Compose项目、环境变量及数据目录；成功清除可重建工作目录，测试失败保留数据库、容器日志及退出状态，清理失败继续失败并保留工作目录。现有smoke作业上传诊断与失败数据，不上传`.env`临时密钥；此测试不授予线上删除权限。
+
 ### 构建与签包
 
 逻辑测试按源码SHA缓存转换；构建、锁文件、Node版本、SDK、迁移及相关资产共同构成成品指纹。Backend/SDK、Frontend、官方候选包按依赖图各构建一次并分发；取消插件`build→test再次build`。缓存只复用构建/依赖，不复用测试结果作为新提交的通过证据。Node权限/IPC/加载测试及产品层使用真实dist和签包，覆盖源码测试无法证明的交付差异。
@@ -361,7 +369,7 @@ PR在依赖映射未经验证前仍完整执行；映射成熟后，可用框架
 
 以下是**待验证的优化目标，不是已实现性能、产品限制或自动取消deadline**：同等Node/runner资源下，快速层争取约1分钟；按用户进一步缩短耗时的要求，完整自动门禁争取3–5分钟。这里是8个测试runner并行后的整轮墙钟目标；另按用户要求尽量把每个测试分片作业连同自身准备、排空控制在2分钟以内。两者都是优化目标，不是实测预测或新增deadline。先以试点测量下沉收益、构建与真实协议下限，再评估可达性；不再将8–12分钟作为最终设计目标。覆盖下沉完成前不承诺达到；实测发现真实时序或负载不允许时记录原因，继续优化重复工作，不能删断言、改产品期限、降低带宽故障强度或额外增加runner后宣称同资源达标。
 
-完整耗时包括依赖/构建、必要服务启动、所有测试与排空、Docker smoke及门禁汇总，排队单列；同时比较CPU分钟、峰值RSS与冷/热缓存。上次完成的历史基线为本体完整CI 16分9秒；关键路径仍为第7片的原生429秒（含自然五分钟认证到期）、本体浏览器246秒和插件浏览器117秒。质量281秒、Docker smoke118秒。独立插件CI为5分53秒，不能与本体墙钟相加或当作同资源整体目标通过。冷/热同基线、CPU分钟和峰值RSS尚未完成，不据不同SHA的CI轮次宣称严格性能提升比例。
+完整耗时包括依赖/构建、必要服务启动、所有测试与排空、Docker smoke及门禁汇总，排队单列。最近完整验收本体墙钟11分41秒、质量3分12秒、分片5分50秒–8分3秒，插件独立5分33秒；准确源码与报告见[当前基线](../testing/E2E.md#当前验收基线)。GNU time与cgroup资源采集已实现；缺测保留null，不将最大单进程RSS当作并发聚合RSS。同源码冷/热严格对照未执行，按用户决定暂停，不据不同SHA轮次计算提升比例。
 
 迁移完成判据：
 
@@ -370,10 +378,8 @@ PR在依赖映射未经验证前仍完整执行；映射成熟后，可用框架
 - 两仓独立运行各自测试；发布组合固定身份，所有八包及非官方风格通用夹具通过真实Host互操作。组合报告保留完整逐文件hash清单与聚合指纹，来源不一致时定位实际文件，不静默排除未确认的生成文件。
 - 没有Playwright→Node包装，普通契约/组件测试不启动无关应用；相同产物不重复构建，测试隔离和真实清理仍可验证。
 - 静态/格式/构建、所有完整自动测试、必需真实I/O与物理时序及Docker smoke在同一最终基线上通过；报告明确未验的真机、模型效果、物理故障与长时负载。
-- 至少记录同资源的冷启动与热缓存完整运行，首次失败/重试/漏项不得掩盖；目标耗时未达到如实记录，不把该设计文档当验收证据。
+- 首次失败/重试/漏项不得掩盖；目标耗时未达到如实记录，不把该设计文档当验收证据。恢复性能专项时再做同源码、同资源冷/热严格对照；当前按用户决定暂停，不作为本轮新增交付阻塞。
 
-源码与框架迁移、完整Agent跨仓归属、浏览器按功能归位、受控服务及两仓8分片门禁已完成并通过完整远程验收。当前报告证明自动覆盖与产物身份；冷/热测量、资源采集及3–5分钟目标仍未完成，发布按准确源码另行核对。实际证据和未验范围见[验证入口](../testing/E2E.md)与[PLAN D35](../PLAN.md#d35本体与插件测试体系重设计2026-11-08)。
+源码与框架迁移、完整Agent跨仓归属、浏览器按功能归位、受控服务及两仓8分片门禁已完成并通过完整远程验收。当前报告证明自动覆盖与产物身份，资源指标已采集；3–5分钟目标未达，后续性能优化及冷/热对照暂停，发布按准确源码另行核对。实际证据和未验范围见[验证入口](../testing/E2E.md)与[PLAN D35](../PLAN.md#d35本体与插件测试体系重设计2026-11-08)。
 
 参考：[Vitest projects](https://vitest.dev/guide/projects)、[并行与隔离](https://vitest.dev/guide/parallelism)、[性能剖析](https://vitest.dev/guide/improving-performance)、[覆盖范围](https://vitest.dev/guide/coverage)、[Playwright API](https://playwright.dev/docs/api-testing)、[worker fixture](https://playwright.dev/docs/test-fixtures#worker-scoped-fixtures)、[Fastify注入](https://fastify.dev/docs/latest/Guides/Testing/)、[Node原生测试](https://nodejs.org/api/test.html)、[避免跨层重复](https://martinfowler.com/articles/practical-test-pyramid.html#AvoidTestDuplication)。
-
-分片执行各阶段时，控制台仅显示阶段开始、结束、实际耗时、退出结果和日志位置；模块/协议/本体浏览器/插件互操作/插件浏览器的完整双流追加保存为本轮`logs/<phase>.log`，复用原报告上传。逐用例结果仍在原框架JSON/JUnit/HTML，失败、未知结果和取消状态不变；日志不截断，不再把两条链的全部输出tee到控制台。质量作业的报告器模拟失败单测输出按用户要求保留。

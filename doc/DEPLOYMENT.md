@@ -111,7 +111,7 @@ docker compose up -d --remove-orphans
 
 ## 构建与开发
 
-使用 `.node-version` 指定的 Node.js 26.13.0 LTS 和根 `packageManager` 指定的 pnpm 12.16.1；本地开发、workflow 与 Docker 构建使用相同版本。依赖安装使用 `--frozen-lockfile`；pnpm 12 生成的锁文件包含环境与应用两个 YAML 文档，使用该版本 pnpm 读取，不手工拆分。Playwright 固定1.64.1，手工环境按锁定版本安装浏览器；CI runner 指纹包含 `.node-version`、清单、锁文件及补丁，版本变化会自动重建，每周继续刷新基础镜像与 OS 包。
+使用 `.node-version` 指定的 Node.js 26.13.0 LTS 和根 `packageManager` 指定的 pnpm 12.16.1；本地开发、workflow 与 Docker 构建使用相同版本。依赖安装使用 `--frozen-lockfile`；pnpm 12 生成的锁文件包含环境与应用两个 YAML 文档，使用该版本 pnpm 读取，不手工拆分。Playwright 固定1.64.1，手工环境按锁定版本安装浏览器；CI runner内容指纹覆盖`.node-version`、清单、锁文件、Dockerfile、构建/指纹脚本、`.dockerignore`、递归补丁及vendor输入；变化自动重建。每周通过`cache-<UTC epoch week>-<fingerprint>`刷新基础镜像与OS包，单轮固定标签/指纹/digest，`latest`仅为便利别名。
 
 ```bash
 pnpm install --frozen-lockfile
@@ -135,15 +135,15 @@ scripts/build/build.sh docker
 
 ## 仓库手动清理
 
-GitHub Actions 的 `Clean old Actions and container versions`（`.github/workflows/cleanup-history.yml`） 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner 当前只发布 `latest`）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
+GitHub Actions 的 `Clean old Actions and container versions`（`.github/workflows/cleanup-history.yml`） 仅支持手动 Run workflow，不随推送、发布或定时任务执行。镜像清理仅限当前仓库关联的 `nexus-terminal` 和 `nexus-terminal-e2e-runner` 两个 GHCR 包；逐包核对仓库归属，分别保留现有 `main`、`dev`、`latest` 标签对应版本及其递归引用的平台和证明 manifest。其余旧发布版本、sha 标签版本和无标签版本均为清理候选；与保留版本共用 digest 的其它标签随版本保留。允许部分保护标签尚未发布（runner同时发布周/内容标签与`latest`便利别名）；有版本却没有任何保护标签的包会使清理停止，不整包盲删。
 
-同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近成功 E2E 及本次清理记录。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
+同时清理旧 Actions 运行及产物、全部 Actions 缓存；保留上述镜像源码对应的成功记录、最近任意分支成功E2E、默认分支成功完整E2E及本次清理记录；同时保留成功main的Host构建、环境产物和准确runner manifest闭包，避免latest变化破坏插件独立验收。环境ZIP摘要、来源或manifest无法确认时停止，先重跑main完整E2E。其它包、GitHub Releases、Git 标签、运行中的服务和实例数据不在镜像清理范围内。清理时保留排队、运行中及重新启动的 Actions 和所属产物；有其它活跃任务时，本次保留镜像版本及 Actions 缓存，待任务结束后手动重跑。
 
 超期空排队记录不会一直阻挡清理：只有仍为 queued、没有结论、创建/开始/更新时间均超过 GitHub 官方 workflow 总期限35天、所有尝试均没有 job，并在读取 job 前后确认尝试号与时间未变化，才忽略其阻挡。该记录及产物仍保留，不尝试强删；近期重跑、有 job 或无法完整核实的记录继续保护。
 
 执行日志按阶段展开，显示检查与删除耗时、逐项序号/ID、镜像 digest/标签、保留和跳过原因，以及已确认删除数量。摘要分别列出计划候选、实际删除与复查后保留/延后；存在其它活跃任务时会明确警告镜像和缓存未清理，不能仅凭 workflow 成功判断所有候选都已删除。
 
-保留镜像无法完整解析、包未关联本仓库或任一保护标签在清理中移动、消失或从缺失变为存在时停止。每次镜像版本删除前复查两个包的保护标签，结束时再次确认；GitHub API 不提供条件删除，复查与删除之间仍存在并发窗口，操作前应先完成其它发布任务。
+保留镜像无法完整解析、包未关联本仓库或任一保护标签在清理中移动、消失或从缺失变为存在时停止。每次镜像版本删除前复查两个包的保护标签和最新成功main的id/attempt，删除Actions运行/产物前也复查该main身份，结束时再次确认；GitHub API 不提供条件删除，复查与删除之间仍存在并发窗口，操作前应先完成其它发布任务。
 
 清理需要仓库 Actions 写权限及两个 GHCR 包的管理权限，包设置须允许此仓库的 Actions 管理访问。GitHub API 单次请求遇到瞬时服务错误时由官方 Octokit 最多重试3次并指数退避；权限/参数错误仍会失败，不降为成功或绕过权限。删除同一资源时404视为已不存在，单独计数，不冒充本轮删除；读取所属运行为404时保留无法重新确认状态的 artifact。镜像版本删除不做隐式重试，保持每次派发前核对渠道，失败后手动重跑重新计算保留集合。重试耗尽或其它失败仍可能已经删除部分旧资源，按运行日志核对权限和状态后手动重跑；不会恢复已删除历史。
 

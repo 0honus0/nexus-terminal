@@ -20,9 +20,7 @@ await test(
 	'Provider capacity: large model sets survive discovery, create, restart, update and strict response decoding',
 	{ timeout: 60000 },
 	async (t) => {
-		const directory = await mkdtemp(
-			join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'provider-capacity-'),
-		);
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'provider-capacity-'));
 		const modelIds = Array.from({ length: 1500 }, (_, i) => 'capacity-model-' + i);
 		const modelServer = createServer((request, response) => {
 			assert.equal(request.url, '/v1/models');

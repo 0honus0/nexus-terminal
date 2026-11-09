@@ -25,7 +25,7 @@ await test(
 	'original Run deadline still stops yielded execution and preserves unknown',
 	{ timeout: 120000 },
 	async (t) => {
-		const directory = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'shell-deadline-'));
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'shell-deadline-'));
 		const sshd = await openSshd(directory);
 		t.after(() => sshd.close());
 		const f = await openAgentExecution(directory, sshd, {

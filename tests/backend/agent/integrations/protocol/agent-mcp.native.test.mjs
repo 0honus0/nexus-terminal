@@ -72,7 +72,7 @@ async function settle(f, run, status = 'completed') {
 }
 
 await test('B10 actual MCP integration negotiation and governed execution', async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-mcp-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-mcp-'));
 	let sshd;
 	let sequence = 0;
 

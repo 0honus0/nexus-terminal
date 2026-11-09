@@ -8,11 +8,11 @@
 
 ## 2. 子功能与目录
 
-既有 `scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；`tests/tooling/maintenance/logic/cleanup-history.native.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
+`scripts/maintenance/cleanup-history.mjs` 持有逐包检查、manifest 闭包、Actions 保留和资源删除；`test-environment.mjs`复用CI产物resolver，核对成功main环境ZIP摘要并读取`environment.json`；`tests/tooling/maintenance/logic/cleanup-history.native.test.mjs` 提供隔离 GitHub/GHCR 回归。工作流只装配手动入口、权限和前置检查。
 
 ## 3. 依赖方向
 
-工作流调用脚本；脚本使用 github-script 提供的 Octokit/context/core，以及 Node fetch 访问 GHCR。不依赖产品 Backend、Frontend 或 Shared，不新增运行时服务。
+工作流调用脚本；脚本使用 github-script 提供的 Octokit/context/core，以及 Node fetch 访问 GHCR；环境ZIP通过现有`unzip`读取，不另写ZIP解码器。不依赖产品 Backend、Frontend 或 Shared，不新增运行时服务。
 
 ## 4. 类型与转换
 
@@ -20,7 +20,7 @@ GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；�
 
 ## 5. 入口与安装
 
-仍只有 `workflow_dispatch`，需要 `contents: read`、`actions: write`、`packages: write` 和两个包的仓库 Actions 管理权限。运行先执行维护回归，再检查全部保留集合，最后删除；没有新安装点或产品协议。
+仍只有 `workflow_dispatch`，需要 `contents: read`、`actions: write`、`packages: write` 和两个包的仓库 Actions 管理权限。工作流先确认`zip/unzip`工具，运行维护回归，再检查全部保留集合，最后删除；没有新安装点或产品协议。
 
 ## 6. 数据、事务与并发
 
@@ -30,10 +30,12 @@ GitHub REST 包元数据中的 repository.id 必须与当前仓库 ID 相同；�
 
 ## 7. 生命周期与失败
 
-当前/活跃运行、保留 revision 的成功运行及最近成功 E2E 留存；旧运行和产物删除前重新确认其运行状态。只有精确 DELETE 的404计为已不存在，其他失败传播；无法确认所属运行的产物保留。包版本删除禁用隐式重试，重跑必须重新检查渠道和计划。失败后按日志核对已删资源，不能把请求失败当作删除未发生。
+当前/活跃运行、保留revision的成功运行、最近任意分支成功E2E及默认分支成功完整E2E均留存；后者保留准确Host构建、环境产物及runner manifest闭包，不能由其它分支更新的latest替代。环境产物按实际成功job执行时间选取，核对ZIP SHA256、来源SHA、fingerprint与本仓固定runner digest；过期、缺失、损坏或缺少对应manifest均停止清理，先重跑main完整E2E再维护。临时ZIP目录在成功/失败时清理，清理错误保留原因。
+
+删除artifact/run前、每次镜像删除及结束时复查最新成功main的id/attempt，变化立即停止旧计划；该复查与DELETE仍非事务。旧运行和产物删除前重新确认其运行状态。只有精确 DELETE 的404计为已不存在，其他失败传播；无法确认所属运行的产物保留。包版本删除禁用隐式重试，重跑必须重新检查渠道和计划。失败后按日志核对已删资源，不能把请求失败当作删除未发生。
 
 检查与删除按阶段折叠分组，记录成功/失败耗时；每项输出序号、资源ID、镜像digest/标签与保留/跳过/删除原因，删除开始、确认成功、404及异常分别表达。阶段结束和删除失败时汇总已确认数量。其它活跃运行造成镜像/缓存延后时输出 warning，摘要分列计划候选、实际删除和复查保留/延后，不把未执行删除表述成已清理。
 
 ## 8. 当前能力与验收
 
-保护集合和删除流程由tests workspace的维护回归检查，手动清理工作流在删除前执行该回归。历史执行结果见 [验证索引](../testing/HISTORY.md#清理工作流超期空排队与执行日志2026-11-05源码与静态)，尚未覆盖的并发与故障组合见 [PLAN](../PLAN.md#待验与外部依赖)。线上实际删除数量及延后项以手动工作流摘要为准，夹具不能证明线上删除成功。
+保护集合和删除流程由tests workspace的维护回归检查，手动清理工作流在删除前执行该回归。回归覆盖成功main的无标签runner闭包、其它分支latest移动、环境包损坏/过期、来源错误及维护中main变化；本轮不执行线上删除。历史执行结果见 [验证索引](../testing/HISTORY.md#清理工作流超期空排队与执行日志2026-11-05源码与静态)，尚未覆盖的并发与故障组合见 [PLAN](../PLAN.md#待验与外部依赖)。线上实际删除数量及延后项以手动工作流摘要为准，夹具不能证明线上删除成功。

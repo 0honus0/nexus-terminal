@@ -22,7 +22,7 @@ function success(response) {
 }
 
 await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', { timeout: 180000 }, async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-docker-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-docker-'));
 	const containers = new Set();
 	let sshd;
 	let sequence = 0;

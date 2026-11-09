@@ -13,9 +13,7 @@ await test(
 	'Agent modular: one WS isolates subscription credit and reconnect reads without replaying Runs',
 	{ timeout: 90000 },
 	async (t) => {
-		const directory = await mkdtemp(
-			join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-modular-stream-'),
-		);
+		const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-modular-stream-'));
 		const sshd = await openSshd(directory);
 		let f;
 		const sockets = new Set();
@@ -35,9 +33,7 @@ await test(
 				() => f?.close(),
 				() => sshd.close(),
 				() =>
-					process.env.NEXUS_AGENT_ACCEPTANCE_ROOT
-						? undefined
-						: rm(directory, { recursive: true, force: true }),
+					process.env.NEXUS_TEST_ARTIFACT_DIR ? undefined : rm(directory, { recursive: true, force: true }),
 			]) {
 				try {
 					await close();

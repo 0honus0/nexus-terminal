@@ -17,7 +17,7 @@ import { openAgentExecution } from '../support/agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
 await test('B10 actual Root/Child collaboration ownership', { timeout: 180000 }, async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-collaboration-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-collaboration-'));
 	let sshd;
 	let sequence = 0;
 

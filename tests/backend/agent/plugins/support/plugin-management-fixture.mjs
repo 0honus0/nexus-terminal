@@ -10,10 +10,7 @@ import { expectStatus } from '../../../../support/protocols/openssh-fixture.mjs'
 
 export async function openPlugins(registerClose) {
 	const directory = await mkdtemp(
-		join(
-			process.env.NEXUS_TEST_ARTIFACT_DIR ?? process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(),
-			'nexus-b10-plugin-contract-',
-		),
+		join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-plugin-contract-'),
 	);
 	let f;
 	registerClose(async () => {

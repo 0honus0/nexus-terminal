@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import cleanup from '../../../../scripts/maintenance/cleanup-history.mjs';
 
 const digest = (value) => 'sha256:' + value.repeat(64);
@@ -28,11 +33,41 @@ function fixture(
 			status: 'completed',
 			conclusion: 'success',
 			head_sha: 'b'.repeat(40),
+			head_branch: 'main',
+			run_attempt: 1,
 			path: '.github/workflows/e2e.yml',
 		},
 		{ id: 3, status: 'completed', conclusion: 'failure', head_sha: 'c'.repeat(40) },
 		...(active ? [{ id: 4, status: 'in_progress' }] : []),
 	];
+	const environment = {
+		sha: 'b'.repeat(40),
+		image: 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('a'),
+		fingerprint: '1'.repeat(64),
+	};
+	const environmentArtifact = {
+		id: 34,
+		name: 'test-environment-' + 'b'.repeat(40) + '-1',
+		expired: false,
+		created_at: '2026-11-09T00:00:05Z',
+	};
+
+	function archiveEnvironment() {
+		const root = mkdtempSync(join(tmpdir(), 'cleanup-archive-'));
+		try {
+			writeFileSync(join(root, 'environment.json'), JSON.stringify(environment));
+			utimesSync(
+				join(root, 'environment.json'),
+				new Date('2026-11-09T00:00:00Z'),
+				new Date('2026-11-09T00:00:00Z'),
+			);
+			execFileSync('zip', ['-X', '-q', 'environment.zip', 'environment.json'], { cwd: root });
+			return readFileSync(join(root, 'environment.zip'));
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}
+
 	const catalogs = {
 		'nexus-terminal': [
 			{ id: 10, name: digest('1'), metadata: { container: { tags: ['latest', 'v2.0.0'] } } },
@@ -72,6 +107,33 @@ function fixture(
 
 		listArtifactsForRepo() {},
 
+		listWorkflowRunArtifacts() {},
+
+		listJobsForWorkflowRun() {},
+
+		async listWorkflowRuns() {
+			return {
+				data: {
+					workflow_runs: runs
+						.filter((run) => run.head_branch === 'main' && run.conclusion === 'success')
+						.slice(0, 1),
+				},
+			};
+		},
+
+		async getArtifact() {
+			return {
+				data: {
+					...environmentArtifact,
+					digest: 'sha256:' + createHash('sha256').update(archiveEnvironment()).digest('hex'),
+				},
+			};
+		},
+
+		async downloadArtifact() {
+			return { data: archiveEnvironment() };
+		},
+
 		getActionsCacheList() {},
 
 		async getWorkflowRun({ run_id: id }) {
@@ -88,7 +150,11 @@ function fixture(
 	let listedRuns = 0;
 	const github = {
 		rest: {
-			repos: { get: async () => ({ data: { id: 1, owner: { type: organization ? 'Organization' : 'User' } } }) },
+			repos: {
+				get: async () => ({
+					data: { id: 1, default_branch: 'main', owner: { type: organization ? 'Organization' : 'User' } },
+				}),
+			},
 			actions,
 		},
 
@@ -99,6 +165,17 @@ function fixture(
 					? runs.map((run) => (run.id === 3 ? { ...run, status: freshStatus } : run))
 					: runs;
 			}
+			if (method === actions.listWorkflowRunArtifacts) return [environmentArtifact];
+			if (method === actions.listJobsForWorkflowRun)
+				return [
+					{
+						name: 'Prepare shared test runner image',
+						status: 'completed',
+						conclusion: 'success',
+						started_at: '2026-11-09T00:00:00Z',
+						completed_at: '2026-11-09T00:00:10Z',
+					},
+				];
 			if (method === actions.listArtifactsForRepo)
 				return [
 					{ id: 30, workflow_run: { id: 3 } },
@@ -183,6 +260,8 @@ function fixture(
 			return new Response(null, current ? { headers: { 'docker-content-digest': current } } : { status: 404 });
 		}
 		const product = packageName === 'nexus-terminal';
+		if (!product && id === digest('0')) return Response.json({ manifests: [{ digest: digest('f') }] });
+		if (!product && id === digest('f')) return Response.json({ config: { digest: digest('8') } });
 		if (product && (id === digest('1') || id === digest('2')))
 			return Response.json({ manifests: [{ digest: digest('4') }, { digest: digest('5') }] });
 		if (product && id === digest('6')) return Response.json({ manifests: [{ digest: digest('7') }] });
@@ -203,6 +282,9 @@ function fixture(
 		},
 		calls,
 		logs,
+		runs,
+		environment,
+		environmentArtifact,
 		catalogs,
 		heads,
 		packageRepositories,
@@ -303,6 +385,7 @@ test('an optional protected tag need not have been published in either package',
 test('a main-only package keeps its current image while other old versions remain eligible', async (t) => {
 	const f = fixture(t);
 	const name = 'nexus-terminal-e2e-runner';
+	f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('b');
 	for (const version of f.catalogs[name]) {
 		version.metadata.container.tags = version.metadata.container.tags.filter((tag) => tag === 'main');
 	}
@@ -354,11 +437,10 @@ test('organization packages use their scoped package endpoints', async (t) => {
 	assert.deepEqual(f.calls, ['artifact:30', 'run:3', 'cache:40', 'image:14', 'image:20']);
 });
 
-test('an absent runner package is skipped without targeting another package', async (t) => {
+test('a missing runner package referenced by successful main stops all deletion', async (t) => {
 	const f = fixture(t, { absent: ['package:nexus-terminal-e2e-runner'] });
-	await cleanup(f.args);
-	assert.deepEqual(f.calls, ['artifact:30', 'run:3', 'cache:40', 'image:14']);
-	assert.equal(f.count('Runner image versions'), '0');
+	await assert.rejects(cleanup(f.args), /runner package is missing/);
+	assert.deepEqual(f.calls, []);
 });
 
 test('runner channel movement stops deletion before any package version is removed', async (t) => {
@@ -394,3 +476,133 @@ test('failure to inspect a retained runner manifest stops all deletion', async (
 	await assert.rejects(cleanup(f.args), /Cannot inspect retained manifest/);
 	assert.deepEqual(f.calls, []);
 });
+
+test('successful main retains its exact untagged runner and child manifests after latest moves', async (t) => {
+	const f = fixture(t);
+	f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('0');
+	f.catalogs['nexus-terminal-e2e-runner'].push({ id: 26, name: digest('f'), metadata: { container: { tags: [] } } });
+	await cleanup(f.args);
+	assert.deepEqual(f.calls, ['artifact:30', 'run:3', 'cache:40', 'image:14']);
+	assert.ok(f.logs.some((line) => line.includes('Keep runner for successful main E2E 2:')));
+});
+
+test('a newer non-main success does not remove the main Host build or its environment', async (t) => {
+	const f = fixture(t);
+	f.runs.unshift({
+		id: 5,
+		head_branch: 'feature',
+		head_sha: 'c'.repeat(40),
+		status: 'completed',
+		conclusion: 'success',
+		path: '.github/workflows/e2e.yml',
+	});
+	await cleanup(f.args);
+	assert.ok(!f.calls.includes('run:2'));
+	assert.ok(!f.calls.includes('run:5'));
+	assert.ok(f.logs.some((line) => line.includes('Keep run 2: successful main Host build')));
+});
+
+for (const [name, change] of [
+	[
+		'expired artifact',
+		(f) => {
+			f.environmentArtifact.expired = true;
+		},
+	],
+	[
+		'wrong source',
+		(f) => {
+			f.environment.sha = 'c'.repeat(40);
+		},
+	],
+	[
+		'wrong package',
+		(f) => {
+			f.environment.image = 'ghcr.io/fixture/unrelated@' + digest('a');
+		},
+	],
+	[
+		'invalid fingerprint',
+		(f) => {
+			f.environment.fingerprint = 'invalid';
+		},
+	],
+	[
+		'missing runner manifest',
+		(f) => {
+			f.environment.image = 'ghcr.io/fixture/nexus-terminal-e2e-runner@' + digest('f');
+		},
+	],
+]) {
+	test(`invalid retained test environment stops before deletion: ${name}`, async (t) => {
+		const f = fixture(t);
+		change(f);
+		await assert.rejects(cleanup(f.args));
+		assert.deepEqual(f.calls, []);
+	});
+}
+
+test('a changed download digest cannot supply a runner retention root', async (t) => {
+	const f = fixture(t);
+	const actions = f.args.github.rest.actions;
+	const getArtifact = actions.getArtifact;
+	t.mock.method(actions, 'getArtifact', async () => {
+		const result = await getArtifact();
+		result.data.digest = digest('0');
+		return result;
+	});
+	await assert.rejects(cleanup(f.args), /archive digest differs/);
+	assert.deepEqual(f.calls, []);
+});
+
+test('a new successful main during cleanup stops before further deletion', async (t) => {
+	const f = fixture(t);
+	const actions = f.args.github.rest.actions;
+	const list = actions.listWorkflowRuns;
+	t.mock.method(actions, 'listWorkflowRuns', async () => {
+		const result = await list();
+		if (f.calls.includes('artifact:30')) result.data.workflow_runs = [{ ...result.data.workflow_runs[0], id: 99 }];
+		return result;
+	});
+	await assert.rejects(cleanup(f.args), /successful main E2E changed/);
+	assert.deepEqual(f.calls, ['artifact:30']);
+});
+
+for (const state of ['empty', 'has-jobs', 'unavailable', 'restarted', 'recent']) {
+	test(`queued cleanup blocker uses complete current evidence: ${state}`, async (t) => {
+		const now = Date.UTC(2026, 10, 9);
+		t.mock.timers.enable({ apis: ['Date'], now });
+		const f = fixture(t, { active: true });
+		const queued = f.runs.find((run) => run.id === 4);
+		const at = new Date(now - (state === 'recent' ? 1 : 36) * 24 * 60 * 60 * 1000).toISOString();
+		Object.assign(queued, {
+			status: 'queued',
+			conclusion: null,
+			run_attempt: 1,
+			created_at: at,
+			updated_at: at,
+			run_started_at: at,
+		});
+		let reads = 0;
+		t.mock.method(f.args.github.rest.actions, 'listJobsForWorkflowRun', async (request) => {
+			reads++;
+			assert.equal(request.run_id, 4);
+			assert.equal(request.filter, 'all');
+			if (state === 'unavailable') throw Object.assign(new Error('Missing job metadata'), { status: 404 });
+			if (state === 'restarted') queued.run_attempt++;
+			return {
+				data: state === 'has-jobs' ? { total_count: 1, jobs: [{ id: 1 }] } : { total_count: 0, jobs: [] },
+			};
+		});
+		await cleanup(f.args);
+		assert.equal(reads, state === 'recent' ? 0 : 2);
+		assert.ok(!f.calls.includes('run:4'));
+		if (state === 'empty') {
+			assert.ok(f.calls.includes('cache:40'));
+			assert.ok(f.calls.includes('image:14'));
+			assert.ok(f.logs.some((line) => line.includes('Ignore stale queued run 4')));
+		} else {
+			assert.ok(!f.calls.some((call) => call.startsWith('image:') || call.startsWith('cache:')));
+		}
+	});
+}

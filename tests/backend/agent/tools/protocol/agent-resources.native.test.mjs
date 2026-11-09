@@ -7,7 +7,7 @@ import { openAgentExecution } from '../../runs/support/agent-execution-fixture.m
 import { openSshd, until, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
 await test('Resource lifecycle: authenticated HTTP close confirms, durably cancels and drains a real running Agent', async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-agent-resources-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-agent-resources-'));
 	const sshd = await openSshd(root);
 	let f;
 	t.after(async () => {

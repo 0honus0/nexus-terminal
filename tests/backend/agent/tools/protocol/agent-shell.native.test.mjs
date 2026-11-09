@@ -53,7 +53,7 @@ await test('B10 resource drain preserves effect uncertainty and independent stor
 });
 
 await test('B10 actual Agent Shell and background Job lifecycles', { timeout: 120000 }, async (t) => {
-	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-shell-'));
+	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-shell-'));
 	let sshd;
 	let sequence = 0;
 
