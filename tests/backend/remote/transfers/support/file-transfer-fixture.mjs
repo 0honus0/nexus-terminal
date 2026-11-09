@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readdir, readlink, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createApp } from '../../../../../packages/backend/dist/bootstrap/create-app.js';
@@ -53,7 +53,7 @@ function knownShutdownFailure(error) {
 }
 
 export async function remoteFilesFixture(t) {
-	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-file-transfers-'));
+	const directory = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-file-transfers-'));
 	const daemons = [];
 	const workspaces = [];
 	const state = { allowUnknownShutdown: false, app: null };
@@ -72,14 +72,8 @@ export async function remoteFilesFixture(t) {
 				}
 			}
 		} finally {
-			try {
-				const results = await Promise.allSettled(daemons.map((daemon) => daemon.close()));
-				failures.push(
-					...results.filter((result) => result.status === 'rejected').map((result) => result.reason),
-				);
-			} finally {
-				await rm(directory, { recursive: true, force: true });
-			}
+			const results = await Promise.allSettled(daemons.map((daemon) => daemon.close()));
+			failures.push(...results.filter((result) => result.status === 'rejected').map((result) => result.reason));
 		}
 		if (failures.length) {
 			throw new AggregateError(failures, 'Remote transfer fixture cleanup failed');

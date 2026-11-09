@@ -73,6 +73,14 @@ await test('A suspended owner expires at its actual lease deadline and a new own
 		await owner.call('suspend.resume', { suspendedSessionId: mark.suspendedSessionId, workspaceId: randomUUID() }),
 	);
 	success(await owner.call('suspend.resumeAck', acknowledgement(mark, first)));
+	// Resume commits the terminal before its independent SFTP owner is ready.
+	// Finish real initialization before advancing Date past its operation deadline.
+	const files = await until(
+		() => owner.events.find((event) => ['filesystem.ready', 'filesystem.error'].includes(event.type)),
+		Boolean,
+		'Resumed lease file owner readiness',
+	);
+	assert.equal(files.type, 'filesystem.ready', JSON.stringify(files));
 	const renewed = success(await owner.call('suspend.owner.renew', {}));
 	assert.ok(
 		renewed.leaseExpiresAt - Date.now() >= 44000,
