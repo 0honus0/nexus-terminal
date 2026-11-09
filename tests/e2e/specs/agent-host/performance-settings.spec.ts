@@ -1,4 +1,4 @@
-import { selectAgentSettingsGroup } from '../../support/agent';
+import { enableTestAgentExecution, selectAgentSettingsGroup } from '../../support/agent';
 import { dismissToasts } from '../../support/feedback';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
@@ -15,8 +15,9 @@ test('execution settings validate before dispatch, save the original CAS and rej
 }) => {
 	await loginAsInitialAdmin(context.request);
 	await setUiLanguage(context.request);
-	// This test edits execution settings; first-enable installation is covered by onboarding.spec.
+	// Exercise disabling with the original CAS; first-enable installation is covered by onboarding.spec.
 	await installTestPlugin(context.request, 'nexus.agent');
+	await enableTestAgentExecution(context.request);
 	const initial = await requestAgentJson(
 		context.request,
 		{

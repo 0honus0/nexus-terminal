@@ -37,6 +37,8 @@
 
 提交发布追加授权后，首次远程[Host42613882980](https://github.com/0honus0/nexus-terminal/actions/runs/42613882980)在快速层353项中1项失败：signed-registry旧断言未包含解码器新增的可选requiredOnEnable字段（undefined）。同步明确输出断言后，原签名/namespace/schema拒绝断言保留，定向1项253ms通过；完整门禁待后续成功轮回填。首败日志为publication/host-first-quality.log。
 
+第二轮[Host42614414918](https://github.com/0honus0/nexus-terminal/actions/runs/42614414918)质量/smoke及7个分片通过，第6片performance-settings旧用例在只安装App后期待直接启用，实际进入新必需集合引导，首次和重试均失败。该用例改用真实Host先启用，验证关闭总开关的原CAS/持久设置；所有原校验、写入次数、刷新及弃用字段拒绝断言保留，首次启用仍由独立onboarding/host用例覆盖，不修改产品UI或旁路权限。本地整份performance-settings四项首次通过（13.9秒），格式/ESLint/diff通过。首败日志及原始ZIP为publication/host-second-failed.log、host-second-shard6.zip。
+
 公共官方目录尚未交付本轮required声明；上线此引导需随后续授权发布插件及更新目录。本轮CDP使用本地开发签名，不冒称官方发布签名通过；真实手机键盘、供应商模型效果和完整远程门禁仍不由本轮专项代替。
 
 ## Agent扩展与插件市场布局验收（2026-11-09）
