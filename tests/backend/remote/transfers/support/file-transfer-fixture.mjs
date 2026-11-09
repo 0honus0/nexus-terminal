@@ -168,7 +168,7 @@ export async function remoteFilesFixture(t) {
 	return { directory, state, app, address, cookie, endpoint, connect, close };
 }
 
-export function transferEvent(workspace, channel, requestId, types) {
+export function transferEvent(workspace, channel, requestId, types, signal) {
 	return until(
 		() =>
 			workspace.events.find(
@@ -179,5 +179,6 @@ export function transferEvent(workspace, channel, requestId, types) {
 			),
 		Boolean,
 		'Transfer event ' + types.join('/'),
+		signal ?? 10000,
 	);
 }

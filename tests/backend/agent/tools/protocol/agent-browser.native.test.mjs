@@ -4,22 +4,19 @@ import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import { mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openAgentExecution } from '../../runs/support/agent-execution-fixture.mjs';
 import { openSshd, until, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
 
-const requireBackend = createRequire(new URL('../../../../../packages/backend/package.json', import.meta.url));
-const requireE2e = createRequire(new URL('../../../../package.json', import.meta.url));
-const puppeteer = requireBackend('puppeteer-core');
-const { chromium } = requireE2e('@playwright/test');
+import { openPuppeteerBrowser } from '../../../../support/protocols/puppeteer-browser.mjs';
 
 await test('B10 actual CDP Browser ownership and governed operations', { timeout: 90000 }, async (t) => {
 	const root = await mkdtemp(join(process.env.NEXUS_AGENT_ACCEPTANCE_ROOT ?? tmpdir(), 'nexus-b10-browser-'));
 	let sshd;
 	let browser;
+	let browserOwner;
 	let observer;
 	let independent;
 	let sequence = 0;
@@ -80,11 +77,8 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 		site.listen(0, '127.0.0.1');
 		await once(site, 'listening');
 		pageOrigin = 'http://127.0.0.1:' + site.address().port;
-		browser = await puppeteer.launch({
-			executablePath: chromium.executablePath(),
-			headless: true,
-			args: ['--no-sandbox'],
-		});
+		browserOwner = await openPuppeteerBrowser();
+		browser = browserOwner.browser;
 		observer = await browser.target().createCDPSession();
 		independent = await browser.createBrowserContext();
 		await independent.newPage();
@@ -264,7 +258,7 @@ await test('B10 actual CDP Browser ownership and governed operations', { timeout
 		);
 	} finally {
 		const outcomes = await Promise.allSettled([
-			Promise.resolve().then(() => browser?.close()),
+			Promise.resolve().then(() => browserOwner?.close()),
 			Promise.resolve().then(() => sshd?.close()),
 			Promise.resolve().then(() => {
 				site.closeAllConnections();

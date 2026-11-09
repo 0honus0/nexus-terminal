@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import puppeteer from '../../../../../../packages/backend/node_modules/puppeteer-core/lib/puppeteer/puppeteer-core.js';
@@ -8,8 +7,7 @@ import { NativeBrowserClient } from '../../../../../../packages/backend/dist/pla
 import { BrowserFailure } from '../../../../../../packages/backend/dist/platform/browser/browser-client.js';
 import { until } from '../../../../../support/protocols/openssh-fixture.mjs';
 
-const requireE2e = createRequire(new URL('../../../../../package.json', import.meta.url));
-const { chromium } = requireE2e('@playwright/test');
+import { openPuppeteerBrowser } from '../../../../../support/protocols/puppeteer-browser.mjs';
 
 function gate() {
 	let resolve;
@@ -28,14 +26,11 @@ function contains(error, expected) {
 }
 
 await test('Browser actual CDP construction cancellation and cleanup fault ownership', async (t) => {
-	const browser = await puppeteer.launch({
-		executablePath: chromium.executablePath(),
-		headless: true,
-		args: ['--no-sandbox', '--disable-dev-shm-usage'],
-	});
+	const owner = await openPuppeteerBrowser();
+	t.after(() => owner.close());
+	const browser = owner.browser;
 	const observer = await browser.target().createCDPSession();
 	const independent = await browser.createBrowserContext();
-	t.after(() => browser.close());
 	const options = {
 		endpoint: browser.wsEndpoint(),
 		verifyTls: true,

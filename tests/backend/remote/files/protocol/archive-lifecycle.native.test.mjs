@@ -8,7 +8,9 @@ import { fileHandles, remoteFilesFixture, transferEvent } from '../../transfers/
 
 await test('B10 real native archive cancellation and Workspace closure', async (t) => {
 	for (const mode of ['cancel', 'workspace-close']) {
-		await t.test(mode, async (t) => {
+		// Real SSH termination and connection cleanup exceeded 10s under the CI lane load.
+		// One framework deadline owns the whole scenario; its waits must not add a shorter timer.
+		await t.test(mode, { timeout: 60000 }, async (t) => {
 			const f = await remoteFilesFixture(t);
 			const owner = await f.endpoint('archive');
 			const sourcePath = join(owner.root, 'source.bin');
@@ -46,17 +48,20 @@ await test('B10 real native archive cancellation and Workspace closure', async (
 				},
 				Boolean,
 				'Actual archive bytes and live native producer',
+				t.signal,
 			);
 			f.state.allowUnknownShutdown = true;
 			if (mode === 'cancel') {
 				const cancelled = await owner.workspace.call('transfer.cancelArchive', { taskId: requestId });
 				assert.equal(cancelled.ok, true, JSON.stringify(cancelled));
 				assert.equal(cancelled.data, true);
-				const event = await transferEvent(owner.workspace, 'transfer.archive', requestId, [
-					'failed',
-					'cancelled',
-					'completed',
-				]);
+				const event = await transferEvent(
+					owner.workspace,
+					'transfer.archive',
+					requestId,
+					['failed', 'cancelled', 'completed'],
+					t.signal,
+				);
 				assert.equal(event.payload.type, 'failed', JSON.stringify(event));
 				assert.equal(event.payload.message, 'operation_unknown');
 				const read = await owner.workspace.call('filesystem.stat', { path: sourcePath });
@@ -70,6 +75,7 @@ await test('B10 real native archive cancellation and Workspace closure', async (
 				() => fileHandles(stage),
 				(holders) => holders.length === 0,
 				'Native archive writer eventually exits',
+				t.signal,
 			);
 			assert.deepEqual(await readFile(destination), original);
 			assert.deepEqual(await readFile(sourcePath), bytes);

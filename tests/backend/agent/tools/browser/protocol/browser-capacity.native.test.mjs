@@ -2,21 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { createRequire } from 'node:module';
 import { NativeBrowserClient } from '../../../../../../packages/backend/dist/platform/browser/adapters/native-browser-client.js';
-const backend = createRequire(new URL('../../../../../../packages/backend/package.json', import.meta.url));
-const e2e = createRequire(new URL('../../../../../package.json', import.meta.url));
+import { openPuppeteerBrowser } from '../../../../../support/protocols/puppeteer-browser.mjs';
 
 await test(
 	'Browser capacity: deep DOM, wide queues and complete fields use the caller snapshot byte budget',
 	{ timeout: 30000 },
 	async (t) => {
-		let browser, session;
+		let owner, session;
 		t.after(async () => {
 			const failures = [];
 			for (const close of [
 				() => session?.close(),
-				() => browser?.close(),
+				() => owner?.close(),
 				() => new Promise((resolve, reject) => site.close((error) => (error ? reject(error) : resolve()))),
 			])
 				try {
@@ -48,12 +46,8 @@ await test(
 		});
 		site.listen(0, '127.0.0.1');
 		await once(site, 'listening');
-		const puppeteer = backend('puppeteer-core');
-		browser = await puppeteer.launch({
-			executablePath: e2e('@playwright/test').chromium.executablePath(),
-			headless: true,
-			args: ['--no-sandbox'],
-		});
+		owner = await openPuppeteerBrowser();
+		const browser = owner.browser;
 		const origin = 'http://127.0.0.1:' + site.address().port;
 		const signal = new AbortController().signal;
 		session = await new NativeBrowserClient().connect(
