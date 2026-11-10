@@ -6,7 +6,6 @@ export async function initializeOidcSchema(tx: SqlExecutor): Promise<void> {
 			id INTEGER PRIMARY KEY CHECK(id=1),
 			revision TEXT NOT NULL,
 			user_id INTEGER NOT NULL REFERENCES access_accounts(id) ON DELETE CASCADE,
-			enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
 			label TEXT NOT NULL,
 			issuer TEXT NOT NULL,
 			client_id TEXT NOT NULL,
@@ -33,9 +32,4 @@ export async function initializeOidcSchema(tx: SqlExecutor): Promise<void> {
 			token_digest TEXT PRIMARY KEY REFERENCES access_sessions(token_digest) ON DELETE CASCADE
 		);
 	`);
-}
-
-/** Visibility follows the verified binding; configuration no longer has a second switch. */
-export async function removeOidcVisibilitySwitch(tx: SqlExecutor): Promise<void> {
-	await tx.exec('ALTER TABLE access_oidc_configuration DROP COLUMN enabled');
 }

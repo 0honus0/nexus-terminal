@@ -1,11 +1,11 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
-/** Original v1 schema; retired producer values are converted by migration v68. */
+/** Current mutation claims, ownership and recovery evidence are created together. */
 export async function initializeMachineMutations(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`CREATE TABLE remote_machine_mutation_claims (
 		id TEXT PRIMARY KEY,
 		owner_id TEXT NOT NULL,
-		origin TEXT NOT NULL CHECK(origin IN ('files','docker','agent','tools')),
+		origin TEXT NOT NULL CHECK(origin IN ('files','docker','retired','tools')),
 		targets_json TEXT NOT NULL,
 		resource_count INTEGER NOT NULL CHECK(resource_count IN (1,2)),
 		state TEXT NOT NULL CHECK(state IN ('held','blocked','released')),

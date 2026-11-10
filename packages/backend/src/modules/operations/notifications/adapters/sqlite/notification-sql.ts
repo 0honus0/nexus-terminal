@@ -18,6 +18,7 @@ import { setting, delivery, readStoredConfig } from './notification-row.js';
 export async function initializeNotifications(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`CREATE TABLE operations_notifications(id TEXT PRIMARY KEY,version INTEGER NOT NULL,name TEXT NOT NULL,enabled INTEGER NOT NULL,events_json TEXT NOT NULL,config_json TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
 CREATE TABLE operations_notification_fanout(audit_id INTEGER PRIMARY KEY REFERENCES operations_audit(id) ON DELETE CASCADE);
+CREATE TABLE operations_notification_pending(audit_id INTEGER PRIMARY KEY REFERENCES operations_audit(id) ON DELETE CASCADE);
 CREATE TABLE operations_notification_deliveries(id TEXT PRIMARY KEY,setting_id TEXT,event TEXT NOT NULL,status TEXT NOT NULL,config_json TEXT NOT NULL,subject_id TEXT,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL);
 CREATE INDEX operations_delivery_pending ON operations_notification_deliveries(status,created_at);`);
 }

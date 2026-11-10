@@ -4,6 +4,12 @@
 
 已退役 Runner/Guacamole 的证据仅用于追溯，不能证明当前 SSH/CDP/浏览器 SDK 的行为。静态、受控 fixture、真实服务与真机结论分别判断。
 
+## OIDC 初始化结构整理（2026-11-10）
+
+按用户明确要求移除 `removeOidcVisibilitySwitch` 函数、导出及迁移调用，OIDC 初始化不再创建 `enabled`。v4 签名更新，后三条迁移顺延为 v66–v68，保持连续；这是新库基线整理，不兼容旧迁移链数据库，不修改运行中实例。删除旧显示字段转换用例，在现有安装回归中核对最终结构无该列；未增加运行时兼容分支。
+
+Shared 与 Backend 构建、Backend 类型、改动文件 ESLint 和测试目录检查通过；OIDC 存储及生产迁移链 11 项通过（Vitest 5.79 秒），迁移事务原生 2 项通过（Node 0.24 秒）。覆盖会话保留、重复启动、完整性／外键、迁移失败回滚及普通应用启动；未运行浏览器、完整远程 E2E 或发布。Vitest 报告保留在 `/home/honus/nexus-task-artifacts/oidc-schema-cleanup-20261110/modules/reports/vitest.json`，此前记录中的迁移编号保留原验证时含义。
+
 ## 移除版 E2E 与开发调试入口清理（2026-11-10）
 
 本体`6b7ee3f0`的[首轮完整E2E42759626441](https://github.com/0honus0/nexus-terminal/actions/runs/42759626441)质量检查及其余六片成功，Docker独立前端stage漏建Shared，分片3的OIDC测试把最后迁移签名固定为旧值，分片6备份页期待已删除的Agent诊断模块；三处均为实际失败，不以其余通过代替。
@@ -3253,3 +3259,11 @@ AppManagement右侧设置紫色、安全蓝色、启用绿色、禁用暖色及�
 本体清理提交`26dd1a88f75a8ca71520e9e5597ee9746d35848e`已推送main，[完整E2E42768086064](https://github.com/0honus0/nexus-terminal/actions/runs/42768086064)成功，质量、共享runner更新、8个测试分片、Docker部署冒烟及报告汇总全部通过。下载quality及8个分片报告逐项核对：快速层227项、Vitest模块235项、原生协议389项、Playwright397项，均无失败、取消或跳过；原始报告及机器汇总归`publication/quality`、`publication/shards`和`publication/verified-test-summary.json`。自动耗时回写`390ab732607f7efa4362b95158b5333260c19638`已快进同步，差异仅为`duration-estimates.json`。随后从该main提交启动amd64 dev镜像[发布42769169285](https://github.com/0honus0/nexus-terminal/actions/runs/42769169285)，未部署远程实例。
 
 发布成功，生产依赖安全审计、amd64构建及GHCR推送全部通过。只读读取仓库镜像元数据，确认`ghcr.io/0honus0/nexus-terminal:dev`与`:sha-390ab732607f`指向同一index digest `sha256:132e5c234d281e8a13620e8a10ee816f3c5cadd9070530d37144da47d04d9da1`，实际平台`linux/amd64`，OCI revision准确为`390ab732607f7efa4362b95158b5333260c19638`。发布结果、完整日志及两标签manifest/config归`publication/`；仅远程构建并发布，未拉取镜像层到本机、未部署或修改远程数据。最终验收文档单独提交，不改变已发布源码。
+
+## 本体模块API开放设计（2026-11-10）
+
+基于已发布清理版`234d97e1`，按用户要求继续架构设计，后端大体不变，供后续插件调用项目功能。只读核对六模块的`public.ts`、`register.ts`、HTTP/WS入口及Targets管理授权、Preferences配置/事务、Operations观察器和System维护装配。确认已有REST与内部协作接口不足以直接作为插件授权出口，特别是Targets可信目标含凭据、Preferences公开的是安装秘密、Operations只公开内部事件发布，以及部分准入依赖HTTP/token。
+
+目标设计在`architecture/AGENT_REFACTOR.md`维护：按用户补充方案新增`modules/sdk`，按原模块集中适配安全业务契约，经Bootstrap交通用宿主注册；原模块不反向依赖SDK，后端发布客户端独立归`sdk/client`；复用原Service/Model/SQL/资源owner，区分八项基础I/O和项目管理功能。补齐内置提供者来源、按需发现/描述、身份与插件授权交接、事务内复查、非HTTP审计、双入口变化通知、多调用部分成功及前后端生命周期；精确授权结构和各方法协议仍待实施前冻结，不声称已提供SDK。同步Backend、Shared、API导航及PLAN四表/后续阶段，修正把归档SDK4写成当前实现及重复删除已移除目录的过时描述。
+
+本轮无源码、SQL或产品行为变化，USAGE核对保持适用，不启动测试环境、不执行运行时测试，不提交推送或发布。验收仅覆盖受影响文档格式、新增本地链接/锚点及diff检查，不继承前一轮E2E作为新宿主的运行时证明。
