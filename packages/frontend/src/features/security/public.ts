@@ -6,4 +6,4 @@ export const loadIpAccessPanel = () => import('./components/IpAccessPanel.vue');
 
 export { useLoginSecurity } from './composables/useLoginSecurity';
 
-export type { LoginCaptchaConfig, CaptchaStatus, LoginSecurityController } from './model/security-types';
+export type { CaptchaStatus } from './model/security-types';

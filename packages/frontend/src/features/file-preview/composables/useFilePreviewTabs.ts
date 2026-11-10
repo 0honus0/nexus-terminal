@@ -185,5 +185,3 @@ export function createFilePreviewSession(
 
 	return { tabs, activeId, active, open, activate, close, closeScope, clear, refresh };
 }
-
-export const useFilePreviewTabs = createFilePreviewSession;

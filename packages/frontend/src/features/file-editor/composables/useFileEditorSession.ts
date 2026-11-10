@@ -378,5 +378,3 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 		activateRelative,
 	};
 }
-
-export const useFileEditorSession = createFileEditorSession;

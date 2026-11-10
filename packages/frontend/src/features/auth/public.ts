@@ -11,25 +11,13 @@ export { authErrorKey } from './model/auth-errors';
 
 export { AuthRequestFailure } from './model/auth-failure';
 
-export type { AccessApi } from './api/access-api';
-
 export { default as LoginView } from './views/LoginView.vue';
 
 export const loadSetupView = () => import('./views/SetupView.vue');
 
-export type {
-	PasskeyLoginInput,
-	AuthUser,
-	AuthLoginRequest,
-	AuthLoginResult,
-	AuthSetupRequest,
-	AuthSessionState,
-	SetupState,
-} from './model/auth-types';
+export type { PasskeyLoginInput } from './model/auth-types';
 
 export { useAuthSession };
-
-export type { AuthSessionController } from './composables/useAuthSession';
 
 export interface AuthNavigationFacade {
 	resolveSetupState(force?: boolean): Promise<SetupState>;
@@ -74,4 +62,4 @@ export { createOidcApi } from './api/oidc-api';
 
 export { redirectToOidc, consumeOidcCallback } from './adapters/browser-oidc';
 
-export type { OidcSettings, OidcSettingsChange } from './model/oidc-types';
+export type { OidcSettings } from './model/oidc-types';

@@ -22,7 +22,6 @@ Commands:
 Environment variables:
   NEXUS_IMAGE_REPOSITORY  Image repository (default: ghcr.io/0honus0/nexus-terminal)
   NEXUS_IMAGE_TAG         Image tag (default: latest)
-  VITE_API_BASE_URL        Optional frontend API base URL embedded at build time
 
 Examples:
   scripts/build/build.sh local backend
@@ -53,10 +52,6 @@ build_local() {
 
 build_docker() {
     local -a build_args=(--build-arg "NODE_VERSION=$(cat "$ROOT_DIR/.node-version")")
-
-    if [[ -n "${VITE_API_BASE_URL:-}" ]]; then
-        build_args+=(--build-arg "VITE_API_BASE_URL=$VITE_API_BASE_URL")
-    fi
 
     echo "==> Building unified Docker image $IMAGE"
     docker build \

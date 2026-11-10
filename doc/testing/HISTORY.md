@@ -3220,3 +3220,32 @@ AppManagement右侧设置紫色、安全蓝色、启用绿色、禁用暖色及�
 浏览器定位修正后，本体测试源码 vue-tsc 与插件 check:browser 的全量发现/类型检查再次通过；增量 ESLint、两仓变更文件 Prettier 与 diff 检查通过。插件仓 ESLint 原配置不匹配测试 TS 文件，其类型覆盖由 check:browser 提供，不将 ignored 警告当作 TS lint 通过。
 
 两仓按配套顺序提交推送：插件修复提交 `e146f7c85d6b453d85f42b21e8bd375871e6d925`，使用 `[skip ci]` 避免独立 Validate 绑定旧的成功 Host；随后本体正常触发完整 E2E，自动检出插件 main 并共同验收。当前专项通过不代表远程完整矩阵已通过；独立插件 Validate 应在新 Host 成功后绑定该运行。此次仅提交推送，不发布签名包/镜像，不部署或清理现有测试环境。
+
+## 前后端目录与基础环境残余清理（2026-11-10）
+
+源码基于已同步main `37fc8c2f`；本批仅本地工作区，未提交推送发布或部署。完整树、逐目录表、入口图与Knip6.44.2辅助分析保存在`/home/honus/nexus-task-artifacts/source-residue-audit-20261110`，工具不加入仓库依赖或门禁。覆盖Backend bootstrap、六个modules及全部platform，Frontend app/client、26个features、foundation、workspace runtime、shared及build/public/vendor；清理后运行图没有入口不可达的TS/Vue/CSS文件。动态语言/worker/wasm、生成测试入口及第三方许可证按真实消费者保留，不能把简单引用统计当充分删除依据。
+
+| 审核      | 结论                                                                                                                                                                                                                                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 职责      | 删除旧UI展示页与DEV路由、4个无用素材、Axios旧栈、next语言扫描、独立前端Dockerignore及空目录。所有正式UI保持；后端目录有实际入口，历史迁移和实际日志数据路径保留。                                                                                                                                    |
+| 类型      | 精简161个无消费者re-export、2个兼容会话别名、无调用reset/catalog/storage wrapper及7项预留类型；内部helper改为非公开。Audit/Notifications仍显式加载认证清理注册，其余缓存仍走既有生命周期。                                                                                                           |
+| 依赖/环境 | 清理19项直接依赖（Backend2、Frontend16、根工具1）及锁文件/catalog；保留Tailwind CSS、协议测试undici和CodeMirror动态语言传递依赖。审核4个workflow，现有Actions、权限、成品链均有消费者；删除两份Dockerfile及构建脚本的旧打包tar编译/xz、setuptools、无用API构建参数与bcrypt授权，不改正常流水线编排。 |
+| 功能      | 现有HTTP诊断改测正式fetch客户端，保留状态、取消、协议/网络失败、关联编号与秘密脱敏全部断言。不新增清理测试；USAGE核对保持符合正式功能，无SQL/Shared协议变更。                                                                                                                                        |
+
+本地Node26.13.0/pnpm12.16.1；所有日志及机器报告归上述任务目录：
+
+- `pnpm check`、双端生产build、测试浏览器客户端build、`pnpm format:all:check`和`git diff --check`通过。
+- 首轮快速层223通过、4项tooling失败：宿主未安装GNU time，无法生成真实资源指标，并非源码回归。任务目录解包发行版工具后用现有`NEXUS_TEST_TIME_COMMAND`指定，不改产品/测试断言；`fast-final`全部227项通过，Vitest10.98秒、命令11.51秒。保留`fast.log`首次失败和两个独立报告根。
+- `frontend-integration`45文件/53项通过，Vitest84.38秒、命令84.83秒，覆盖真实HTTP、组件、身份清理及缓存生命周期。
+- 正式隔离Chromium：setup/login、protected-navigation、frontend-diagnostics共13项通过，Playwright15.8秒；含应用与测试客户端构建总28.40秒。HTTP6组完成/拒绝/服务错误/在途取消/格式错误/网络错误断言完整保留。
+- 基础环境修改后现有runner-image/test-shard/deployment-smoke工具链3文件/11项通过，Vitest0.96秒。
+- 从当前源码真实构建生产镜像，Alpine Python3.14/node-gyp12.3在未安装setuptools时ssh2原生模块编译成功；正式Compose前后端健康及Shared健康契约冒烟通过，总13.50秒，临时容器/网络由正式脚本清理。
+- 从当前锁文件真实构建runner，使用发行版GNU tar1.34，无Python/make/g++运行残余；离线安装642包全部复用、下载0，未重跑ssh2 install，缓存原生加密模块成功加载。镜像内快速层227项通过（9.99秒），原归档恢复6项通过（10.58秒，含原生工具、取消/失败后恢复、并发及2万项/64层路径）。日志分别保留在`runner-evidence/fast.log`与`archive.log`；后一次Vitest默认JSON覆盖同根文件，runner快速层以完整原始日志为证，宿主快速层独立JSON保留。
+
+范围只证明上述静态、构建及现有本地回归；未重新运行全部远程矩阵、真实手机/Windows或生产部署。未改历史迁移、实例数据库、用户环境或现有镜像。临时构建器、两份验证镜像及离线验证源码副本在验收后精确清理，保留任务日志、报告与工具证据。
+
+### 残余清理提交与发布（2026-11-10）
+
+用户后续授权将前一轮移除相关剩余变更提交推送并发布新版本，沿用main、amd64、dev镜像通道，不更新远程实例。提交前复核全部94项工作区文件，确认旧Agent移除提交及插件仓空树已在远程；插件仓main为`ffbe4d277c4302917cbe6f402ab8c31a43265f4f`，删除前两仓实现仍有归档标签及完整历史。本轮不实施前端目录调整、插件API代理或新宿主，不增加数据库迁移。
+
+当前源码再次通过`pnpm run check`、`pnpm run format:all:check`及`git diff --check`，沿用本节已记录的实际构建和本地功能回归，不重复无变更的长测试。新增门禁日志及提交前补丁保存在原任务目录`publication/`。推送后跟进当前提交完整远程E2E，成功后才启动镜像发布；实际运行及发布结果在本节继续记录。

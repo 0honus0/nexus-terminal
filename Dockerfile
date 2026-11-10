@@ -15,8 +15,6 @@ RUN PNPM_VERSION="$(node -p "require('./package.json').packageManager.replace(/^
     && npm install --global --allow-scripts=pnpm "pnpm@${PNPM_VERSION}"
 
 FROM workspace-base AS frontend-builder
-ARG VITE_API_BASE_URL=""
-ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 COPY packages/frontend/package.json ./packages/frontend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/frontend...
@@ -30,7 +28,7 @@ RUN pnpm --filter @nexus-terminal/shared build \
     && pnpm --filter @nexus-terminal/frontend build
 
 FROM workspace-base AS backend-builder
-RUN apk add --no-cache python3 py3-setuptools make g++
+RUN apk add --no-cache python3 make g++
 COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     CI_CHECK_FAIL=ssh2 pnpm install --frozen-lockfile --filter @nexus-terminal/backend...

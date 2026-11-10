@@ -54,7 +54,7 @@ export function toSshResource(value: SshResourceStatus): SshResource {
 	};
 }
 
-export function toPendingResource(target: SshResourceTarget, error?: ResourceFailureCode): SshResource {
+function toPendingResource(target: SshResourceTarget, error?: ResourceFailureCode): SshResource {
 	const key = resourceKey(target.host, target.port);
 	if (error) {
 		return {

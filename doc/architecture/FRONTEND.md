@@ -36,7 +36,7 @@ Foundation 保持业务无关；具体编辑器、xterm、图表 的技术资源
 
 ## 5. 入口与安装
 
-`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。开发模式仅保留通用UI展示入口；旧独立远端调试页、对应runtime及专用代理已移除，认证统一使用正式同源入口。
+`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。旧UI展示页、独立远端调试页、对应runtime及专用代理均已移除，认证统一使用正式同源入口。
 
 重型编辑器、预览及图表沿实际异步入口加载；加载占位不伪造业务数据。现成全局确认、Toast 和 UiSelect 由基础组件统一呈现，具体动作与恢复仍归用例 owner。
 
@@ -452,8 +452,8 @@ StatusMonitor 的矮面板单行模式由原 status-content 高度容器查询�
 2. **子功能与目录**：沿既有 logger、transport-diagnostics 与 app/bootstrap/runtimeDiagnostics；真实状态 owner 记录状态变化，传输 owner 记录安全技术元数据，不新增并行日志系统。
 3. **依赖方向**：logger 消费 Shared `FRONTEND_LOG_LEVELS/FrontendLogLevel`；Client、Runtime 和 Feature 依赖 logger；Client 不反向依赖 Feature。
 4. **类型与转换**：错误通过 Pino 的浏览器 `err` serializer 白名单投影类型及源码位置；忽略错误正文和自定义字段。HTTP/WS 只投影 pathname、本地关联编号、状态、耗时与缓冲字节，不记录查询参数、凭据、正文及聊天/终端内容。
-5. **入口与安装**：main 安装全局和 Vue 错误诊断；偏好同步沿原 Store watcher；Axios 与 fetch 共用 HTTP 诊断，正式构建不包含 `build/e2e-browser-diagnostics.ts` 测试入口。
-6. **数据、事务与并发**：不涉及数据库或迁移；HTTP 回调仅结算一次，Axios 通过 WeakMap 关联配置与诊断，不修改请求头、重试、错误或未知结果契约；页面内编号不等于服务端请求 ID。
+5. **入口与安装**：main 安装全局和 Vue 错误诊断；偏好同步沿原 Store watcher；正式 JSON 与二进制 fetch 客户端共用 HTTP 诊断，正式构建不包含 `build/e2e-browser-diagnostics.ts` 测试入口。
+6. **数据、事务与并发**：不涉及数据库或迁移；HTTP 回调仅结算一次，由实际 fetch 请求闭包关联诊断，不修改请求头、重试、错误或未知结果契约；页面内编号不等于服务端请求 ID。
 7. **生命周期与失败**：全局监听与 PerformanceObserver 属于页面生命周期；取消/主动关闭记 debug，恢复失败记 warn，协议/未捕获异常记 error；trace 走 console.debug 避免逐帧捕获堆栈，长任务先检查等级再聚合。
 8. **当前能力与验收**：新增正式浏览器场景覆盖等级动态过滤、silent、脱敏、HTTP 关联与取消以及 window/Promise/Vue 异常；实际执行、静态结果与远程待验分开记录在 testing/HISTORY。
 
@@ -563,3 +563,7 @@ Vite 正式入口和 E2E 客户端都安装 localeMessages，main 等待首种�
 6. **数据与并发**：无数据库变更。失败启动在原串行队列核对；未确认停止不放行替换启动。取消后排队的移除在派发前复查认证epoch，旧会话结果不能操作新会话。
 7. **生命周期与失败**：停止并发共享Promise，失败保留原请求绑定以便再核对；原附件断开使绑定失效，旧停止不能发往替换连接。控制器dispose排队停止，晚样本仍按消费状态拒绝。
 8. **当前能力与验收**：USAGE状态监控/传输章节同步；虚拟时钟仅验证控制器时间语义，真实WS验证绑定、错误及恢复，实际UI、资源与完整门禁结果归testing，不用单测替代全量验收。
+
+## 目录残余清理边界
+
+源码、动态语言/worker/wasm、构建及测试入口共同决定文件是否保留。公开出口只保留真实跨模块消费者；内部模型类型和仍有内部调用的实现留在原owner，缓存重置即使不再公开也须保持认证生命周期注册。文件编辑/预览只公开实际会话factory，移除无消费者旧别名。生产HTTP只保留JSON与二进制fetch客户端，错误提示保留Error.message及fallback；测试诊断入口同样消费正式客户端。CodeMirror额外语言由language-data动态加载，不重复声明无直接消费的语言包；正式logo-small及IronRDP包、补丁和许可证保留。

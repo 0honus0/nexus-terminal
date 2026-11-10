@@ -70,12 +70,6 @@ export default defineConfig({
 				// 可选：如果后端 API 路径没有 /api 前缀，可以在这里重写路径
 				// rewrite: (path) => path.replace(/^\/api/, '')
 			},
-			// 将所有 /uploads 开头的请求也代理到后端服务器
-			'/uploads': {
-				target: devBackendOrigin, // 后端服务器地址
-				changeOrigin: true, // 对于静态资源通常也建议开启
-				// 通常不需要重写静态资源的路径
-			},
 			// Keep the clean WebSocket families on independent proxy instances. Upload sockets can
 			// be numerous and short-lived under cancellation/network-failure tests; sharing one broad
 			// /ws proxy lets that churn affect later Workspace control upgrades in the dev/E2E ingress.

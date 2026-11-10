@@ -1,4 +1,4 @@
-export const normalizeEditorEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeEditorEncoding = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const ENCODING_DETECTION_SAMPLE_BYTES = 256 * 1024;
 
@@ -64,7 +64,7 @@ const encodingDetectionSample = (rawContent: Uint8Array): Uint8Array => {
 	return sample;
 };
 
-export const detectEditorEncoding = async (rawContent: Uint8Array): Promise<string> => {
+const detectEditorEncoding = async (rawContent: Uint8Array): Promise<string> => {
 	if (rawContent.byteLength >= 3 && rawContent[0] === 0xef && rawContent[1] === 0xbb && rawContent[2] === 0xbf)
 		return 'utf-8';
 	if (rawContent.byteLength >= 2 && rawContent[0] === 0xff && rawContent[1] === 0xfe) return 'utf-16le';
@@ -106,7 +106,7 @@ export const decodeEditorDocument = async (
 	return { content: await decodeEditorRawContent(rawContent, encoding), encoding };
 };
 
-export const decodeEditorRawContent = async (rawContent: Uint8Array, encoding: string): Promise<string> => {
+const decodeEditorRawContent = async (rawContent: Uint8Array, encoding: string): Promise<string> => {
 	const normalized = normalizeEditorEncoding(encoding);
 	if (normalized === 'utf8' || normalized === 'utf16le' || normalized === 'utf16be') {
 		return new TextDecoder(

@@ -14,7 +14,7 @@ import type {
 	RemoteHtmlThemeListing,
 } from './model/html-theme-types.js';
 
-export const MAX_CUSTOM_HTML_THEMES = 2048;
+const MAX_CUSTOM_HTML_THEMES = 2048;
 
 export function validateHtmlThemeName(name: string): void {
 	if (

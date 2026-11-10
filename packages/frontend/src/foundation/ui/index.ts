@@ -1,9 +1,5 @@
 export { default as UiOverlayPanel } from './UiOverlayPanel.vue';
 
-export { overlayStack } from './overlayStack';
-
-export type { OverlayStackRegistration } from './overlayStack';
-
 export { default as UiTokenInput } from './UiTokenInput.vue';
 
 export type { UiTokenOption } from './UiTokenInput.vue';
@@ -37,8 +33,6 @@ export { default as UiInfoHint } from './UiInfoHint.vue';
 export { default as UiInlineNotice } from './UiInlineNotice.vue';
 
 export { default as UiInput } from './UiInput.vue';
-
-export { default as UiListToolbar } from './UiListToolbar.vue';
 
 export { default as UiLoadingState } from './UiLoadingState.vue';
 
@@ -74,4 +68,4 @@ export { default as UiTable } from './UiTable.vue';
 
 export { default as UiTextarea } from './UiTextarea.vue';
 
-export type { UiAppearance, UiDensity, UiSelectOption, UiSelectValue, UiSurfaceKind, UiTone } from './uiTypes';
+export type { UiDensity, UiSelectOption, UiSelectValue, UiTone } from './uiTypes';

@@ -1,7 +1,7 @@
-export const DEFAULT_FONT_FAMILY_SANS =
+const DEFAULT_FONT_FAMILY_SANS =
 	'-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
 
-export const DEFAULT_FONT_FAMILY_MONO =
+const DEFAULT_FONT_FAMILY_MONO =
 	'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
 
 export const defaultTerminalTheme: Record<string, string> = {

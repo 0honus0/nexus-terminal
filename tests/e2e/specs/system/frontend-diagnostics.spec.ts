@@ -87,14 +87,26 @@ test('frontend HTTP diagnostics correlate results, classify cancellation and omi
 			console[channel] = (...args: unknown[]) => output.push(JSON.stringify(args));
 		}
 		const modulePath = '/__e2e__/browser-diagnostics.js';
-		const { httpClient, requestJson, setFrontendLogLevel } = await import(modulePath);
+		const { requestJson, setFrontendLogLevel } = await import(modulePath);
 		setFrontendLogLevel('debug', false);
 		for (const status of [200, 404, 503]) {
-			await httpClient.get(`/__logging_regression?status=${status}&token=private-query`).catch(() => {});
+			await requestJson({
+				method: 'GET',
+				url: `/api/v1/__logging_regression?status=${status}&token=private-query`,
+				maxRequestBytes: 1024,
+				maxResponseBytes: 1024,
+			}).catch(() => {});
 		}
 		const controller = new AbortController();
+		const pending = requestJson({
+			method: 'GET',
+			url: '/api/v1/__logging_regression?status=200',
+			maxRequestBytes: 1024,
+			maxResponseBytes: 1024,
+			signal: controller.signal,
+		});
 		controller.abort();
-		await httpClient.get('/__logging_regression?status=200', { signal: controller.signal }).catch(() => {});
+		await pending.catch(() => {});
 		for (const kind of ['protocol', 'network']) {
 			await requestJson({
 				method: 'GET',

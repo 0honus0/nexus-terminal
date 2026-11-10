@@ -1,4 +1,4 @@
-export const PREVIEW_SEARCH_MATCH_SELECTOR = 'mark[data-preview-search-match]';
+const PREVIEW_SEARCH_MATCH_SELECTOR = 'mark[data-preview-search-match]';
 
 export const clearPreviewSearchMatches = (root: HTMLElement | null): void => {
 	if (!root) return;

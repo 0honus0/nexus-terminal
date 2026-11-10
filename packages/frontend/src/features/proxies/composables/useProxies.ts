@@ -15,5 +15,3 @@ export function useProxies(): ProxiesController {
 		remove: store.remove,
 	};
 }
-
-export const resetProxiesCache = (): void => useProxiesStore().reset();

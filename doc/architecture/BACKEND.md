@@ -201,6 +201,8 @@ Port 文件表达 Platform 的技术能力及技术输入/输出，不是新增�
 
 ## 4. 类型与转换
 
+源码清理仅删除无人消费的预留类型/导出；内部仍使用的规则和行解码留在原owner。六个业务模块与Platform技术目录均有正式入口，`platform/tools`仍服务远端工具安装，不是旧Agent残余。历史迁移的依赖闭包及挂起日志已使用的数据路径保留，不因目录或字段含历史名称删除。
+
 ### Factors 类型及公开白名单
 
 Shared 的 `access/factors/http.ts` 拥有 TOTP token/disable、WebAuthn credential JSON 和 Passkey 名称/发现 query 的未知输入解码，以及公开成功结果。Factors 内部身份、PendingLogin/FactorChallenge/PasskeyCredential 分别归 `factors/model/factor-types.ts`，Storage 行/命令归 `factors/storage`，Port 的公钥/注册结果不含 account/user 类型。HTTP 明确构造用户/id/计数/时间响应，登录成功联合含 `requiresTwoFactor:true` 的部分分支，注册/认证 options 由 Model 的 `options-projector.ts` 投影；完整会话 bearer、服务端 pending/challenge cookie 和加密的 TOTP secret 不进入跨模块 public。Factors Adapter 复用 Sessions 的事务内身份读取，不另写一套会话 SQL；到期时钟在读取后取值，挑战消费在实际事务中读取并判断期限。令牌生成/摘要技术异常由 FactorModel 映射；Passkey 列表交付前由 Service 复查原会话。凭据持久编码与容量由 Adapter 严格解码，基础容量精确引用 Shared values。

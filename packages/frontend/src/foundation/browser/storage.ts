@@ -22,11 +22,7 @@ const GLOBAL_SCOPE: BrowserStorageScope = { kind: 'global' };
 const scopeSegment = (scope: BrowserStorageScope): string =>
 	scope.kind === 'global' ? '' : `.${scope.kind}.${encodeURIComponent(String(scope.id))}`;
 
-export const browserStorageKey = (
-	namespace: string,
-	version: number,
-	scope: BrowserStorageScope = GLOBAL_SCOPE,
-): string => {
+const browserStorageKey = (namespace: string, version: number, scope: BrowserStorageScope = GLOBAL_SCOPE): string => {
 	if (!namespace || !Number.isInteger(version) || version < 1) throw new Error('INVALID_BROWSER_STORAGE_KEY');
 	return `nexus.${namespace}${scopeSegment(scope)}.v${version}`;
 };
@@ -103,12 +99,6 @@ export const removeStoredValue = <T>(definition: BrowserStorageDefinition<T>): v
 	const storage = resolveStorage(definition.area ?? 'local');
 	if (!storage) return;
 	removeRaw(storage, currentKey(definition));
-};
-
-export const removeLegacyStorageKeys = (keys: readonly string[], area: BrowserStorageArea = 'local'): void => {
-	const storage = resolveStorage(area);
-	if (!storage) return;
-	for (const key of keys) removeRaw(storage, key);
 };
 
 export const stringStorageCodec = (validate: (value: string) => boolean = () => true): BrowserStorageCodec<string> => ({

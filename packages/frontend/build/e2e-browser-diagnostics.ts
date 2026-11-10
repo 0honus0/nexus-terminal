@@ -5,8 +5,6 @@ export { logger, setFrontendLogLevel } from '../src/client/logging/logger';
 
 export { requestJson } from '../src/client/http/json-client';
 
-export { httpClient } from '../src/client/http/httpClient';
-
 export {
 	registerGlobalRuntimeDiagnostics,
 	registerVueRuntimeDiagnostics,

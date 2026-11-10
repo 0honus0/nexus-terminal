@@ -486,5 +486,3 @@ const handlePageHide = (event: PageTransitionEvent): void => {
 if (typeof window !== 'undefined') {
 	window.addEventListener('pagehide', handlePageHide);
 }
-
-export type WorkspaceRuntimeRegistry = typeof workspaceRuntimeRegistry;

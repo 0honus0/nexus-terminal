@@ -27,7 +27,7 @@ function text(value: unknown, max: number): string {
 	return value;
 }
 
-export function storedThemeColors(input: unknown): StoredThemeColors {
+function storedThemeColors(input: unknown): StoredThemeColors {
 	if (input === null || typeof input !== 'object' || Array.isArray(input)) {
 		throw new Error('Corrupt theme colors');
 	}

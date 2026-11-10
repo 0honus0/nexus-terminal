@@ -7,7 +7,7 @@ const deltaToPixels = (event: WheelEvent): number => {
 };
 
 /** Convert noisy mouse/trackpad deltas into bounded discrete steps without leaking large-delta backlog. */
-export function createWheelStepAccumulator({
+function createWheelStepAccumulator({
 	thresholdPx = 72,
 	resetAfterMs = 220,
 	maxStepsPerEvent = 3,

@@ -51,7 +51,7 @@ function input(value: CommandInput): void {
 	}
 }
 
-export function validateCommandTask(task: CommandTask): void {
+function validateCommandTask(task: CommandTask): void {
 	switch (task.action) {
 		case 'create':
 			input(task.input);

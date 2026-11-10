@@ -16,16 +16,6 @@ export { useSettingsReloadNotifications } from './composables/useSettingsReloadN
 
 export { default as RuntimeErrorBoundary } from './components/RuntimeErrorBoundary.vue';
 
-export type {
-	AlertDialogOptions,
-	ConfirmDialogOptions,
-	DialogDetail,
-	DialogTone,
-	NotificationKind,
-	SettingsReloadResult,
-	SettingsReloadSource,
-	UiNotification,
-	UiNotificationAction,
-} from './model';
+export type { NotificationKind } from './model';
 
 export { preferenceFailureMessage } from './preference-failure-message';

@@ -3,17 +3,11 @@ export interface TerminalViewport {
 	rows: number;
 }
 
-export type TerminalConnectionState = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error';
-
 export interface TerminalOutput {
 	data: string | Uint8Array;
 	/** Apply after data has been parsed and before subsequent output. */
 	viewport?: TerminalViewport;
 	consumed?: () => void;
-}
-
-export interface TerminalSnapshot {
-	text: string;
 }
 
 export interface TerminalVisualOptions {

@@ -17,7 +17,7 @@ export interface StickyTerminalModifiers {
 	clear(): void;
 }
 
-export const STICKY_MODIFIER_DOUBLE_TAP_MS = 350;
+const STICKY_MODIFIER_DOUBLE_TAP_MS = 350;
 
 export function createStickyTerminalModifiers(): StickyTerminalModifiers {
 	const levels = reactive<Record<TerminalModifier, StickyModifierLevel>>({ ctrl: 'off', alt: 'off', shift: 'off' });

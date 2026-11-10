@@ -1,11 +1,9 @@
 export const loadFileEditor = () => import('./components/FileEditor.vue');
 
-export { createFileEditorSession, useFileEditorSession } from './composables/useFileEditorSession';
+export { createFileEditorSession } from './composables/useFileEditorSession';
 
-export type { FileEditorSessionController, FileEditorOpenContext } from './model/file-editor-session-types';
+export type { FileEditorSessionController } from './model/file-editor-session-types';
 
 export type { FileDocumentPort } from './ports/file-document-port';
-
-export type { EditorDocument, EditorLineEnding, EditorSaveState, LoadedEditorDocument } from './model/editor';
 
 export { decodeEditorDocument } from './model/editorEncoding';

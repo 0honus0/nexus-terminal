@@ -2,8 +2,6 @@ export const loadAppearanceCustomizerModal = () => import('./components/Appearan
 
 export const loadAppearanceSettingsPanel = () => import('./components/AppearanceSettingsPanel.vue');
 
-export { resetAppearanceCache, useAppearance } from './composables/useAppearance';
-
-export type { AppearanceController } from './composables/useAppearance';
+export { useAppearance } from './composables/useAppearance';
 
 export { defaultTerminalTheme } from './config/default-theme';

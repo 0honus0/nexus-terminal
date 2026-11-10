@@ -2,22 +2,6 @@ export const loadFileManager = () => import('./components/FileManager.vue');
 
 export const loadRemoteDirectoryPicker = () => import('./components/RemoteDirectoryPicker.vue');
 
-export { default as FilesystemCatalogModal } from './components/FilesystemCatalogModal.vue';
-
-export { useFilesystemCatalog } from './composables/useFilesystemCatalog';
-
-export type { FavoritePathSaveInput, FilesystemCatalogController } from './model/catalog-types';
-
-export type { FavoritePathSummary, FavoritePathSort, PathHistoryItem } from './model/catalog-types';
-
-export { useFilesystemBrowser } from './composables/useFilesystemBrowser';
-
-export type {
-	FilesystemBrowserController,
-	FilesystemSortDirection,
-	FilesystemSortKey,
-} from './composables/useFilesystemBrowser';
-
 export { createFilesystemSessionState } from './composables/createFilesystemSessionState';
 
 export type { FilesystemSessionState } from './composables/createFilesystemSessionState';
@@ -34,13 +18,9 @@ export type {
 	DirectoryListing,
 	RemoteFileSearchEntry,
 	FileSearchResult,
-	LocalUploadBatch,
 	LocalUploadFile,
-	FilesystemMutation,
 	FilesystemInvalidation,
 	RemoteFileEntry,
-	RemoteFileMetadata,
-	ResolvedRemotePath,
 } from './model/filesystem-types';
 
 export { FilesystemFailure } from './model/filesystem-types';

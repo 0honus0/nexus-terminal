@@ -18,5 +18,3 @@ export function useConnectionTags(): ConnectionTagsController {
 		setConnections: store.setConnections,
 	};
 }
-
-export const resetConnectionTagsCache = (): void => useTagsStore().reset();

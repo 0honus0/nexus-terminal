@@ -78,7 +78,7 @@ export function validateAppearance(settings: AppearanceSettings): void {
 	}
 }
 
-export function applyAppearanceChange(current: AppearanceRecord, change: AppearanceChange): AppearanceSettings {
+function applyAppearanceChange(current: AppearanceRecord, change: AppearanceChange): AppearanceSettings {
 	return {
 		customUiTheme: change.patch.customUiTheme === undefined ? current.customUiTheme : change.patch.customUiTheme,
 		activeTerminalThemeId:

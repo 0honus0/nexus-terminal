@@ -9,7 +9,7 @@ import type {
 	WorkspaceLayoutConfiguration,
 } from '../model/presentation-types';
 
-export const WORKSPACE_LAYOUT_MIN_SIZE = 5;
+const WORKSPACE_LAYOUT_MIN_SIZE = 5;
 
 const paneNames = new Set<WorkspacePane>(WORKSPACE_PANES);
 

@@ -9,7 +9,7 @@ import {
 	type FileArchiveHardlink,
 } from './model/file-task-types.js';
 
-export const ARCHIVE_UNSAFE_CHARACTER = /[\x00-\x1f\x7f]/u;
+const ARCHIVE_UNSAFE_CHARACTER = /[\x00-\x1f\x7f]/u;
 
 /** Interpret a native listing only when it agrees with the independently
  * generated verbose metadata. In particular, filenames with embedded line

@@ -7,18 +7,10 @@ export {
 	startSuspendedSessionsSync,
 	applySuspendedAutoTermination,
 	refreshSuspendedSessionsCatalog,
-	resetSuspendedSessionsCatalog,
 	refreshSuspendedSessionsAfterHandoff,
-	removeSuspendedSessionFromCatalog,
 	findSuspendedSessionByOriginalWorkspace,
 	findSuspendedSessionById,
 } from './composables/useSuspendedSessions';
-
-export type {
-	SuspendedSessionsController,
-	SuspendedSessionsLoadOptions,
-	SuspendedSessionsLoadResult,
-} from './model/suspended-session-types';
 
 export type { SuspendedAutoTermination } from './model/suspended-session-types';
 

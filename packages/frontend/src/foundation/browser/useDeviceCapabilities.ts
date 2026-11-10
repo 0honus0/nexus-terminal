@@ -11,7 +11,7 @@ export interface DeviceCapabilities {
 
 const MOBILE_USER_AGENT = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
 
-export const isMobileUserAgent = (userAgent: string): boolean => MOBILE_USER_AGENT.test(userAgent);
+const isMobileUserAgent = (userAgent: string): boolean => MOBILE_USER_AGENT.test(userAgent);
 
 /**
  * Browser capability classification used by responsive/touch UI.

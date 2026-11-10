@@ -19,7 +19,7 @@ export interface AuthenticatedSessionLifecycle {
 	dispose(): AuthenticatedSessionDispatch;
 }
 
-export const createAuthenticatedSessionLifecycle = (): AuthenticatedSessionLifecycle => {
+const createAuthenticatedSessionLifecycle = (): AuthenticatedSessionLifecycle => {
 	const owners = new Map<string, AuthenticatedSessionOwner>();
 	let activeUserId: number | null = null;
 

@@ -1,11 +1,9 @@
 export const loadFilePreview = () => import('./components/FilePreview.vue');
 
-export { previewInlineLimit, previewKindFor } from './providers/previewRegistry';
+export { previewKindFor } from './providers/previewRegistry';
 
-export { createFilePreviewSession, useFilePreviewTabs } from './composables/useFilePreviewTabs';
+export { createFilePreviewSession } from './composables/useFilePreviewTabs';
 
-export type { FilePreviewSessionController, FilePreviewOpenContext } from './composables/useFilePreviewTabs';
+export type { FilePreviewSessionController } from './composables/useFilePreviewTabs';
 
-export type { FilePreviewReadOptions, FilePreviewReadResult, FilePreviewSource } from './ports/file-preview-source';
-
-export type { PreviewError, PreviewFile, PreviewKind, PreviewTab } from './model/preview';
+export type { FilePreviewSource } from './ports/file-preview-source';

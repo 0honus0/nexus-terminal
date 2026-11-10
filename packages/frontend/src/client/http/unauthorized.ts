@@ -9,7 +9,7 @@ export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null): voi
 	unauthorizedHandler = handler;
 };
 
-/** One session-loss dispatch across Axios and bounded fetch-based JSON clients. */
+/** One session-loss dispatch across JSON and binary fetch clients. */
 export const dispatchUnauthorized = (path: string): void => {
 	if (!unauthorizedHandler || handlingUnauthorized) return;
 	handlingUnauthorized = true;

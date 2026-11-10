@@ -143,7 +143,7 @@ pnpm run check
 pnpm run format:all:check
 ```
 
-传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。现有 xterm、Monaco 与 splitpanes 补丁保留；Monaco 补丁使用 pnpm 12 支持的标准 Git diff 头。ssh2 1.17.0 额外应用上游 [Isolate 修复](https://github.com/mscdex/ssh2/commit/45522bb8723d8ecf459a1d222086e56074c11682) 和 [Nan ObjectWrap 修复](https://github.com/mscdex/ssh2/commit/a3a39d795a8d7ff43d5f33aafadccfc03466d044)，确保 Node 26 下原生加密模块能够编译和加载；此项为临时补丁，后续每次依赖升级都须检查：ssh2 新正式版包含上述修复时，同次删除补丁文件、`patchedDependencies` 注册及锁文件引用，再确认 Node 26 下原生加密模块编译、加载成功；不能只更新版本而遗留补丁。OpenAI 7.51.0 使用稳定版本，仅该精确版本列入 pnpm 默认发布等待期的例外，不关闭整体供应链校验。
+传递依赖的安全 override 按真实消费者限定：readdir-glob、ESLint、@eslint/config-array 和 @typescript-eslint/typescript-estree 使用 minimatch 11，避免继续解析受影响的旧版本；升级这些上游包时需同步核对其导出、glob 匹配和审计结果。jschardet 4 沿文件编辑器原动态导入使用，支持现有编码识别接口。现有 xterm、Monaco 与 splitpanes 补丁保留；Monaco 补丁使用 pnpm 12 支持的标准 Git diff 头。ssh2 1.17.0 额外应用上游 [Isolate 修复](https://github.com/mscdex/ssh2/commit/45522bb8723d8ecf459a1d222086e56074c11682) 和 [Nan ObjectWrap 修复](https://github.com/mscdex/ssh2/commit/a3a39d795a8d7ff43d5f33aafadccfc03466d044)，确保 Node 26 下原生加密模块能够编译和加载；此项为临时补丁，后续每次依赖升级都须检查：ssh2 新正式版包含上述修复时，同次删除补丁文件、`patchedDependencies` 注册及锁文件引用，再确认 Node 26 下原生加密模块编译、加载成功；不能只更新版本而遗留补丁。
 
 vue-chartjs 5.3.4临时补丁在已排队的 `nextTick` 更新前复核原图表实例，阻止快速关闭后访问已销毁画布；ESM/CJS两条入口同步。2026-11-08核对npm正式最新版和上游main均仍含此竞态。后续升级该依赖时检查上游是否已修复；修复后同次删除补丁、workspace注册和锁文件引用，并运行 `tests/e2e/specs/status-monitor/status-chart-samples.spec.ts` 的真实浏览器回归。
 
@@ -154,7 +154,7 @@ NEXUS_DB_PATH=/absolute/path/data/nexus-terminal.db pnpm --filter @nexus-termina
 scripts/build/build.sh docker
 ```
 
-启动命令还需从受控环境注入实例密钥和公开 Origin。Docker 构建与运行共用官方 `node:26.13.0-alpine` 基础镜像，Nginx/tini 由 APK 安装；升级 Node 时同步 `.node-version` 和主镜像、E2E runner Dockerfile 的默认 `NODE_VERSION`，构建脚本与 CI 显式传入版本文件的值。npm 安装 pnpm 时仅授权 pnpm 自身的安装脚本；workspace 的构建授权继续由 `allowBuilds` 管理。命中缓存不会刷新系统包；刷新用 `docker build --pull --no-cache .`。后端构建 Shared 后通过 `deploy --prod` 交付，不再构建 Protocol。发布与远程 E2E 仍按当前实施方案执行。
+启动命令还需从受控环境注入实例密钥和公开 Origin。Docker 构建与运行共用官方 `node:26.13.0-alpine` 基础镜像，Nginx/tini 由 APK 安装；升级 Node 时同步 `.node-version` 和主镜像、E2E runner Dockerfile 的默认 `NODE_VERSION`，构建脚本与 CI 显式传入版本文件的值。npm 安装 pnpm 时仅授权 pnpm 自身的安装脚本；workspace 的构建授权继续由 `allowBuilds` 管理。命中缓存不会刷新系统包；刷新用 `docker build --pull --no-cache .`。后端构建 Shared 后通过 `deploy --prod` 交付，不再构建 Protocol。前端API固定同源，不接收无消费者的`VITE_API_BASE_URL`构建参数；后端原生ssh2构建需要Python、make与C++编译器，不额外安装setuptools，运行层不包含这些构建工具。发布与远程 E2E 仍按当前实施方案执行。
 
 ## 仓库手动清理
 

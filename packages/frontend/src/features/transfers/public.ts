@@ -1,5 +1,3 @@
-export type { ServerTransferMethod } from '@nexus-terminal/shared/remote/transfers/server-values';
-
 export const loadProgressCenter = () => import('./components/ProgressCenter.vue');
 
 export const loadProgressDisplayModal = () => import('./components/ProgressDisplayModal.vue');
@@ -10,16 +8,9 @@ export const loadUploadConflictModal = () => import('./components/UploadConflict
 
 export { createFileClipboardController } from './state/fileClipboardController';
 
-export type {
-	FileClipboardController,
-	FileClipboardItem,
-	FileClipboardOperation,
-	FileClipboardSnapshot,
-} from './state/fileClipboardController';
+export type { FileClipboardOperation } from './state/fileClipboardController';
 
 export { useServerTransfers } from './composables/useServerTransfers';
-
-export type { ServerTransfersController } from './composables/useServerTransfers';
 
 export { createTransferController } from './state/transferController';
 
@@ -29,9 +20,7 @@ export {
 	transferTaskWarningDescriptor,
 } from './presentation-transfer-message';
 
-export type { TransferMessageDescriptor } from './presentation-transfer-message';
-
-export type { ConflictStrategy, TransferController, UploadConflict } from './model/transfer-types';
+export type { TransferController } from './model/transfer-types';
 
 export type { TransferChannel } from './ports/transfer-channel';
 
@@ -44,16 +33,11 @@ export type {
 	CopyMoveCommand,
 	TransferErrorKind,
 	TransferEvent,
-	TransferKind,
-	TransferLocation,
-	TransferStatus,
 	TransferTask,
-	TransferWarningKind,
 	UploadPrepareCommand,
 	UploadCommand,
-	UploadSourceFile,
 } from './model/transfer-types';
 
-export type { SendFileSource, SendFilesCommand, ServerTransferTask } from './model/server-transfer-types';
+export type { SendFileSource } from './model/server-transfer-types';
 
 export { useTransferCredentialConfirmation } from './composables/useTransferCredentialConfirmation';

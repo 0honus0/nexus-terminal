@@ -79,8 +79,7 @@ export default defineConfig({
 				test: {
 					name: 'backend-http',
 					environment: 'node',
-					// Signed-package HTTP journeys retain their original browser scenario budget.
-					// The 5s Vitest default includes real package signing and isolated runtime startup.
+					// HTTP scenarios include isolated runtime startup and retain their original operation budget.
 					testTimeout: 120_000,
 					hookTimeout: 120_000,
 					include: ['backend/**/http/' + layerFiles],

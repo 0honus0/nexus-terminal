@@ -11,7 +11,7 @@ interface MessageTree {
 const prefix = 'virtual:nexus-locale/';
 const source = fileURLToPath(new URL('../src', import.meta.url));
 const pattern =
-	'{app/i18n/messages,app/pages/*/i18n,shared/*/i18n,features/*/i18n,features/*/next/i18n,runtimes/*/i18n}/*.json';
+	'{app/i18n/messages,app/pages/*/i18n,shared/*/i18n,features/*/i18n,runtimes/*/i18n}/*.json';
 
 function merge(target: MessageTree, raw: unknown, keys: Set<string>, path: string, prefix = ''): void {
 	if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {

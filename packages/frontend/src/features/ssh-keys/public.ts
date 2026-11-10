@@ -4,4 +4,4 @@ export { default as SshKeyManagementModal } from './components/SshKeyManagementM
 
 export { useSshKeys } from './composables/useSshKeys';
 
-export type { SshKeysController, SshKeySummary } from './model/ssh-key-types';
+export type { SshKeySummary } from './model/ssh-key-types';

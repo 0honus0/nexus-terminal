@@ -2,15 +2,9 @@ export const loadTerminalView = () => import('./components/TerminalView.vue');
 
 export { default as VirtualKeyboard } from './components/VirtualKeyboard.vue';
 
-export type { TerminalChannel, TerminalHistoryPage } from './ports/terminal-channel';
+export type { TerminalChannel } from './ports/terminal-channel';
 
-export type {
-	TerminalConnectionState,
-	TerminalOutput,
-	TerminalSnapshot,
-	TerminalViewport,
-	TerminalVisualOptions,
-} from './model/terminal-types';
+export type { TerminalOutput, TerminalViewport, TerminalVisualOptions } from './model/terminal-types';
 
 export { RESET_REMOTE_PTY_DISPLAY, createTerminalSessionState } from './state/terminalSessionState';
 
@@ -22,9 +16,4 @@ export type { TerminalModifierState } from './model/terminalModifiers';
 
 export { createStickyTerminalModifiers } from './state/stickyModifiers';
 
-export type {
-	StickyModifierLevel,
-	StickyModifierLevels,
-	StickyTerminalModifiers,
-	TerminalModifier,
-} from './state/stickyModifiers';
+export type { StickyModifierLevels, TerminalModifier } from './state/stickyModifiers';

@@ -62,7 +62,7 @@ function boolean(value: unknown): boolean {
 	return value;
 }
 
-export function storedConfig(value: unknown): StoredNotificationConfig {
+function storedConfig(value: unknown): StoredNotificationConfig {
 	if (value === null || typeof value !== 'object' || !('kind' in value)) {
 		throw new Error('Corrupt notification config');
 	}

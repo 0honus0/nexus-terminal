@@ -54,8 +54,6 @@ export interface UserPreferences {
 
 export type PreferencesPatch = Partial<UserPreferences>;
 
-export type PreferenceKey = keyof UserPreferences;
-
 export const LOG_LEVELS = FRONTEND_LOG_LEVELS;
 
 export type PanelScaleKind = 'status' | 'files' | 'quick-commands';

@@ -16,5 +16,3 @@ export function usePreferences(): PreferencesController {
 		reset: store.reset.bind(store),
 	};
 }
-
-export const resetPreferencesCache = (): void => usePreferencesStore().reset();

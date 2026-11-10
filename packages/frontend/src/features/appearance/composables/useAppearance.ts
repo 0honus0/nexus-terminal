@@ -43,6 +43,6 @@ export function useAppearance(): AppearanceController {
 	};
 }
 
-export const resetAppearanceCache = (): void => useAppearanceStore().reset();
+const resetAppearanceCache = (): void => useAppearanceStore().reset();
 
 registerAuthenticatedSessionReset('appearance-cache', resetAppearanceCache);

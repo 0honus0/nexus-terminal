@@ -44,13 +44,6 @@ export interface ResolvedRemotePath {
 	targetType: RemoteFileTargetType;
 }
 
-export type FilesystemMutation =
-	| { type: 'create-directory'; path: string }
-	| { type: 'create-file'; path: string; content?: string }
-	| { type: 'remove'; paths: string[] }
-	| { type: 'rename'; from: string; to: string }
-	| { type: 'chmod'; path: string; mode: number };
-
 export interface LocalUploadFile {
 	file: File;
 	relativeDirectory?: string;

@@ -4,7 +4,7 @@ export const loadConnectionEditorModal = () => import('./components/ConnectionEd
 
 export { refreshConnection, resetConnectionsCache, useConnections } from './composables/useConnections';
 
-export type { ConnectionSummary, ConnectionsController } from './model/connection-types';
+export type { ConnectionSummary } from './model/connection-types';
 
 export { useConnectionManagement } from './composables/use-connection-management';
 

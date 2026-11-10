@@ -334,7 +334,7 @@ export const applySuspendedAutoTermination = (
 	event: SuspendedAutoTermination,
 ): SuspendedAutoTerminationViewModel | null => useSuspendedSessionsStore().applySuspendedAutoTermination(event);
 
-export const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
+const resetSuspendedSessionsCatalog = (): void => useSuspendedSessionsStore().resetSuspendedSessionsCatalog();
 
 export const startSuspendedSessionsSync = (): (() => void) => useSuspendedSessionsStore().startSync();
 
@@ -342,9 +342,6 @@ registerAuthenticatedSessionReset('suspended-sessions-cache', resetSuspendedSess
 
 export const refreshSuspendedSessionsCatalog = (): Promise<SuspendedSessionsLoadResult> =>
 	useSuspendedSessionsStore().load({ silent: true, force: true });
-
-export const removeSuspendedSessionFromCatalog = (id: string): void =>
-	useSuspendedSessionsStore().removeSuspendedSessionFromCatalog(id);
 
 export const refreshSuspendedSessionsAfterHandoff = (workspaceId: string): void =>
 	useSuspendedSessionsStore().refreshSuspendedSessionsAfterHandoff(workspaceId);
