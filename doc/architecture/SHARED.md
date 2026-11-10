@@ -135,7 +135,7 @@ Access 的 `GET /api/v1/auth/login/options` 与 `GET/DELETE /api/v1/settings/ip-
 
 模块为区分语义而给 Shared 类型建立明确别名可以保留，别名不能引入另一份同义字段定义。待实施的 schema 关联须覆盖 path/query/header/body、成功与失败响应及状态码；认证声明不代替授权执行，UTF-8/编码容量和业务跨字段规则仍由实际 owner 保证。Platform 只消费通用元数据，不导入 Shared 业务类型。实施期间前端迁移与测试时机以实施方案决定项为准。
 
-Remote Files 的 HTTP 与 Workspace 入口均消费当前契约；正式文件浏览、编辑、上传/下载、复制/移动及归档通过 Workspace 功能 API 消费，独立 `remote-next` 开发页不代表正式页面覆盖范围。
+Remote Files 的 HTTP 与 Workspace 入口均消费当前契约；正式文件浏览、编辑、上传/下载、复制/移动及归档通过 Workspace 功能 API 消费。旧独立开发页已移除，后端HTTP能力继续独立核验身份、权限与资源生命周期。
 
 Workspace Files Shared 契约由后端的 `/ws/workspace` Files adapter 生产。正式Frontend普通终端与Files浏览/编辑/预览已消费Shared；files/workspace-codec覆盖请求、完整成功结果、metadata及ready/error有限事件，旧Files应用DTO已删除。目录列表不设条目数量门槛，完整8MiB响应字节预算与500搜索结果由Shared values唯一维护；复制/压缩来源和upload.prepare目录同样不再重复限制数量，完整WS消息字节预算仍有效，遍历并发/目录队列仍属后端私有策略。Files时间为Unix毫秒，不沿用连接时间的秒换算。上传完整回执/事件已接正式能力；Workspace复制/移动/归档已接完整codec；跨服务器HTTP任务已接server-*完整契约；挂起HTTP/WS与监控/Docker WS已接Shared；观测 HTTP/配置及桌面也已接正式消费者；旧 Backend 与二进制 codec 从 Git 历史追溯，不增加旧路径到 Shared 的兼容转导出。正式前端已切换 Shared；当前远程基线及后继未验变更见 testing。
 

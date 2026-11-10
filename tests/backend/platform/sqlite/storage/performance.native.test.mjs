@@ -6,13 +6,14 @@ import { join } from 'node:path';
 import { SqliteRuntime } from '../../../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../../../../../packages/backend/dist/platform/storage/sqlite/schema.js';
 import { applicationMigrations } from '../../../../../packages/backend/dist/bootstrap/schema.js';
+import { migrateOperationsPendingNotifications } from '../../../../../packages/backend/dist/modules/operations/migrations.js';
 import { SqliteAuditStorage } from '../../../../../packages/backend/dist/modules/operations/audit/adapters/sqlite/audit-sql.js';
 import { SqliteNotificationStorage } from '../../../../../packages/backend/dist/modules/operations/notifications/adapters/sqlite/notification-sql.js';
 import { SqliteAccountStorage } from '../../../../../packages/backend/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
 import { SqliteHistoryStorage } from '../../../../../packages/backend/dist/modules/preferences/history/adapters/sqlite/history-sql.js';
 import { registerOperationsSnapshot } from '../../../../../packages/backend/dist/modules/operations/snapshots/adapters/sqlite/snapshot-registration.js';
 
-async function database(t, version = applicationMigrations.length) {
+async function database(t, migrations = applicationMigrations) {
 	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-performance-'));
 	const db = SqliteRuntime.open(join(root, 'test.sqlite'));
 	t.after(async () => {
@@ -22,7 +23,7 @@ async function database(t, version = applicationMigrations.length) {
 			await rm(root, { recursive: true, force: true });
 		}
 	});
-	await initializeSchema(db, applicationMigrations.slice(0, version));
+	await initializeSchema(db, migrations);
 	return db;
 }
 
@@ -47,14 +48,18 @@ function deferred() {
 	return { promise, resolve };
 }
 
-test('Performance: v4 upgrade preserves notification membership and independent migration signatures', async (t) => {
-	const db = await database(t, 4);
+test('Performance: pending notification migration preserves membership and existing migration records', async (t) => {
+	const pendingIndex = applicationMigrations.findIndex(
+		(migration) => migration.apply === migrateOperationsPendingNotifications,
+	);
+	assert.ok(pendingIndex > 0, 'Pending notification migration must follow the initial notification schema');
+	const db = await database(t, applicationMigrations.slice(0, pendingIndex));
 	await db.exec(
 		"INSERT INTO operations_audit(event_key,event,created_at) VALUES('settled','LOGIN_SUCCESS',1),('pending','LOGIN_SUCCESS',2); INSERT INTO operations_notification_fanout(audit_id) VALUES(1)",
 	);
 	const before = await db.all('SELECT * FROM schema_version ORDER BY version');
 	await initializeSchema(db, applicationMigrations);
-	assert.deepEqual(await db.all('SELECT * FROM schema_version WHERE version<=4 ORDER BY version'), before);
+	assert.deepEqual((await db.all('SELECT * FROM schema_version ORDER BY version')).slice(0, before.length), before);
 	assert.deepEqual(
 		(await db.all('SELECT audit_id FROM operations_notification_pending')).map((row) => row.audit_id),
 		[2],

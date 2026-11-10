@@ -7,6 +7,10 @@ import { tmpdir } from 'node:os';
 import { SqliteRuntime } from '../../../../../packages/backend/dist/platform/storage/sqlite/sqlite-runtime.js';
 import { initializeSchema } from '../../../../../packages/backend/dist/platform/storage/sqlite/schema.js';
 import { applicationMigrations } from '../../../../../packages/backend/dist/bootstrap/schema.js';
+import {
+	migrateAccessOidc,
+	removeOidcVisibilitySwitch,
+} from '../../../../../packages/backend/dist/modules/access/migrations.js';
 import { registerAccessBackupExclusions } from '../../../../../packages/backend/dist/modules/access/register.js';
 import { SqliteOidcStorage } from '../../../../../packages/backend/dist/modules/access/oidc/adapters/sqlite/oidc-sql.js';
 import { LoginOptionsModel } from '../../../../../packages/backend/dist/modules/access/login-options/model/login-options-model.js';
@@ -247,22 +251,28 @@ async function fixture(configurationChanged = () => {}) {
 	};
 }
 
-test('OIDC v3 -> v4 preserves data, records migration once and reopens', async () => {
+test('OIDC schema installation preserves existing sessions and migration records across upgrade and restart', async () => {
 	const base = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 	await mkdir(base, { recursive: true });
 	const root = await mkdtemp(join(base, 'oidc-migration-'));
 	const path = join(root, 'upgrade.sqlite');
 	let db = SqliteRuntime.open(path);
 	try {
-		await initializeSchema(db, applicationMigrations.slice(0, 3));
+		const oidcIndex = applicationMigrations.findIndex((migration) => migration.apply === migrateAccessOidc);
+		assert.ok(oidcIndex > 0, 'OIDC installation must follow the initial access schema');
+		await initializeSchema(db, applicationMigrations.slice(0, oidcIndex));
 		await seed(db);
 		const before = await db.all('SELECT * FROM schema_version ORDER BY version');
+		const sessions = await db.all('SELECT * FROM access_sessions');
 		await initializeSchema(db, applicationMigrations);
-		assert.deepEqual(await db.all('SELECT * FROM schema_version WHERE version<4 ORDER BY version'), before);
-		assert.equal((await db.one('SELECT COUNT(*) AS count FROM access_sessions')).count, 1);
+		const committed = await db.all('SELECT * FROM schema_version ORDER BY version');
+		assert.deepEqual(committed.slice(0, before.length), before);
+		assert.deepEqual(await db.all('SELECT * FROM access_sessions'), sessions);
 		await db.close();
 		db = SqliteRuntime.open(path);
 		await initializeSchema(db, applicationMigrations);
+		assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), committed);
+		assert.deepEqual(await db.all('SELECT * FROM access_sessions'), sessions);
 		assert.deepEqual(
 			(await db.all('SELECT version FROM schema_version ORDER BY version')).map((row) => row.version),
 			applicationMigrations.map((migration) => migration.version),
@@ -376,17 +386,18 @@ test('public OIDC metadata uses one read without a transaction and observes poli
 	}
 });
 
-test('v66 removes the visibility switch and preserves a previously hidden binding across upgrade and restart', async () => {
+test('OIDC visibility switch removal preserves a hidden binding and sessions across upgrade and restart', async () => {
 	const base = process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir();
 	await mkdir(base, { recursive: true });
 	const root = await mkdtemp(join(base, 'oidc-visibility-migration-'));
 	const path = join(root, 'upgrade.sqlite');
 	let db = SqliteRuntime.open(path);
 	try {
-		await initializeSchema(
-			db,
-			applicationMigrations.filter((migration) => migration.version < 66),
+		const visibilityIndex = applicationMigrations.findIndex(
+			(migration) => migration.apply === removeOidcVisibilitySwitch,
 		);
+		assert.ok(visibilityIndex > 0, 'Visibility switch removal must follow OIDC installation');
+		await initializeSchema(db, applicationMigrations.slice(0, visibilityIndex));
 		await seed(db);
 		await db.run(
 			'INSERT INTO access_oidc_configuration(id,revision,user_id,enabled,label,issuer,client_id,client_authentication,secret_cipher,subject) VALUES(1,?,1,0,?,?,?,?,?,?)',
@@ -403,12 +414,17 @@ test('v66 removes the visibility switch and preserves a previously hidden bindin
 		assert.equal((await new SqliteOidcStorage(db).readProvider()).label, 'Pocket ID');
 		const committed = await db.all('SELECT * FROM schema_version ORDER BY version');
 		assert.deepEqual(committed.slice(0, markers.length), markers);
-		assert.equal(committed.at(-1).signature, 'access-oidc-binding-visibility-20261109');
+		assert.deepEqual(
+			committed.map((migration) => ({ version: migration.version, signature: migration.signature })),
+			applicationMigrations.map((migration) => ({ version: migration.version, signature: migration.signature })),
+		);
 		await db.close();
 		db = SqliteRuntime.open(path);
 		await initializeSchema(db, applicationMigrations);
 		assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), committed);
 		assert.deepEqual(await db.one('SELECT * FROM access_oidc_configuration'), before);
+		assert.deepEqual(await db.all('SELECT * FROM access_sessions'), sessions);
+		assert.equal((await new SqliteOidcStorage(db).readProvider()).label, 'Pocket ID');
 		assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 		assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 	} finally {

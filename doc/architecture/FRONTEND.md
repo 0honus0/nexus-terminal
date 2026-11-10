@@ -13,7 +13,6 @@
 | `app`                                | main/bootstrap、路由、页面装配、shell、全局样式和语言安装。                                                                     |
 | `features`                           | 按连接、终端、文件、传输、状态、认证、偏好等业务拥有组件、model、API、mapper、store/composable 和公开入口；以实际功能需要分层。 |
 | `runtimes/workspace`                 | 工作区标签、RuntimeSession/Registry、布局与能力装配；通过 adapter 连接功能 Port 与同一 Workspace 生命周期。                     |
-| `runtimes/remote-next`               | 独立远端开发入口；不代替正式 Workspace 消费者。                                                                                 |
 | `client`                             | HTTP/二进制/Workspace 等传输与严格通信边界，持请求关联、取消及连接资源，不持业务草稿或服务端政策。                              |
 | `shared`                             | 前端共用反馈、布局等能力；与双端契约包 `packages/shared` 职责不同。                                                             |
 | `foundation`                         | 通用 UI、交互、浏览器、数据与异步基础能力，不反向依赖业务功能。                                                                 |
@@ -37,7 +36,7 @@ Foundation 保持业务无关；具体编辑器、xterm、图表 的技术资源
 
 ## 5. 入口与安装
 
-`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。独立 remote-next 页面仅作开发入口。
+`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。开发模式仅保留通用UI展示入口；旧独立远端调试页、对应runtime及专用代理已移除，认证统一使用正式同源入口。
 
 重型编辑器、预览及图表沿实际异步入口加载；加载占位不伪造业务数据。现成全局确认、Toast 和 UiSelect 由基础组件统一呈现，具体动作与恢复仍归用例 owner。
 

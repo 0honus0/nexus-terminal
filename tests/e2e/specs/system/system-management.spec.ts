@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { DIAGNOSTIC_MODULE_IDS } from '@nexus-terminal/shared/system/diagnostics/values';
 import { test, expect } from '../../support/fixtures';
 import {
 	E2E_ADMIN,
@@ -20,7 +21,10 @@ test('data settings download and restore a complete backup, fencing old consumer
 	await page.getByText('Diagnostics and recovery (advanced)', { exact: true }).click();
 	await expect(page.locator('[data-host-diagnostics] dd').first()).toBeVisible();
 	await page.locator('[data-host-resource-diagnostics] > summary').click();
-	await expect(page.locator('[data-diagnostic-module]')).toHaveCount(8);
+	await expect(page.locator('[data-diagnostic-module]')).toHaveCount(DIAGNOSTIC_MODULE_IDS.length);
+	for (const id of DIAGNOSTIC_MODULE_IDS) {
+		await expect(page.locator(`[data-diagnostic-module="${id}"]`)).toHaveCount(1);
+	}
 	await page.locator('#backup-export-password').fill(E2E_ADMIN.password);
 	const downloading = page.waitForEvent('download');
 	await page.locator('[data-backup-export] button[type=submit]').click();

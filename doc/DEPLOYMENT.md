@@ -132,6 +132,8 @@ docker compose up -d --remove-orphans
 
 ## 构建与开发
 
+统一镜像的Frontend和Backend使用独立构建stage，各自先构建Shared再构建所属应用；两边都不能依赖另一stage或旧SDK builder顺便生成声明。普通workspace总构建的执行顺序不代替镜像各stage的依赖编排。
+
 使用 `.node-version` 指定的 Node.js 26.13.0 LTS 和根 `packageManager` 指定的 pnpm 12.16.1；本地开发、workflow 与 Docker 构建使用相同版本。依赖安装使用 `--frozen-lockfile`；pnpm 12 生成的锁文件包含环境与应用两个 YAML 文档，使用该版本 pnpm 读取，不手工拆分。Playwright 固定1.64.1，手工环境按锁定版本安装浏览器；CI runner内容指纹覆盖`.node-version`、清单、锁文件、Dockerfile、构建/指纹脚本、`.dockerignore`、递归补丁及vendor输入；变化自动重建。两仓容器统一使用`:latest`，以独立周元数据刷新基础镜像与OS包；准备阶段确定期望依赖指纹，分片核对实际指纹，不固定digest或另发缓存标签。digest仅记录准备时观测事实供追查/保留，latest移动后不能承诺各片OS字节完全相同。
 
 ```bash

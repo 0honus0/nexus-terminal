@@ -296,7 +296,7 @@ Access 取得可信会话身份；Targets 管理出口只给非敏感对象，�
 
 Remote 会话 HTTP 仅负责协议解码和失败投影，入场身份查询与管理员授权统一由 RemoteSessionOwner 执行。读取/关闭对未认证或无权限身份抛具名失败，认证通过但资源不属于该会话时返回未找到；建连完成后再次核对权威身份，WebSocket 访问/输出也继续复查。入场去重不删除异步期间会话撤销保护。
 
-Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 源码，status/docker 已有 源码，行为统一待专项验收（见 PLAN）。下载/上传/传输/归档的 源码已收口，行为覆盖见 testing。现有 `/api/v1/remote/files` 暂由 DEV `remote-next` 消费，正式页面使用 Workspace 文件能力，独立 HTTP 入口用于其真实消费者，不增加旧协议兼容包装。
+Remote 同时安装 `/ws/workspace` 的旧 Files 子协议适配层。Interface 持有旧 envelope、requestId/in-flight、binary read owner、NXW1 发送、cancel 和 ready/error；旧 WorkspaceEventHub/Protocol 复查确认没有独立 Files mutation change event，因此适配层不虚构 `filesystem.changed` 一类消息。Files Service 持有路径/编码/操作政策；Model/Platform 不知道旧 Workspace DTO。R1 恢复 fresh `workspace.connect`、`workspace.ping` 与 Files 消息；完整 `workspace.resume`、Terminal/suspend 已有 源码，status/docker 已有 源码，行为统一待专项验收（见 PLAN）。下载/上传/传输/归档的 源码已收口，行为覆盖见 testing。独立 `/api/v1/remote/files` HTTP能力保留，原手动调试页面已移除；正式页面使用Workspace文件能力，各协议接口仍核对真实身份与资源归属，不增加旧协议兼容包装。
 
 ## 6. 数据、事务与并发
 

@@ -22,18 +22,8 @@ interface AccessRequest<T> {
 
 export type SendAccessRequest = <T>(input: AccessRequest<T>) => Promise<T>;
 
-export function createAccessRequest(basePath: string): SendAccessRequest {
-	const base = new URL(basePath, window.location.href);
-	if (
-		base.origin !== window.location.origin ||
-		!['/api/v1/auth', '/__next/api/v1/auth'].includes(base.pathname) ||
-		base.search ||
-		base.hash ||
-		base.username ||
-		base.password
-	) {
-		throw new AuthRequestFailure('invalid_input', 'not_dispatched');
-	}
+export function createAccessRequest(): SendAccessRequest {
+	const base = new URL('/api/v1/auth', window.location.href);
 	return async <T>(input: AccessRequest<T>): Promise<T> => {
 		let body: unknown;
 		try {

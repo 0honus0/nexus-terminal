@@ -16,7 +16,7 @@ function changed(value: unknown): void {
 }
 
 export function createOidcApi() {
-	const send = createAccessRequest('/api/v1/auth');
+	const send = createAccessRequest();
 	return {
 		async settings(signal: AbortSignal): Promise<OidcSettings> {
 			const c = await send({

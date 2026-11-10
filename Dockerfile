@@ -26,7 +26,8 @@ COPY packages/frontend/src ./packages/frontend/src
 COPY packages/frontend/public ./packages/frontend/public
 COPY packages/frontend/build ./packages/frontend/build
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
-RUN pnpm --filter @nexus-terminal/frontend build
+RUN pnpm --filter @nexus-terminal/shared build \
+    && pnpm --filter @nexus-terminal/frontend build
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++

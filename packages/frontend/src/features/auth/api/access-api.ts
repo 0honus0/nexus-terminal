@@ -54,9 +54,9 @@ export interface AccessApi {
 	loginOptions(signal?: AbortSignal): Promise<AccessLoginOptionsResponse>;
 }
 
-/** Shared wire owner for the formal application and isolated DEV consumers. */
-export function createAccessApi(basePath = '/api/v1/auth'): AccessApi {
-	const send = createAccessRequest(basePath);
+/** Shared wire owner for the application's authentication consumers. */
+export function createAccessApi(): AccessApi {
+	const send = createAccessRequest();
 	return {
 		passkeys: createPasskeyApi(send),
 

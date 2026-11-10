@@ -231,11 +231,7 @@ export default [
 	},
 	{
 		name: 'nexus/control-flow',
-		files: [
-			'packages/backend/src/**/*.ts',
-			'packages/shared/src/**/*.ts',
-			'packages/frontend/src/runtimes/remote-next/**/*.ts',
-		],
+		files: ['packages/backend/src/**/*.ts', 'packages/shared/src/**/*.ts'],
 		rules: { curly: ['error', 'all'] },
 	},
 ];

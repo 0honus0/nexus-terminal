@@ -61,13 +61,6 @@ export default defineConfig({
 		// Keep this explicit instead of disabling host checks globally.
 		allowedHosts: ['api.honus.top'],
 		proxy: {
-			'/__next': {
-				target: devBackendOrigin,
-				changeOrigin: false,
-				ws: true,
-
-				rewrite: (path: string) => path.replace(/^\/__next/, ''),
-			},
 			// 将所有 /api 开头的请求代理到后端服务器
 			'/api': {
 				target: devBackendOrigin, // 后端服务器地址
