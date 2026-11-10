@@ -1,85 +1,66 @@
 # 测试与验收
 
-本文只维护当前验收基线、可复用执行入口与证据判据。逐轮结果见 [历史验证索引](HISTORY.md)，Agent 任务设计见 [场景清单](AGENT_TASK_SCENARIOS.md)，当前未验和实施安排见 [PLAN](../PLAN.md)。产品操作与实现设计分别见 [USAGE](../USAGE.md) 和 [架构](../architecture/BACKEND.md)。
-
-本体与插件已按[测试架构](../architecture/TESTING.md)完成Vitest/Node/Playwright分层迁移和两仓完整门禁。当前自动验收与既有实机证据分别记录，耗时目标未达及未验范围继续保留。
+本文维护当前执行入口、证据与验收边界；架构见[测试体系](../architecture/TESTING.md)，固定版本结果见[历史记录](HISTORY.md)，实施安排见[PLAN](../PLAN.md)。产品行为见[USAGE](../USAGE.md)。
 
 ## 当前验收基线
 
-[本体完整E2E42619641078](https://github.com/0honus0/nexus-terminal/actions/runs/42619641078)验证`b7f87cb2635c73014528a842e1edd12ff4bdddb6`，绑定插件`c3caa1dd93732a7d81e4a3b37fcca7339be62050`：质量、Docker部署smoke、8个分片及报告汇总全部成功。原始报告核对快速353、模块245、Node原生873、有限文件系统5、Docker模块1/原生9、本体浏览器430、插件fast9/包124/互操作54/浏览器70，全部首次通过，无执行跳过、重试或flaky。不同层不相加作为独立产品功能总数。
+2026-11-10 旧Agent整体移除阶段：按用户要求不新增移除功能测试，保留并适配普通功能的现有用例。已核对v1–v66签名不变、v67–v69升级、72张旧表删除、机器突变围栏/人工证据保留、外键/完整性及重复初始化。前后端构建与实际应用启动已验证，最终命令和适用现有回归记录见[本轮证据](HISTORY.md#旧-agent-整体移除2026-11-10)。这批尚未提交、推送、发布或部署，未执行远程完整E2E。
 
-[插件独立Validate42621361043](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42621361043)验证同一插件源码及上述准确Host/不可变构建，全部9个作业成功：fast9、原生包124、互操作54、浏览器70全部首次通过。质量阶段的`--list`目录发现报告不作为执行报告；实际分片无跳过、重试或flaky。
-
-两仓都使用`:latest`启动runner并核对依赖指纹；Host准备时观测digest为`sha256:762bdb53d9efb2137919ff35757c9d9a0d89d347380f940e34afb46ea681aee2`，仅为证据，不固定启动。每仓17份组合保持源码/成品/SDK/签包摘要一致，本体32份WebServer/44份阶段日志、插件独立16/16份日志均非空。本体作业墙钟12分16秒，质量3分18秒，分片5分03秒–8分34秒；插件墙钟5分36秒、质量1分47秒。每片2分钟及整轮3–5分钟目标未达，按用户决定暂停进一步优化。首次失败、追加修复、四表和发布证据见[本轮记录](HISTORY.md#必需插件启用引导与权限折叠验收2026-11-09)。
-
-[main amd64 dev发布42622640691](https://github.com/0honus0/nexus-terminal/actions/runs/42622640691)成功，来源`01e9183b81cd9a44368ef40ff0acfea83f620cf7`；与被测`b7f87cb2635c73014528a842e1edd12ff4bdddb6`仅差自动回写的12项测试耗时估算。`dev`与`sha-01e9183b81cd`同摘要`sha256:2fcc3975a2ef3bdef86b5a8e6b4b482fedc27bf29ecf07f8727e91533af4fb46`。已核对唯一产品平台linux/amd64、manifest/config摘要及OCI revision/source/version，未下载镜像层或部署生产。
-
-正式插件组合为Agent2.0.3、ChatUI2.0.3、Browser2.1.1、Agent工具2.1.0、MCP/ACP服务4.0.0及Remote/Integrations工具2.0.0；公开最新目录为[catalog-20261109-2](https://github.com/0honus0/nexus-agent-plugins/releases/tag/catalog-20261109-2)。Agent/ChatUI从上述准确插件源码正式签名发布，目录逐字段保留原15个版本/地址/摘要并追加两项，共17项；官方签名、requiredOnEnable声明、大小和摘要及公开latest入口均已核对。Shared4.0.5、运行SDK4；后续文档提交不改变运行源码。新声明需配套本轮Host，不修改旧不可变资产。
-
-指定CDP`172.30.30.11:9223`访问`https://api.honus.top`的9998测试前端，使用真实本地可信签包完成取消/安装/默认授权/编辑保存刷新/再次启用复用及320/390/1440px验收；重启到最终代码后刷新无page error和横向溢出。开发签名与官方资产验签分别记录，不混称。此前SDK4聊天、三语市场及工具设置证据继续按原验证版本引用，见[历史记录](HISTORY.md#agent-设置归属与插件召回配置2026-11-08)。真机、真实模型、音画、介质故障及负载性能等未验边界见[PLAN](../PLAN.md#待验与外部依赖)。
+此前[本体E2E42619641078](https://github.com/0honus0/nexus-terminal/actions/runs/42619641078)、[插件Validate42621361043](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42621361043)及[amd64 dev发布42622640691](https://github.com/0honus0/nexus-terminal/actions/runs/42622640691)属于移除前版本，不证明本次源码全部通过。其成品、签包、耗时、CDP及发布身份继续按[历史记录](HISTORY.md#必需插件启用引导与权限折叠验收2026-11-09)追溯。原每片2分钟/整轮3–5分钟目标未达到，按用户决定暂停进一步耗时优化。
 
 ## 阶段逻辑回归
 
-先按 PLAN 决定项核对本批授权和真实受影响调用链，再选择验证；D17 的默认路径为源码审核、静态检查后按明确授权执行远程 GitHub Actions。下列命令是入口说明，不表示本批已经执行或获得额外测试授权。
+先按当前任务授权和实际调用链选择验证。D17默认源码、静态与构建后按授权执行远程门禁；本轮用户明确只要求移除后正常运行，不新增测试。
 
-| 检查             | 入口与范围                                                                                                                                                             |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 静态与构建       | 根目录 `pnpm run check`、`pnpm run build`、`pnpm run format:all:check`、`git diff --check`；纯文档可只运行受影响 Markdown 格式、链接及 diff 检查。                     |
-| 快速层           | `pnpm test:fast` 直接运行Shared、后端纯逻辑、前端状态与组件，不需要应用构建。                                                                                          |
-| 模块集成         | `pnpm test:integration` 构建Backend/SDK后直接运行Vitest存储/HTTP、前端真实HTTP集成和Node原生测试。模块按新入口执行，完整原生结果以当前CI为准。                         |
-| 浏览器产品流程   | `pnpm test:e2e` 构建应用与测试客户端后运行Playwright；配置为`tests/playwright.config.ts`，业务用例按功能归`tests/e2e/specs/`。                                         |
-| 定向模块         | `pnpm --filter @nexus-terminal/tests exec vitest run <文件或筛选词>`；Node模块使用`node --test tests/backend/<模块>/<层>/*.native.test.mjs`。先核对构建与fixture要求。 |
-| 动态隔离端口入口 | `pnpm test:e2e:isolated -- <Playwright参数>` 调用本地 `scripts/e2e/run-remote.mjs`，为服务分配独立环回端口后运行 Playwright；这个名称不表示会触发 GitHub Actions。     |
-| 远程 Actions     | `.github/workflows/e2e.yml` 及其实际引用脚本；每轮记录 run URL、提交 SHA、分片结果、首次失败与重试，不跳过失败场景换绿。                                               |
+| 检查       | 入口与范围                                                        |
+| ---------- | ----------------------------------------------------------------- |
+| 静态与构建 | pnpm check、pnpm build、pnpm format:all:check、git diff --check   |
+| 快速层     | pnpm test:fast：Shared、后端逻辑、前端逻辑/组件、tooling          |
+| 模块集成   | pnpm test:integration：构建Backend后直接运行模块与原生协议        |
+| 产品流程   | pnpm test:e2e：构建应用/测试客户端后执行Playwright                |
+| 定向模块   | Vitest文件筛选或node --test现有原生文件，先核对成品与夹具要求     |
+| 隔离端口   | pnpm test:e2e:isolated -- <参数>，只在本地分配端口，不触发Actions |
+| 远程门禁   | .github/workflows/e2e.yml，按当前授权触发并核对全部实际报告       |
+| 入口验收   | 测试包test:ingress，明确指定NEXUS_PRODUCTION_BASE_URL             |
+| 文档截图   | 测试包test:docs及远程refresh_screenshots输入                      |
 
-回归覆盖正常流程、授权/身份变化、冲突、取消、未知提交/执行、晚返回及资源关闭；按真实 owner 判断结果，不能从本地等待结束推断远端停止。每项证据注明环境、命令、输出、覆盖和未验范围，实机/外部依赖不能用静态或协议夹具代替。专用环境与产物保留至用户通知清理，凭据不进入文档或日志。
+不能把编译、发现或mock结果当真实协议、视觉或生产验收。真实模型、手机真机、音画、介质故障与负载仍按其原证据边界记录。
 
 ## 分组、隔离与产物
 
-唯一测试workspace为`tests/package.json`（`@nexus-terminal/tests`）。`*.test.ts/mjs`由Vitest直接发现，`*.native.test.mjs`由Node直接发现，`*.spec.ts/mjs`由Playwright发现，不互相包装。快速层无需浏览器；实际IPC/签包/Worker仍需Backend/SDK成品，浏览器层另需Frontend与测试客户端。根`test:all`当前串接静态、构建和以上三层，只执行本体自动测试，不能代替两仓组合与独立Docker smoke完整门禁。
+Vitest、Node、Playwright分别发现自己的用例。旧Agent、SDK、插件候选、互操作及业务浏览器链已从本体移除；当前CI质量作业只构建一次应用及浏览器客户端。质量与共享runner准备成功后启动8个分片，使用准确不可变应用成品，分片不重复构建。
 
-Actions使用统一8个测试runner：每个分片将Node原生协议与“Vitest模块→本体Playwright→插件互操作→插件Playwright”链重叠执行，模块/原生按框架原生分片，浏览器按实际发现与历史耗时均衡；不再固定1个Backend与7个Browser。所有测试容器启用init回收孤儿进程，并以SYS_PTRACE检查真实OpenSSH句柄。第1分片单独挂Docker socket运行真实Docker协议/模块，同时持有限定的挂载能力，在私有mount namespace执行真实有限tmpfs的ENOSPC测试；其余分片不挂Docker socket或授予挂载能力。ENOSPC文件显式归第1分片，不依赖原生文件排序后的偶然分配。快速层、静态及插件独立测试在质量作业执行，成品Docker部署smoke单独执行；全部必需作业成功才算门禁通过。
+每片两组进程独立运行：原生Node文件并发2，模块之后执行本体浏览器。第一片额外负责真实Docker及有限文件系统，其余片不挂载socket或mount权限。失败仍等待其他组收尾，取消等待真实退出；发现和断言仍归框架。
 
-质量检查统一全仓ESLint范围，格式步骤复用其内容缓存；前端build/check使用同一vue-tsc增量检查，Prettier保留全仓检查。静态缓存由官方Actions cache持有，cold关闭恢复，warm允许恢复；测试结果不缓存。八个测试runner仅在质量检查和共享环境准备都成功后启动；构建或检查失败不启动分片。产物直接解析并下载，无构建等待轮询。质量作业构建Host一次、签候选包一次，上传准确插件源码和包。分片复用绑定本次SHA/不可变artifact ID的同批成品，不重建；完整重跑与部分重跑遵循下文产物身份规则。插件独立Validate选择成功Host E2E的准确SHA和不可变构建产物；质量作业构建签包一次并执行包测试、浏览器发现与类型检查，八个容器分片恢复同批产物执行Node互操作与Playwright。开发签名私钥不分发给测试分片。测试环境归`tests/fixtures/runner/Dockerfile`，只预装Chromium headless shell及协议工具；成功Host发布准确SHA、latest引用、准备时观测digest与依赖指纹，插件独立门禁通过latest启动并校验成功Host的依赖指纹。分片离线链接匹配依赖，不回退旧镜像。Docker部署smoke仅构建生产镜像、等待Compose健康及读取真实HTTP契约，不装测试工作区或浏览器。两仓组合记录须绑定真实源码、成品和包摘要，不能引用旧harness的绿色结论。
+受控SSH/OpenSSH、xrdp/TigerVNC来自仓库协议脚本，runner只预装依赖。Playwright用例按需声明ssh/desktop；普通页面不启动服务。每worker记录启动/退出/排空，强杀或清理失败仍失败；失败数据库在重置前归档，不能消除未知效果。
 
-浏览器使用正式Frontend构建的preview及真实Backend，每例独立数据库，外部协议服务按声明启动。`NEXUS_TEST_ARTIFACT_DIR`与`NEXUS_E2E_DATA_ROOT`指定任务证据/数据库；`NEXUS_E2E_SERVICE_ROOT`为受控SSH运行路径，默认使用短临时路径以保持Unix socket名称互不截断，timings记录对应runtime根。首次trace/截图/录像/日志及数据库保留，重试通过仍阻止CI通过。WebServer完整stdout/stderr归本轮`webserver/{backend,frontend}/run-*/output.log`，随现有分片报告上传；控制台保留步骤/结果与失败摘要，报告器单测中的模拟失败仍为预期fixture输出。
+统一用NEXUS_TEST_ARTIFACT_DIR设置本轮产物根，缓存用NEXUS_TEST_CACHE_DIR。WebServer完整双流归webserver目录，阶段完整输出归logs目录；控制台显示结果、时间与路径。框架JSON/JUnit/HTML保留逐例结果，首次失败与重试均保留。
 
-分片执行各阶段时，控制台仅显示阶段开始、结束、实际耗时、退出结果和日志位置；模块/协议/本体浏览器/插件互操作/插件浏览器的完整双流追加保存为本轮`logs/<phase>.log`，复用原报告上传。逐用例结果仍在原框架JSON/JUnit/HTML，失败、未知结果和取消状态不变；日志不截断，不再把两条链的全部输出tee到控制台。质量作业的报告器模拟失败单测输出按用户要求保留。
+Runner使用latest并校验依赖指纹，准备时digest仅作观测。应用/环境/分片产物以来源job真实执行周期、名称和创建时间匹配不可变ID，部分重跑不能按新attempt猜测旧产物；缺失、过期、重复或来源失败阻止继续。
 
-push和手动workflow_dispatch完整成功后，最终汇总作业均自动回写耗时估算；PR仅上传提案。提交前复查远程分支仍为被测SHA，已前进则跳过，避免旧结果覆盖新代码；截图仅在明确请求时一起提交。
-
-按H-22.1，所有可替代的长短等待均使用所属进程的框架虚拟时钟：浏览器使用Playwright clock；后端认证、票据和租约推进Node MockTimers的Date；Workspace两分钟空闲推进应用启动时安装的实际回收定时器，新建SSH连接的保活保留真实时间，避免将独立进程的网络回应错误视为可快进。产品期限与原断言保持，不能以页面快进代替后端或SSH完成。WS消息排序、真实SSH/传输及关闭等待明确回执、输出或资源状态；进度/预览的布局与生命周期检查使用受控服务已有READ/WRITE/压缩屏障，断言后释放并核对实际收尾；CPU/绘制性能、原生timer溢出和真实背压保留物理时序。专门弱网回归保留原带宽与延迟；进度回归使用真实8MiB文件、至少两个不同UI百分比及完整字节/SHA验证。
-
-功能门禁中的网络与文件列表性能矩阵默认每条件采样一次，全部原延迟、带宽、数据量、形状与逐字节断言保留；需要多次性能采样时设置`NEXUS_TEST_PROFILE_SAMPLES=3`等正整数。插件浏览器由Playwright按独立用例分片，仍为单worker；不能把发现列表均匀当成实际耗时已达标。所有截图、日志和报告进入框架用例产物目录，不写入参与源码身份比较的目录。
-
-ACP取消验证工具取消、旧审批拒绝、禁止文件未生成及原进程实际退出；已确认收尾时要求应用正常关闭，不再强行期待旧`execution_unknown`。真实未知副作用仍保留围栏、数据库和具名失败，不能用重置抹掉。
-
-应用成品解析、插件消费成功Host测试环境与耗时汇总均按当前运行对应最新 job 的实际执行时间、产物创建时间及名称前缀定位不可变产物 ID。GitHub 部分重跑会复制成功 job 并重写 ID/run_attempt，但保持原执行时间；因此复用原产物不能只按 attempt 名称匹配，也不允许回退到其它执行周期的产物。仅重跑失败分片或汇总作业时复用其余成功分片的原产物。耗时发现使用 github-script 的只读请求重试，下载使用官方 Action 的 token/REST 路径并保留摘要校验；任一来源失败、产物缺失、过期或重复均阻止汇总。产物选择逻辑回归 `pnpm test:fast`中的`tests/tooling/ci/logic/timing-artifacts.test.mjs`验证产物选择逻辑。
+成功门禁汇总并回写耗时，手动运行同样执行；源码前进时跳过陈旧更新，PR只上传提案。截图仅在明确请求且成功验收后替换，不复用历史通过状态。
 
 ## 测试重构当前证据（2026-11-08）
 
-`tests/cases/migration.json`记录326份旧来源、86个展开场景及38份资产的去向，没有pending；55处外仓替代owner已逐文件核对。旧入口、Playwright→Node包装和重复任务工程已移除，固定签包及来源锁定仍由真实消费者使用。迁移索引证明归属，完整报告证明执行；二者均需核对。
+原测试架构迁移及耗时优化的逐模块实测、首次失败、四表与远程结果见[历史记录](HISTORY.md#测试重构分模块实测2026-11-08)。当前cases/migration.json已随功能移除清理无接收owner的Agent项；映射只证明当前归属，不能继承旧数量或旧执行结论。
 
-当前两仓完整门禁与耗时见上方基线。逐模块本地实测、生产缺陷修复、首次失败与逐轮远程结果统一见[分模块记录](HISTORY.md#测试重构分模块实测2026-11-08)及[最终验收](HISTORY.md#测试重构最终验收与独立插件分片2026-11-08)，不再在当前入口重复旧的待验表。
-
-当前维护复核证据根为`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，包含两仓原始报告ZIP、组合/资源指标、发现/文档盘点、只读环境核对与首次失败。上一轮性能证据仍在`/dev/shm/nexus-performance-ci-20261108`及`/dev/shm/nexus-performance-20261109-optimization`保留。早期迁移归档位置与摘要沿历史记录追溯，不在源码目录保留生成报告、数据库或签包。活动环境及无关资源不在清理范围。
+原维护证据根为`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，本轮移除证据归`/home/honus/nexus-task-artifacts/agent-removal-20261110`。旧现场与未知结果不随源码移除清理，独立插件仓未修改。
 
 ## 数据库迁移验收
 
-按 H-21，每条数据库变更独立迁移，dev 与 latest 使用同一版本链；下列为各条迁移的验收要求：
+按H-21，每条变更独立连续迁移，dev/latest共用同链：
 
-- 从上一发布数据库按顺序执行新增迁移，与空库安装结果核对结构、约束、数据语义和签名；验证完整性、外键与数据保留。
-- 连续升级不同 dev 构建、跨多个迁移版本升级及重复启动，确认已应用版本被跳过、签名不匹配被拒、后续变更独立追加；已执行或已发布的迁移及记录不原地改写或合并。
-- 验证 SQL/脚本完成旧数值、单位与 JSON 转换，业务读取及解码只接受当前格式；核对 CHECK、关联版本、内容 hash 与快照恢复边界。
-- 验证迁移与版本记录同事务提交、失败回滚、提交未知核对及恢复，失败不能写入成功标记，未知结果不能盲目重放。
+- 核对旧发布基线升级与空库安装的结构、约束、签名、数据语义、完整性和外键。
+- 连续升级及重复启动只执行新记录；已发布版本与签名不改写，签名不匹配明确拒绝。
+- SQL或迁移脚本转换旧数据，业务运行只接受新表示；核对引用、hash及快照边界。
+- 迁移与版本记录同事务提交，失败不写成功标记，提交未知先核对，不盲目重放。
 
 ## 证据与资源管理
 
-- 每轮记录精确源码 SHA、工具链、命令、输出位置、正常与失败范围；首次失败和重试都保留。CI 任务 success 不替代逐项 Reporter 核对，测试 skip 不能算通过。
-- 完整验收包含模块、原生协议、两仓浏览器、插件互操作、质量与Docker smoke；截图更新任务按条件跳过不等于测试场景跳过。仅文档修改执行受影响格式、路径/锚点和 diff 检查，不为文档运行行为测试。
-- 真模型效果、真实目标/介质故障、手机真机与模拟 Provider/协议 fixture 分开记录；不能用静态构建或微基准声称端到端通过。
-- 专用环境和精简产物放在明确归属的本地任务目录，保留至用户通知；凭据不进入文档、日志或截图。清理只操作已确认属于本轮的资源，保留数据、未知副作用与收尾证据。
+每轮记录源码、工具链、命令、实际结果、产物及未验边界；skip不算通过，CI success仍须核对各框架报告。可替代的长短等待使用所属框架虚拟时钟，不能伪造真实I/O或副作用确认。
+
+本地使用明确任务目录，凭据不进入文档、日志或截图。清理只操作确认归属的可重建资源，用户保留的环境、数据库及收尾证据等待明确删除指令。未获授权不操作生产或独立插件仓。
 
 ## 文档截图
 
-截图存放在 `doc/imgs/e2e`，由正式 E2E 的 `refresh_screenshots` 输入和截图夹具生成，不能手工伪造通过状态。图片是特定版本的视觉记录，不能替代当前源码或交互测试。生成脚本仍消费的截图即使未在正文引用，也不按孤立文件删除。
+截图归doc/imgs/e2e，由正式E2E截图入口生成，保留PNG校验。图片只证明对应版本外观，不能代替当前行为。已删除功能且无消费者的截图随功能清理；仍被文档或脚本消费的文件保留。

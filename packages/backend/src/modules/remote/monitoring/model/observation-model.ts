@@ -1,4 +1,3 @@
-import type { ObservationDockerInspection } from './observation-types.js';
 import type { MachineCommandExecutor } from '../../../../platform/ssh/ssh-port.js';
 import { TargetOperationError } from '../../../targets/public-errors.js';
 import { DOCKER_MAX_CONTAINERS } from '@nexus-terminal/shared/remote/docker/values';
@@ -6,7 +5,6 @@ import type { ConnectionCatalog, TrustedSshTargetResolver } from '../../../targe
 import { OBSERVATION_MAX_RESOURCES } from '@nexus-terminal/shared/remote/monitoring/values';
 import type { ObservationTarget } from './observation-types.js';
 import { observationTargetKey } from './observation-targets.js';
-import type { ReadDiagnostics } from '../../machines/model/operation-types.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { RemoteMachineProvider } from '../../machines/model/machine-types.js';
 import { RemoteHostKeyUntrustedError } from '../../machines/model/machine-errors.js';
@@ -145,7 +143,7 @@ export class ObservationModel {
 		}
 		if (machine) {
 			try {
-				await this.machines.release(machine, failure === null);
+				await this.machines.release(machine);
 			} catch (cleanup) {
 				throw new RemoteResourceCleanupFailure(failure === null ? [cleanup] : [failure, cleanup]);
 			}
@@ -206,32 +204,6 @@ export class ObservationModel {
 			}
 			return sample(value);
 		});
-	}
-
-	/** Monitoring stores MiB memory and KiB disk; independent diagnostics consistently expose bytes. */
-	async diagnose(scope: ObservationScope, key: string): Promise<ReadDiagnostics> {
-		const value = await this.collect(scope, key, true);
-
-		const bytes = (amount: number | undefined, unit: number): number | null => {
-			if (amount === undefined) {
-				return null;
-			}
-			const result = amount * unit;
-			if (!Number.isSafeInteger(result) || result < 0) {
-				throw new ObservationFailure('remote_unavailable');
-			}
-			return result;
-		};
-
-		return {
-			generatedAt: value.timestamp,
-			cpuPercent: value.cpuPercent ?? null,
-			memUsedBytes: bytes(value.memUsed, 1024 * 1024),
-			memTotalBytes: bytes(value.memTotal, 1024 * 1024),
-			diskUsedBytes: bytes(value.diskUsed, 1024),
-			diskTotalBytes: bytes(value.diskTotal, 1024),
-			loadAverage: value.loadAvg?.map((number) => number) ?? [],
-		};
 	}
 
 	async listTargets(
@@ -314,30 +286,6 @@ export class ObservationModel {
 		} catch (cause) {
 			throw new RemoteResourceCleanupFailure([cause]);
 		}
-	}
-
-	inspectDockers(scope: ObservationScope, ids: string[]): Promise<ObservationDockerInspection[]> {
-		return this.withMachine(scope, async (execute) =>
-			(
-				await this.docker.inspectMany(
-					execute,
-					ids.map((id) => id),
-					scope.signal,
-				)
-			).map((value) => ({ id: value.id, state: value.state, image: value.image, created: value.created })),
-		);
-	}
-
-	inspectDocker(
-		scope: ObservationScope,
-		id: string,
-	): Promise<{ id: string; state: string; image: string; created: string } | null> {
-		return this.withMachine(scope, async (execute) => {
-			const value = await this.docker.inspect(execute, id, scope.signal);
-			return value === null
-				? null
-				: { id: value.id, state: value.state, image: value.image, created: value.created };
-		});
 	}
 
 	getDocker(scope: ObservationScope): Promise<ObservedDockerStatus> {

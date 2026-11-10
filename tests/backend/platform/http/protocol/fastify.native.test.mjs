@@ -1,4 +1,3 @@
-import { AGENT_PLUGIN_FRONTEND_SANDBOX } from '../../../../../packages/shared/dist/agent/plugins/values.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { request } from 'node:http';
@@ -842,69 +841,22 @@ test('native Cookie serialization keeps credential policy and drops credentials 
 	}
 });
 
-test('Helmet preserves plugin sandbox and raw SDK headers without adding incompatible defaults', async () => {
-	const { createPluginContentRoutes } =
-		await import('../../../../../packages/backend/dist/modules/agent/interfaces/http/plugin-http.js');
+// Preserve the ordinary theme assertions from the former mixed plugin/theme case.
+test('Helmet preserves HTML theme sandbox headers without adding incompatible defaults', async () => {
 	const { sendHtmlThemeText } =
 		await import('../../../../../packages/backend/dist/modules/preferences/interfaces/http/html-theme-http-support.js');
 	const controller = new AbortController();
-	const content = { bytes: Buffer.from('<p>fixture</p>'), sha256: 'a'.repeat(64) };
-	const routes = createPluginContentRoutes(
+	const server = await listen([
 		{
-			sdkAsset: (_path, deliver) => deliver(content, controller.signal),
+			method: 'GET',
+			url: '/theme',
 
-			asset: (_app, _version, _grant, _path, deliver) => deliver(content, controller.signal),
+			async handler(request, reply) {
+				await sendHtmlThemeText(request, reply, '<p>theme</p>', controller.signal);
+			},
 		},
-		(work) => work(),
-	);
-	routes.push({
-		method: 'GET',
-		url: '/theme',
-
-		async handler(request, reply) {
-			await sendHtmlThemeText(request, reply, '<p>theme</p>', controller.signal);
-		},
-	});
-	const server = await listen(routes);
+	]);
 	try {
-		const id = '11111111-1111-4111-8111-111111111111';
-		const asset = await send(server, 'GET', `/plugins/${id}/1.0.0/${id}/index.html`);
-		assert.equal(asset.status, 200);
-		assert.equal(asset.headers['referrer-policy'], 'no-referrer');
-		assert.equal(asset.headers['cross-origin-resource-policy'], 'cross-origin');
-		assert.equal(asset.headers['access-control-allow-origin'], '*');
-		assert.equal(asset.bytes.toString(), content.bytes.toString());
-		assert.deepEqual(
-			new Set(asset.headers['content-security-policy'].split(';').map((item) => item.trim())),
-			new Set([
-				'sandbox ' + AGENT_PLUGIN_FRONTEND_SANDBOX,
-				"default-src 'none'",
-				"script-src 'self' 'wasm-unsafe-eval'",
-				'worker-src blob:',
-				"style-src 'self' 'unsafe-inline'",
-				"img-src 'self' data: blob:",
-				"font-src 'self' data: blob:",
-				"connect-src 'none'",
-				"object-src 'none'",
-				"base-uri 'none'",
-				"form-action 'none'",
-				"frame-ancestors 'self'",
-			]),
-		);
-		assert.equal((await send(server, 'GET', '/sdk/frontend-v1.mjs')).status, 404);
-		assert.equal((await send(server, 'GET', '/sdk/frontend-v2.mjs')).status, 404);
-		const sdk = await send(server, 'GET', '/sdk/frontend-v4.mjs');
-		assert.equal(sdk.status, 200);
-		assert.equal(sdk.headers['cross-origin-resource-policy'], 'cross-origin');
-		assert.equal(sdk.headers['access-control-allow-origin'], '*');
-		assert.equal(sdk.headers['content-security-policy'], undefined);
-		assert.equal(sdk.headers['content-type'], 'text/javascript; charset=utf-8');
-		assert.equal(asset.headers['content-type'], 'text/html; charset=utf-8');
-		assert.equal(asset.headers.etag, '"' + content.sha256 + '"');
-		for (const response of [asset, sdk]) {
-			assert.equal(response.headers['content-length'], String(content.bytes.byteLength));
-			assert.equal(response.headers['cache-control'], 'no-store');
-		}
 		const theme = await send(server, 'GET', '/theme');
 		assert.equal(theme.status, 200);
 		assert.equal(theme.bytes.toString(), '<p>theme</p>');
@@ -912,16 +864,14 @@ test('Helmet preserves plugin sandbox and raw SDK headers without adding incompa
 			new Set(theme.headers['content-security-policy'].split(';').map((item) => item.trim())),
 			new Set(['sandbox', "default-src 'none'", "base-uri 'none'", "form-action 'none'"]),
 		);
-		for (const response of [asset, sdk, theme]) {
-			assert.equal(response.headers['x-content-type-options'], 'nosniff');
-			for (const name of [
-				'x-frame-options',
-				'strict-transport-security',
-				'cross-origin-embedder-policy',
-				'cross-origin-opener-policy',
-			]) {
-				assert.equal(response.headers[name], undefined, name + ' is not silently introduced');
-			}
+		assert.equal(theme.headers['x-content-type-options'], 'nosniff');
+		for (const name of [
+			'x-frame-options',
+			'strict-transport-security',
+			'cross-origin-embedder-policy',
+			'cross-origin-opener-policy',
+		]) {
+			assert.equal(theme.headers[name], undefined, name + ' is not silently introduced');
 		}
 	} finally {
 		await server.close();

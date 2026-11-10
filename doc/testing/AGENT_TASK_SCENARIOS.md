@@ -1,6 +1,7 @@
 # Agent 任务验收场景
 
-本清单以应用任务验证Agent能力：完整机制回归归[插件仓](https://github.com/0honus0/nexus-agent-plugins)的`tests/interoperability/agent/`，插件交互归`tests/e2e/specs/<packageId>/`，本体只保留`tests/backend/agent/`与`tests/e2e/specs/agent-host/`的宿主责任。以下是设计清单，不是已通过清单。共 81 个主场景；落地前核对当前实现，不虚构工具或协议。下方历史批次中的 **Runner/Agent Workspace 执行记录是退役版本证据**，不作为当前运行流程、Runner 接口或已完成验收标准；现行 Agent 仅使用授权 SSH 与独立 Backend CDP。
+> 历史设计参考：旧 Agent 及 SDK4 已从本体移除，以下不再是当前接口或验收入口。后续目标见 Agent 重构方案，旧执行证据见 testing/HISTORY。
+> 本清单以应用任务验证Agent能力：完整机制回归归[插件仓](https://github.com/0honus0/nexus-agent-plugins)的`tests/interoperability/agent/`，插件交互归`tests/e2e/specs/<packageId>/`，本体只保留`tests/backend/agent/`与`tests/e2e/specs/agent-host/`的宿主责任。以下是设计清单，不是已通过清单。共 81 个主场景；落地前核对当前实现，不虚构工具或协议。下方历史批次中的 **Runner/Agent Workspace 执行记录是退役版本证据**，不作为当前运行流程、Runner 接口或已完成验收标准；现行 Agent 仅使用授权 SSH 与独立 Backend CDP。
 
 ## 方法与边界
 

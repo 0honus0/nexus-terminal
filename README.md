@@ -26,11 +26,9 @@ docker compose up -d
 
 访问 `http://localhost:18111` · [部署与更新](./doc/DEPLOYMENT.md)
 
-Agent 的 File/Shell/ACP 工具通过明确授权的 SSH 连接执行，Browser 通过 Backend CDP 接入。独立 Agent Workspace Runner、Toolchain 与其 Compose 部署入口已退出；普通终端 Workspace、SSH/SFTP、RDP/VNC 及 Artifact 继续提供。
-
 ## 功能
 
-浏览器中的 SSH / SFTP / RDP / VNC 远程连接工具，支持终端挂起与跨设备目录同步、文件管理与在线编辑、跨服务器传输、经确认的远端依赖安装、Agent 与插件市场、安全认证、模块资源诊断、移动端和界面定制。RDP / VNC 使用浏览器 SDK 与后端认证桥，无需 guacd；远端依赖安装仅在用户确认后执行。
+浏览器中的 SSH / SFTP / RDP / VNC 远程连接工具，支持终端挂起与跨设备目录同步、文件管理与在线编辑、跨服务器传输、经确认的远端依赖安装、安全认证、模块资源诊断、移动端和界面定制。RDP / VNC 使用浏览器 SDK 与后端认证桥，无需 guacd；远端依赖安装仅在用户确认后执行。
 
 本文功能概览对应当前源码，已发布与已验证范围见 [使用说明](./doc/USAGE.md) 和 [验证记录](./doc/testing/E2E.md)。
 

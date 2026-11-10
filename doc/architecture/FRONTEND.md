@@ -8,28 +8,27 @@
 
 ## 2. 子功能与目录
 
-| 目录（相对 `packages/frontend/src`） | 职责                                                                                                                                     |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`                                | main/bootstrap、路由、页面装配、shell、全局样式和语言安装。                                                                              |
-| `features`                           | 按连接、终端、文件、传输、状态、认证、偏好与 Agent 等业务拥有组件、model、API、mapper、store/composable 和公开入口；以实际功能需要分层。 |
-| `features/agent/plugins`             | 插件浏览器 SDK、可信 Host bridge/iframe、市场及安装管理；与 Backend/Shared 的 `agent/plugins` 对齐。                                     |
-| `runtimes/workspace`                 | 工作区标签、RuntimeSession/Registry、布局与能力装配；通过 adapter 连接功能 Port 与同一 Workspace 生命周期。                              |
-| `runtimes/remote-next`               | 独立远端开发入口；不代替正式 Workspace 消费者。                                                                                          |
-| `client`                             | HTTP/二进制/Workspace 等传输与严格通信边界，持请求关联、取消及连接资源，不持业务草稿或服务端政策。                                       |
-| `shared`                             | 前端共用反馈、布局等能力；与双端契约包 `packages/shared` 职责不同。                                                                      |
-| `foundation`                         | 通用 UI、交互、浏览器、数据与异步基础能力，不反向依赖业务功能。                                                                          |
+| 目录（相对 `packages/frontend/src`） | 职责                                                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `app`                                | main/bootstrap、路由、页面装配、shell、全局样式和语言安装。                                                                     |
+| `features`                           | 按连接、终端、文件、传输、状态、认证、偏好等业务拥有组件、model、API、mapper、store/composable 和公开入口；以实际功能需要分层。 |
+| `runtimes/workspace`                 | 工作区标签、RuntimeSession/Registry、布局与能力装配；通过 adapter 连接功能 Port 与同一 Workspace 生命周期。                     |
+| `runtimes/remote-next`               | 独立远端开发入口；不代替正式 Workspace 消费者。                                                                                 |
+| `client`                             | HTTP/二进制/Workspace 等传输与严格通信边界，持请求关联、取消及连接资源，不持业务草稿或服务端政策。                              |
+| `shared`                             | 前端共用反馈、布局等能力；与双端契约包 `packages/shared` 职责不同。                                                             |
+| `foundation`                         | 通用 UI、交互、浏览器、数据与异步基础能力，不反向依赖业务功能。                                                                 |
 
 ## 3. 依赖方向
 
 页面/工作区装配 → 功能公开入口 → 功能内部 controller/store/API → client 与 Shared。组件通过本功能 model 或受控 props/事件消费状态；跨功能依赖走实际 public 出口，不能穿透私有 API/store。Workspace adapter 负责 Port 与实际传输的字段投影，终端功能不反向依赖 Workspace 实现。
 
-Foundation 保持业务无关；具体编辑器、xterm、图表、插件 iframe 的技术资源在相应功能 owner 内管理。后端的 Service→Model→Storage、SQL 和 SSH Adapter 规则只在 Backend 维护。
+Foundation 保持业务无关；具体编辑器、xterm、图表 的技术资源在相应功能 owner 内管理。后端的 Service→Model→Storage、SQL 和 SSH Adapter 规则只在 Backend 维护。
 
 ## 4. 类型与转换
 
 | 边界                     | 类型与转换 owner                                                              | 实际消费者                                |
 | ------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------- |
-| unknown 响应/事件 → wire | Shared codec 严格解码；持请求的 API/client 核对资源、版本、游标与字节范围关联 | HTTP、Workspace、插件 RPC                 |
+| unknown 响应/事件 → wire | Shared codec 严格解码；持请求的 API/client 核对资源、版本、游标与字节范围关联 | HTTP、Workspace                           |
 | wire → 前端应用          | 功能 mapper 白名单转换为独立 model 类型，明确秒/毫秒、有限状态及可选语义      | store/controller 与展示组件               |
 | 草稿/意图 → 请求         | 功能 API 显式构造 Shared 完整命令；身份来源仍由服务端验证                     | 表单、设置、终端与文件操作                |
 | Runtime → 功能 Port      | workspace adapter 投影连接、目录、终端输出、传输与取消能力                    | TerminalView、FileManager、ProgressCenter |
@@ -38,7 +37,7 @@ Foundation 保持业务无关；具体编辑器、xterm、图表、插件 iframe
 
 ## 5. 入口与安装
 
-`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。Agent Host 只匹配真实 App 组合及其签名包版本/hash/publisher，聊天统一加载组合选定的 UI 插件 iframe；Host 不根据 frontendEntry 在内置聊天与自定义页面之间分流。frontendEntry 仅是签名 UI 包资源入口。开启 Agent 的安装引导与总开关分别提交；确认引导新装时后端同时启用 App 和授予全部声明能力，普通市场安装和已有安装复用保留各自权限语义。DEV 页面仅作开发入口，不提供默认 App 或手工创建旁路。
+`app/main.ts`、bootstrap 与 router 安装全局依赖和页面；正式 Workspace 按当前身份和视图构建 runtime/功能能力。独立 remote-next 页面仅作开发入口。
 
 重型编辑器、预览及图表沿实际异步入口加载；加载占位不伪造业务数据。现成全局确认、Toast 和 UiSelect 由基础组件统一呈现，具体动作与恢复仍归用例 owner。
 
@@ -54,11 +53,11 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 
 视图失活、身份撤销、通道替换和组件卸载各自取消本次监听、计时和请求；已经派发的写入仍由原 owner 追踪收口。取消等待不等于远端停止；未确认的提交/关闭必须保留核对路径。确认框绑定原意图与视图，确认后派发前再次复核有效性。
 
-终端的预测、快照、resize 与真实输出共用串行解析屏障；断线、挂起、后台和 PTY 替换先撤销预测。前台恢复同步可视几何并保留下一帧收敛，不重发输入或强制唤起软键盘。插件订阅/iframe、编辑器、图表及拖动监听按自身实例释放。
+终端的预测、快照、resize 与真实输出共用串行解析屏障；断线、挂起、后台和 PTY 替换先撤销预测。前台恢复同步可视几何并保留下一帧收敛，不重发输入或强制唤起软键盘。编辑器、图表及拖动监听按自身实例释放。
 
 ## 8. 当前能力与验收
 
-正式认证、连接、工作区、文件、传输、偏好、远程桌面及 Agent Host 已对接当前 Shared。源码完成、专项静态/行为与远程全量基线分别记录；不得将早期“待 F1”当作现存未迁移功能，也不得把历史通过扩大为最新工作区保证。后端限制与副作用见 Backend/USAGE，不在前端文档复制整套后端设计。
+正式认证、连接、工作区、文件、传输、偏好、远程桌面 已对接当前 Shared。源码完成、专项静态/行为与远程全量基线分别记录；不得将早期“待 F1”当作现存未迁移功能，也不得把历史通过扩大为最新工作区保证。后端限制与副作用见 Backend/USAGE，不在前端文档复制整套后端设计。
 
 以下保留前端特有设计；各轮日期与实测证据归 testing，当前待验统一承接于 PLAN。
 
@@ -68,42 +67,40 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 
 1. **职责与范围**：Foundation 持有主题材料、基础组件及多个功能共同使用的目录/设置视觉契约；页面、应用壳和反馈展示拥有各自布局。业务不靠重写基础组件内部 class 形成隐式接口。
 2. **子功能与目录**：`foundation/ui/styles` 按 materials、surfaces、feedback-states、controls、selection、dialogs、motion-accessibility、confirmation-actions、catalog、settings 组织。`app/styles/{shell,update-prompt}` 持应用壳和更新提示；`shared/feedback/styles/notifications.css` 持 Toast；代理与通知目录专用 toolbar 分别归各 feature 的 styles。
-3. **依赖方向**：`app/styles/global.css` 显式装配各 owner 的全局 CSS，Foundation 不 import 上层样式，也不识别 App Header 或 Agent 专有 DOM。跨功能组件与能力由所属 feature public 提供；不通过 shared 聚合业务类型、重导出应用对象或注入全功能 Service Locator。
-4. **类型与转换**：UiEmptyState 通过 `--ui-empty-state-*` 提供图标、标题、说明、动作的局部定制，默认及密度 fallback 保持基础组件原值；UiInput 字号复用 `--ui-control-font-size`，Spinner 复用 `--ui-spinner-size`。UiPopover 的 `panelMarkerAttribute` 仅接一个 `data-*` 存在标记，Agent 在自身调用处传入。无 Shared/协议变更。
-5. **入口与安装**：Tailwind 与 tokens 先安装，再按明确顺序安装材料、组件、可访问性与后置变体、目录、设置及业务专属规则。保持原 CSS layer、选择器权重及同目标覆盖关系；不把未分层组件规则统一移入 Tailwind layer，不依赖路由访问顺序加载共用外观。
-6. **数据、事务与并发**：各功能 composable 仍消费自身唯一 Pinia Store，连接/标签/代理/密钥及远桌消费者直接经公开入口取得同一 owner。没有新的状态缓存、请求、持久偏好或迁移。
-7. **生命周期与失败**：原认证清理、视图 scope、KeepAlive、请求取消和未知写入保护不变；样式不建立监听。Portal 的 Agent 标记仍作用于原面板，外部点击、Escape 与焦点恢复不变。UiSelect 消费 Reka 提供的可用高度约束列表，扣除现有 padding/border，保留正常高度和密度。
-8. **当前能力与验收**：核对 USAGE 的目录、全局确认/Toast、登录、工作区与 Agent 操作，内部重构不改变产品行为。CSS 删除须有动态消费者、编译 scope 或等价 cascade 证据；运行时 Coverage 未命中不是死规则证明。实际源码、静态及 CDP 宽窄/深浅对照分别记录 testing/HISTORY，真机输入法不由桌面视口模拟代替。
+   跨功能组件与能力由所属 feature public 提供；不通过 shared 聚合业务类型、重导出应用对象或注入全功能 Service Locator。
+3. **类型与转换**：UiEmptyState 通过 `--ui-empty-state-*` 提供图标、标题、说明、动作的局部定制，默认及密度 fallback 保持基础组件原值；UiInput 字号复用 `--ui-control-font-size`，Spinner 复用 `--ui-spinner-size`。无 Shared/协议变更。
+4. **入口与安装**：Tailwind 与 tokens 先安装，再按明确顺序安装材料、组件、可访问性与后置变体、目录、设置及业务专属规则。保持原 CSS layer、选择器权重及同目标覆盖关系；不把未分层组件规则统一移入 Tailwind layer，不依赖路由访问顺序加载共用外观。
+5. **数据、事务与并发**：各功能 composable 仍消费自身唯一 Pinia Store，连接/标签/代理/密钥及远桌消费者直接经公开入口取得同一 owner。没有新的状态缓存、请求、持久偏好或迁移。
+6. **生命周期与失败**：原认证清理、视图 scope、KeepAlive、请求取消和未知写入保护不变；样式不建立监听。UiSelect 消费 Reka 提供的可用高度约束列表，扣除现有 padding/border，保留正常高度和密度。
+   CSS 删除须有动态消费者、编译 scope 或等价 cascade 证据；运行时 Coverage 未命中不是死规则证明。实际源码、静态及 CDP 宽窄/深浅对照分别记录 testing/HISTORY，真机输入法不由桌面视口模拟代替。
 
 ### 活动视图、手势与展示组件边界
 
-1. **职责与范围**：App router 编排经过认证的 Workspace 导航预加载；Workspace 装配真实可见的编辑/预览视图；文件功能拥有列宽及文档动作；窗口功能拥有视口边界；Foundation 只提供手势机制；shared/focus 的纯 DOM 能力根据通用文档标记判断快捷键归属，不依赖文件功能私有结构。Provider 管理用例与卡片展示分开，Agent 配置按钮尺寸归按钮组件。
-2. **子功能与目录**：`filesystem/composables/use-file-manager-columns.ts` 持列宽计算和拖动；`file-editor/composables/use-file-editor-actions.ts` 持重新加载/编码/丢弃确认，session 类型归 `file-editor/model/file-editor-session-types.ts`。`shared/focus/document-keyboard.ts` 持文档焦点归属判断；transfers 持进度窗口的可见性、速度采样及位置持久化。`agent/settings/ProviderCatalogCard.vue` 持卡片 DOM 和样式，管理 API、草稿、复制计时及弹窗仍归 ModelProviderSettings。
-3. **依赖方向**：App router → workspace/public 的预加载能力；Connections 仅发原导航意图，不引用 Runtime。Workspace → file-editor/file-preview/transfers 的 active 契约；文件功能 → 认证视图 scope、Foundation；Provider 卡片 → 本功能 model 和基础 UI，不持 API 或 Store。Surface 传尺寸变量，不再深层覆盖配置按钮的尺寸属性。
-4. **类型与转换**：文件 session/actions 直接消费唯一应用类型；确认注册返回绑定实例的关闭能力及 dispose；FileEditor 和 Workspace 弹窗均经触发实例派发，不借另一活动编辑器的确认。active 为宿主实际可见性，KeepAlive 再提供实例活动条件。Provider props/events 传既有 Provider、disabled、复制状态及用户意图。没有 Shared、HTTP 或数据库变化。
-5. **入口与安装**：认证通过且 Workspace 导航带 connectionId 时并行预热现有异步组件，导航不等待预热；默认懒加载和原加载失败处理保留。预览/编辑弹窗与嵌入布局均传真实 active，Agent 文件库及聊天预览同步装配。正常 DOM、断点、最小列宽、卡片布局、按钮方形变体和深浅主题保持。
+1. **职责与范围**：App router 编排经过认证的 Workspace 导航预加载；Workspace 装配真实可见的编辑/预览视图；文件功能拥有列宽及文档动作；窗口功能拥有视口边界；Foundation 只提供手势机制；shared/focus 的纯 DOM 能力根据通用文档标记判断快捷键归属，不依赖文件功能私有结构。
+2. **子功能与目录**：`filesystem/composables/use-file-manager-columns.ts` 持列宽计算和拖动；`file-editor/composables/use-file-editor-actions.ts` 持重新加载/编码/丢弃确认，session 类型归 `file-editor/model/file-editor-session-types.ts`。`shared/focus/document-keyboard.ts` 持文档焦点归属判断；transfers 持进度窗口的可见性、速度采样及位置持久化。
+3. **依赖方向**：App router → workspace/public 的预加载能力；Connections 仅发原导航意图，不引用 Runtime。Workspace → file-editor/file-preview/transfers 的 active 契约；文件功能 → 认证视图 scope、Foundation；Surface 传尺寸变量，不再深层覆盖配置按钮的尺寸属性。
+4. **类型与转换**：文件 session/actions 直接消费唯一应用类型；确认注册返回绑定实例的关闭能力及 dispose；FileEditor 和 Workspace 弹窗均经触发实例派发，不借另一活动编辑器的确认。active 为宿主实际可见性，KeepAlive 再提供实例活动条件。没有 Shared、HTTP 或数据库变化。
+5. **入口与安装**：认证通过且 Workspace 导航带 connectionId 时并行预热现有异步组件，导航不等待预热；默认懒加载和原加载失败处理保留。正常 DOM、断点、最小列宽、卡片布局、按钮方形变体和深浅主题保持。
 6. **数据、事务与并发**：列宽 pointerup 才发持久意图；取消保留当前预览，不补发晚保存。文档确认绑定原 session、文档修订和授权，确认中编辑、切页或身份失效撤销原意图；await 后再核对。共享 session 的确认注册按实例解绑，无可用确认时拒绝丢弃脏文档。关闭多个文档还核对完整目标快照。
 7. **生命周期与失败**：隐藏预览不截获快捷键或迟聚焦，恢复继续使用原内容。基础拖动和 resize 的 stopDragging/stopResize/pointerup 提交，cancelDragging/cancelResize/pointercancel/失焦/隐藏/KeepAlive 失活/卸载仅释放手势和 body 选择状态；Workspace 切会话同步取消左右侧栏与三个弹窗手势，持久弹窗另在 active/disabled 撤销时取消。远桌监听 layout/visual viewport，把窗口与恢复按钮限制在可见区域，取消旧手势，不持久化自动适配尺寸；原 peer resize 继续同步显示尺寸，不重建连接。外观窗口复用基础拖动，失焦/隐藏/视口变化取消，遮罩关闭要求按下也始于遮罩。进度窗口隐藏后释放速度计时和手势，恢复重新建立采样基线；传输任务生命周期不随展示暂停；完成后的目录只读同步核对原会话仍存活，不依赖发起视图的旧permission，提示及后续写意图仍要求原视图有效。拖动后的点击抑制仅针对指针click，detail=0的键盘激活继续正常恢复。多个文档通过 data-document-keyboard-scope 标记优先按事件目标及当前焦点选择实例，已处理的键盘事件不重复执行。
 8. **当前能力与验收**：清理无消费者 Tooltip、ManagementCard、management 操作布局及 Pagination density，保留实际分页外观。只删除已核消费者及 scope 的无效 CSS；其它未证实规则保留。浏览器基线、跨断点计算样式、生命周期故障与静态检查归 testing/HISTORY；桌面 CDP 与受控 visualViewport 不证明真实手机输入法或全部平台组合。
 
 ### 移动端可达性与长内容
 
-1. **职责与范围**：设置页拥有分类导航，文档预览拥有搜索与工具行，Agent配置与Provider卡片拥有自己的紧凑控件/详情，基础搜索框拥有唯一清除呈现。
-2. **子功能与目录**：沿SettingsPage、PreviewSearchBar/FilePreviewDialog、AgentConfigPopover/ProviderCatalogCard与UiSearchInput原文件维护，不另建状态仓库。
 3. **依赖方向**：组件消费Foundation和VueUse；设置滚动边缘来自实际DOM几何，CSS不反向引用业务Store；父预览仅持工具栏换行，子搜索持自身排列。
-4. **类型与转换**：沿原props/events和局部HTMLElement/ref，不改Shared、业务模型、数据库与迁移。
-5. **入口与安装**：手机分类两侧各保留提示间隙，箭头不拦指针；选中分类/语言/容器改变使当前项可见。窄预览与coarse pointer搜索采用输入独占一行、下方计数与44px动作。Agent配置只增触控高度，保留横向宽度；展开模型ID完整换行并可选择。启用自带clearable的UiSearchInput局部隐藏原生webkit清除，不改其它输入。
-6. **数据、事务与并发**：纯展示调整，无新请求；选中项沿原router状态，搜索/清除沿原受控事件，长ID不创建复制缓存或额外读取。
-7. **生命周期与失败**：ResizeObserver及模板监听随所属scope释放；KeepAlive恢复重新测分类，滚动不改变选择。搜索清除只清query，外侧关闭才收起；隐藏快捷键和迟聚焦保护保留。
-8. **当前能力与验收**：桌面密度保持，320/390深浅与三语、触控命中、全工具栏不溢出、长文本及正式回归分别归testing/HISTORY；仿真不代替真实手机输入法。
+
+4. **入口与安装**：手机分类两侧各保留提示间隙，箭头不拦指针；选中分类/语言/容器改变使当前项可见。窄预览与coarse pointer搜索采用输入独占一行、下方计数与44px动作。启用自带clearable的UiSearchInput局部隐藏原生webkit清除，不改其它输入。
+5. **数据、事务与并发**：纯展示调整，无新请求；选中项沿原router状态，搜索/清除沿原受控事件，长ID不创建复制缓存或额外读取。
+6. **生命周期与失败**：ResizeObserver及模板监听随所属scope释放；KeepAlive恢复重新测分类，滚动不改变选择。搜索清除只清query，外侧关闭才收起；隐藏快捷键和迟聚焦保护保留。
+7. **当前能力与验收**：桌面密度保持，320/390深浅与三语、触控命中、全工具栏不溢出、长文本及正式回归分别归testing/HISTORY；仿真不代替真实手机输入法。
 
 ### 管理列表主题信息层级
 
 1. **职责与范围**：Foundation 提供名称、类型、标签和状态的配色；管理视图及工作区组件选择对应展示角色。
-2. **子功能与目录**：foundation/ui/styles/catalog.css 定义共用变量和徽标配色类；连接、代理、通知、Docker、WorkspaceConnectionList、快捷命令分组、连接标签选择器、Agent Provider/集成/插件市场与机器突变恢复在原模板/样式中应用；历史与挂起目录时间不再叠加额外透明度。
+2. **子功能与目录**：foundation/ui/styles/catalog.css 定义共用变量和徽标配色类；历史与挂起目录时间不再叠加额外透明度。
 3. **依赖方向**：具体展示依赖 Foundation CSS，不跨功能引用私有状态，不更改全局按钮的 primary 配色。
 4. **类型与转换**：无新增应用或 Shared 类型；CSS 颜色由现有主题前景、背景、强调与状态变量派生，无新增持久主题字段。
-5. **入口与安装**：沿全局样式 foundation/ui/styles/catalog.css 的现有安装点加载；徽标与标签输入显式 opt-in，避免影响其它产品区域；普通数量保持中性，模型容量与版本使用信息色，启停和结果保留原语义色。
+5. **入口与安装**：沿全局样式 foundation/ui/styles/catalog.css 的现有安装点加载；徽标与标签输入显式 opt-in，避免影响其它产品区域；
 6. **数据、事务与并发**：无通信、数据及事务变更；名称、分组、标签与状态仍来自原 owner。
 7. **生命周期与失败**：无新增监听或资源；主题变量改变即重算颜色，原选中、悬停、焦点、禁用及失败状态保持各自语义。
 8. **当前能力与验收**：USAGE 对应章节维护展示层级；静态计算与检查归 testing，深浅主题与手机视觉按 PLAN 待验。
@@ -118,39 +115,6 @@ Workspace RuntimeSession 持普通与挂起附件的连接/续租，Registry 持
 6. **数据、事务与并发**：密钥读取及写入继续由原 SSH Keys controller/store 管理；无新增持久化或迁移。
 7. **生命周期与失败**：弹窗按需挂载，关闭、页面隐藏或认证身份变化时销毁；读取、取消、错误及未知写入保护复用原管理 owner。
 8. **当前能力与验收**：操作说明见 USAGE 连接管理章节；按 PLAN 执行静态检查，宽窄屏与弹窗行为保留正式远程回归待验，不以编译替代。
-
-### Agent Host、签名 UI 与页面通信
-
-1. **职责与范围**：Host 持窗口、App 切换、真实认证网络、可信确认和资源选择；聊天展示、正文缓存及输入意图在签名 UI iframe。包安装与 App 组合是独立事实，只有提供 app 贡献并完成组合的 App 才进入 Host 目录。
-2. **子功能与目录**：`features/agent/plugins/sdk` 持公开浏览器 runtime，`plugins/host` 持 `PluginAppFrame`、可信 bridge、descriptor 投影及 Artifact 选择；`plugins/{api,model,composables,components}` 持插件市场、安装及数据管理。通用 Hub/窗口/提醒/checkpoint 状态留 `features/agent/host`，页面传输留 `api/page-stream`。独立插件仓库的 `plugins/nexus.ui.chat/src` 完整持有聊天、预览、基础 UI、样式及翻译源码。
-3. **依赖方向**：签名 UI → 公开 SDK/MessagePort → 绑定原 App 和安装身份的 Host bridge → 真实 API。SDK runtime 只依赖 Shared 与本地 UI client；独立 UI 只消费 Shared 契约和公开 ESM URL，不导入 Host 源码、认证 Store、直接 HTTP/WS client 或全功能服务定位器。包中的 displayName、权限声明和状态提示均不构成执行授权。
-4. **类型与转换**：Shared `agent/plugins/frontend-sdk` 唯一持有 `AgentPluginFrontendModule`、factory、错误构造器及 SDK 类型，相关文件持 RPC、UI 环境、流和 checkpoint 契约；Host 和 UI 分别逐字段投影。独立 UI 的 `nexus:frontend-sdk` 声明通过索引访问这些类型，factory 与 `PluginUiRequestFailure` 来自同一公开模块实例，保留 `instanceof` 语义。SDK 请求采用具名方法联合，不开放任意路径代理或自报 App 身份。主题、语言、窗口状态和目标摘要经白名单环境同步，环境消息不含 Cookie 或 grant；跨 App 选择结果不含源 App、包或资源版本。
-5. **入口与安装**：`pnpm run build:plugin-sdk` 从前端 `plugins/sdk/index.ts` 构建 `dist-plugin-sdk/frontend-v4.mjs`；Backend 仅复制该产物并交付 `/sdk/frontend-v4.mjs`，运行时不编译或导入前端源码。没有独立 frontend SDK workspace/npm/tgz 包。独立 UI 在自身仓库执行 check/build，Vite 将 `nexus:frontend-sdk` 保留为该公开 URL，产物进入真实签名 UI 包；生成的源码/hash 清单记录本地源码、Shared 归档与外部 runtime URL，不以 Host source snapshot 为构建输入。Host 不把 AgentAppSurface 作为聊天入口。
-6. **数据、事务与并发**：一个页面的 Run 状态、SDK Run 事件和 Memory 失效订阅复用一条 `/ws/agent-runs`；每个具名 source 有独立 subscriptionId、generation、revision 和 ACK 信用。Run/事件源沿持久游标恢复，Memory 的 epoch/revision 仅触发重读。父页只在 UI 实际消费后释放对应信用，页面重连不改变业务游标。任务投影由 Host 重新读取 Run、审批和用量，不能用 frame 自报状态替代权威事实。
-7. **生命周期与失败**：App/包版本、UI revision、grant、认证或页面生命周期失效时关闭原 bridge、端口和订阅，晚结果不得发布到新 frame。Host 在当前认证会话内按 App/UI package/publisher 保存 opaque checkpoint，UI 版本更新保留草稿，成功显式清除 App 数据后仅删除该 App 的 checkpoint 与目标偏好；payload schema 和严格解码由 UI 持有。审批及 full_access 先经父页可信确认；审批摘要由父页读取原审批版本/hash，最终权限和 CAS 仍由后端核对。跨 App ArtifactPicker 常驻父页并复用原多选/分页/上传恢复；frame 仅得到显式选择的 opaque key/id/name，附加使用父页保留的原版本与固定目标 App，未知写入不自动重试。
-8. **当前能力与验收**：架构以真实签名 iframe、独立构建和当前通信消费者为准；静态检查、受控逻辑、实际浏览器和完整远程验收分别记录于 testing/PLAN，不从组件复用或构建通过推断行为全部通过。
-
-### Agent 最小化任务提醒
-
-1. **职责与范围**：签名 UI Surface 持任务展示与写意图；Host 核对权威 Run/审批/用量后呈现最小化时实际发生的任务状态、审批和失败变化，提醒短暂出现，不常驻或建立全局Run store。
-2. **子功能与目录**：签名 UI 内 AgentAppSurface 发布当前任务展示投影，useNativeRuns 持逻辑订阅；`plugins/host/ui-host-bridge` 的 PluginUiHostBridge 复核服务端事实并在 agent-host-state 按 frame 实例登记窄审批能力；use-agent-task-notices持变化基线、合并队列、收起/过期计时；AgentLauncher和AgentTaskNotice呈现。
-3. **依赖方向**：签名 UI Surface → 本功能 model/SDK；父页 bridge → 原认证 API → Host 投影 → Launcher/card → Foundation 按钮；@floating-ui/vue 2.0.1已由Reka引入，Frontend显式声明直接依赖复用定位/flip/shift/size，不复用有全局FocusScope/DismissableLayer的弹出框承载自动提醒。
-4. **类型与转换**：AgentTaskActivity及注册能力唯一归agent/model，复用NativeRun/Approval的有限状态及安全摘要；投影带本页确认创建的Run标记、当前会话标题、状态、最多360字符结果、已确认用量/待审批和实例绑定动作。UI 消息和 API/Shared 保持白名单转换；审批及用量来自 Host 重读，无新的提醒持久化。
-5. **入口与安装**：仅minimized显示变化提醒，单纯最小化/普通文字/计数或语言变化不补弹；切换/加载历史任务的首个快照只作基线，本页确认创建或追加的Run首次回执即终态时仍可提醒；不按历史加载伪造新完成。同一实例任务更新合并，多实例顺序展示；新审批优先，正在悬停/键盘操作的卡片保持，8秒收起；悬停/键盘操作暂缓、触摸点击不永久暂停。卡片不自动聚焦或建立背景遮罩，Esc仅在卡片内处理，328px最大展示宽度再按真实可用宽高收缩。
-6. **数据、事务与并发**：最小化可继续同一任务订阅和窄审批，创建/追加/取消与未知写重试仍要求完整活动界面。快速批准由父页复查当前 Run/Thread、最新审批版本/hash，显示可信确认，再沿原快照意图/CAS/operationId 提交；并发点击受原busy/blocked围栏，禁止重放或扩大授权。语言改变只更新文案，变化键使用原语义取值。
-7. **生命周期与失败**：逻辑任务订阅复用父页 page-stream，由实际 socket 结果驱动退避，不用 onLine 硬闸；online/offline 和 NetworkInformation change 触发重连，源首份状态到达前心跳不续原45秒期限。浏览器隐藏暂停原订阅和收起计时，恢复原游标续读；关闭/销毁/认证撤销停止观察，目录按App版本/启用状态过滤并删除对应提醒。每个Surface独立Symbol注册，旧卸载只能注销自己；晚更新不能恢复已注销项。提醒收起不影响任务，过期审批按最近真实expiresAt更新入口标记/按钮，不定时请求服务端；冲突/未知保留原完整任务核对路径。
-8. **当前能力与验收**：仅已挂载签名 UI 的当前任务投影；Host 重新核对真实状态，无全局任务发现或内置原生聊天分支。源码/静态检查与真实UI/异步故障验收分别记录于testing；已覆盖场景见测试入口，真实手机、键盘和扩大故障组合见 PLAN。
-
-### Agent 会话列表与正文恢复
-
-1. **职责与范围**：Thread owner持列表和创建/删除意图；Run owner缓存已确认正文及双向游标，任务/审批状态仍从原API核对；Surface持阅读位置和虚拟渲染，不建立全局任务Store。
-2. **子功能与目录**：use-native-threads后台核对已加载范围并直接消费写回执；use-native-runs持conversationSnapshots、追赶窗口、selectionGeneration及历史分页；native-run-rules合并连续正文；AgentAppSurface复用vue-virtual-scroller的DynamicScroller/Item测高与可见行回收，消息和工具分组共同虚拟化。
-3. **依赖方向**：签名 UI Panel/Surface → 原 composable/Native model → SDK 具名请求 → Host 认证 RPC → 现有 Backend Context/Workspace；正文存储和游标归原 owner。Host 提醒在展示投影之外重新核对 Run/审批/用量。
-4. **类型与转换**：NativeConversationSnapshot唯一归agent/model，保存entries、前向cursor、反向startCursor和olderHidden，无审批、权限或写意图。NativeEntryHistory逐字段映射Shared AgentThreadEntryHistory；Agent Model 的 NativeTranscriptRow 持稳定Run/role/step/event键，工具子组件随行身份隔离，避免回收时串用展开状态。工具组优先归属本步骤或更早的助手正文；无前置正文时锚定本Run首条已加载消息，后续步骤的总结不改变该锚点，避免文件/GIF跨行重新挂载。
-5. **入口与安装**：返回Hub保留列表并后台核对；增删直接消费权威回执，未知仍显式核对。重复选择不重置，新选择可取消旧后台读。无缓存首次仅取最近正文页，向上到顶或点击原“加载更早消息”入口再取前页；缓存立即显示并沿前向游标补齐，追赶期间批量发布，避免历史逐页重绘。
-6. **数据、事务与并发**：活动正文随向前分页增长，只挂载可见消息/工具行；跟随最新时按原128条/256Ki UTF-16字符缓存预算回收视口之前的完整消息，仍可重新分页读回，单条长消息不截断。闲置缓存按同一预算及访问顺序淘汰，活动正文超预算时不保留额外闲置窗口，不限制持久历史。前后游标分离，前页合并不得回退WS进度。scope/App版本、选择代次与operation generation隔离晚结果；历史首次加载禁止写入，用户翻页可取代工具后台读并补安排工具快照。未确认写入仍串行。
-7. **生命周期与失败**：Surface按逻辑消息索引导航、保存阅读锚点及库CacheSnapshot；同宽缓存切换先恢复测量再定位，测量缓存随正文缓存淘汰，宽度变化不套用旧测量；prepend复用库shift，单条消息补前缀另按实测行高差保持位置；动态测高期间仅在用户贴底时跟随。删除确认后清缓存/位置，最后会话清空主区；后台列表失败保留旧画面和恢复围栏，权限/认证撤销清私有状态；切换/销毁取消旧读取、逻辑订阅和视图 RAF，实际 socket 由页面 owner 共享，不自动重放未知写入。
-8. **当前能力与验收**：保留原气泡、审批和工具详情、输入区及悬浮控件，删除无消费者的旧裁剪提示；未缓存正文不再从头读取。Run元数据仍分页到最新并保留最近100项，不宣称其已改为服务端尾页。既有限定CDP验证尾页/连续上翻、长正文虚拟挂载与同宽缓存阅读位置、创建/删除及最小化完成提醒；真实弱网、代码/图片/宽度变化测高与导航交错仍按testing待验，不报告未经实测的加速比例。
 
 ### 认证撤销后的通知隔离
 
@@ -211,17 +175,6 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 7. **生命周期与失败**：generation、原实例、signal和可见性保护保留；续租无法确认显示operation_unknown，lease_expired仅来自服务端撤销。目录晚到仍恢复原PTY，其他owner不得静默接管。表单取消/失活清理秘密与旧测试。
 8. **当前能力与验收**：USAGE连接管理/SSH挂起章节说明操作；CDP受控后台与真实SSH证据见testing，不能等同所有移动系统休眠实机验收。
 
-### Artifact 总空间与分段文件传输
-
-1. **职责与范围**：文件库消费总空间契约，移除已授权删除的单文件设置，其余UI保持不变。
-2. **子功能与目录**：execution-types/mapper和ExecutionSettings同步字段删除；artifact-management-api拥有长度/版本/范围/hash关联，通用binary-client继续只负责技术传输。
-3. **依赖方向**：功能API消费Shared和client；增量SHA-256复用成熟@noble/hashes，不自行实现hash。
-4. **类型与转换**：Artifact metadata和begin字节上限随Shared总空间最大值；上传File不再先整体arrayBuffer，按4MiB分片增量hash，Blob请求直接交付不重复解包。
-5. **入口与安装**：原上传/下载按钮与返回Blob契约不变，超过4MiB下载沿原content Range接口逐段获取，无新UI或轮询。
-6. **数据、事务与并发**：每段验证原ID路由、etag、206/200、Content-Range、真实长度及末尾完整SHA-256；版本变化或段失败不交付部分文件。Blob分段组装避免单个巨大ArrayBuffer，实际仍取决于浏览器内存/Blob能力。
-7. **生命周期与失败**：同一取消信号覆盖hash和各段请求，hash状态在finally销毁；无自动上传或未知写入重试。分段只缩小传输工作集，不作为存储上限。
-8. **当前能力与验收**：双端静态和构建见testing；大文件、取消、版本变化和窄设备资源的待验范围见 PLAN。
-
 ### 挂起终端画面恢复的尺寸顺序
 
 1. **职责与范围**：恢复原PTY画面时保留快照尺寸与实时输出尺寸，不改变UI设计。
@@ -266,36 +219,6 @@ FileManager 沿原 TerminalDirectoryPort.changeDirectory 的 onQueued 消费 wai
 7. 生命周期：原布局锁、ResizeObserver、结构key和真实拖动事件保存不变；不改命中区、可见分隔线或默认布局。
 8. 验收：api.honus.top隔离实例挂载真实Renderer/RuntimeSession，无SSH连接/用户配置写入；验证上下往返、两侧分隔条、38–42px、百分比总和及锁定。既有SSH E2E补齐真实连接后的上下拖动回归，等待正式远程Actions。
 
-### Agent 审计入口移除
-
-任务详情不再展示步骤与工具审计；审批卡片移除查看工具审计按钮及定位状态。NativeRunDetails 保留运行概况、子任务和 Run 事件；开发页同步移除步骤审计。线程工具列表 API 由 `native-tools-api.ts` 持有，独立签名 UI 构建将其请求适配为 SDK 的 agent.tools.list/details，供聊天工具状态及其中的审批结果展示使用；不保留旧审计 API 包装。其他界面布局和样式不变。
-
-### 插件市场安装与更新确认弹窗
-
-1. **职责与范围**：PluginManagementSettings将市场共用的候选包确认区放入UiModal，不再插入仓库列表上方；包安装、App 组合及两步升级保留明确提交动作。
-2. **子功能与目录**：继续由 agent/settings 呈现校验和确认；use-plugin-management 持候选包、依赖预览及已确认的包/App 安装状态，PluginInstallPlanPreview 展示完整依赖闭包。预览是本次操作的短期数据，不建立持久安装流程。
-3. **依赖方向**：弹窗消费 foundation/ui 的 UiModal；prepareCatalogEntry 经 Plugin API 严格解码依赖预览，applyCandidate 提交原包/仓库版本及依赖身份，实际校验和提交归后端 PluginRepositoryService。
-4. **类型与转换**：包/stage/App 事实归 agent/model/plugin-types，短期计划归 model/plugin-install-plan-types；API mapper 白名单转换 Shared install-plan，请求绑定仓库版本、stage 版本、已安装依赖 revision 和精确包身份。
-5. **入口与安装**：候选包非空且市场页active时显示；原签名、名称/版本、能力与技术详情移入正文，取消与确认留在独立footer。无候选包时恢复提示在市场，有候选包时在弹窗中显示，始终只显示一处。
-6. **数据、事务与并发**：candidate/candidatePlan 是预览展示依据，包和 App 的已确认快照分别维护；保留 canWrite、busy、refreshRequired 和 mutationUnknown 围栏。依赖可能已逐项提交，失败后重读实际包/App 事实并重新准备预览；关闭只清空候选意图，不撤销已提交包、排空或自动重放未知操作。
-7. **生命周期与失败**：忙碌时取消/遮罩/Escape均禁止关闭；空闲关闭、确认成功或失效清空后隐藏。UiModal负责Portal、焦点进入及短屏滚动；调用方在校验请求禁用按钮前保存触发元素，候选包关闭且原视图可写时在DOM更新后恢复焦点，失活时丢弃该引用；active控制离开页签的可见性，原视图owner继续隔离认证/页面撤销后的晚结果。失败重读与未知核对在弹窗内可达，未决状态仍由原owner持有。
-8. **当前能力与验收**：原弹窗与新增依赖预览的源码、静态和实际浏览器证据分别见 testing；包/App 组合、部分成功、两步升级及未知结果恢复按当前 PLAN 验收，不将关闭弹窗声称为撤销安装或升级。
-
-### Agent 聊天工具状态与悬浮控件
-
-1. **职责与范围**：聊天只保留工具调用分组，审批结果进入同一工具状态区域；待审批任务侧栏与最小化快速批准仍持原写入入口。
-2. **子功能与目录**：AgentAppSurface按toolCallId建立审批索引；NativeToolActivityList展示状态及处理时间，删除无消费者的NativeApprovalHistoryList及对应文案。控件浮动布局归Surface的模板和CSS。
-3. **依赖方向**：继续沿useNativeRuns读取当前Run审批与线程工具分页，复用原工具详情延迟读取；没有新公开入口、全局状态或后台请求。
-4. **类型与转换**：复用agent/model/native-run-types.ts；索引按工具ID关联，并复查appId/runId，当前状态还须匹配operationHash和inputRevision/operationRevision。审批时间为秒，展示时乘1000；工具时间保持毫秒。审批与执行状态分别呈现，不将批准转换为completed。
-5. **入口与安装**：消息后和未关联消息的工具列表共同消费审批索引；不再独立渲染审批历史。工具未加载时随原工具分页加载，审批读取范围仍为当前选中Run，不伪造其它Run的审批状态。
-6. **数据、事务与并发**：只读投影不持久化、不提交批准；审批按输入版本、政策版本及申请时间排序，被取代的许可不覆盖其替代许可；同一工具旧操作的审批留在展开详情，不能作为当前操作已获批准的依据。
-7. **生命周期与失败**：保留原订阅、版本合并、Run/Thread切换和失效围栏；页面媒体查询由VueUse随组件作用域释放，不新增业务timer。状态行绝对定位在输入区上方，空白pointer-events:none，只有按钮恢复命中；按钮自身实色，正文保留底部留白。聊天滚动区与footer之间不留gap或顶部padding，使整排状态行都覆盖正文滚动范围；无用量时的发送提示不绘制底色。权限入口与compact附件入口复用soft外观，非compact附件仍沿原ghost；SSH目标仅按页面和输入区宽度响应，VueUse媒体查询页面至少768px且输入区超过620px时显示文字、已选数量和下拉箭头，其余使用square图标触发器；不消费设备类型、UA或触控能力，保留原aria-label/title和选择面板。思考/目标/权限及附件外层不收缩，模型沿原flex收缩；文件/发送持右组，停止移入左组，避免附件flex-1/min-w-0导致根宽小于按钮的重叠。附件、输入框及popover仍沿原布局/Portal，不改变自动跟随与导航动作。思考强度按手选或当前模型默认得出同一有效显示值，标签、说明、滑块定位和强度配色统一消费；未配置默认时显示“自动”，不补造具体请求等级，原模型切换清覆盖和Run冻结保持。
-8. **当前能力与验收**：已完成源码与消费者迁移；此前限定CDP覆盖桌面及390/320px的浮层点击/滚轮穿透、Token/消息导航和真实批准/拒绝状态，证据见testing。本轮SSH目标按宽度切换及选择保持已由Desktop Chrome/Pixel 7 UA的1440→390→320→1440px正式远程场景覆盖；真实触摸滚动/软键盘、工具栏组合视觉、扩大审批和历史分页组合仍待专项。
-
-### 自动图片预览
-
-image_generate、artifact_create、artifact_present、file_deliver 的可信成功结果派生 outputArtifactIds，工具说明与 Host 指引明确自动展示，无需模型拼接 Markdown 地址。前端 NativeToolArtifact 以认证 API 按需读取文件元数据，使用现有图片外观或文件卡、FilePreview 和下载入口；失败与过期不伪造成功。Base64 只经生成服务落盘，不写入聊天或工具列表。待批准及失败不产生成功预览；unknown 批次只展示其中已确认完成的文件；刷新后仍可从工具记录恢复，文件读取继续执行原会话与 App 授权。直接 Images 对话仍由程序生成展示内容，不依赖文字模型。
-
 Workspace 传输失败呈现：原 TransferController 保留 error/unknown 真实结算，WorkspaceSessionSurface 与 WorkspacePage 通过 transfers 的 `isProgressTaskVisible` 统一过滤浮动进度、恢复按钮与隐藏任务列表。各操作原等待回执的 owner 发出 Toast，上传在批次完成回执中通知，准备失败只由原提交 catch 通知，不重复订阅同一错误。密码拒绝仍进入原重输流程。此展示过滤不取消远端任务、不解除机器突变未知围栏。所有进度视图不再附加错误/警告段落，完成警告由原回执 owner 通过 Toast 通知。后台 serverTransfers store 比较当前快照的子任务状态与错误码发布安全失败 Toast，列表读取及取消/移除错误同样走 feedback；身份/代次/取消保护保持，网络错误交原全局通知，不新增轮询或重复监听。
 
 Splitpanes 连续拖动的生命周期补丁：mouseup 立即解除本次全局拖动监听，click 保护仅保留到本次同步 click 结束后的下一任务；新 mousedown 清除上次定时器，卸载清理监听和定时器，防止旧拖动延迟收尾解除新拖动的监听，且不保留100ms全页pointer-events屏障。正常尺寸和布局不变。
@@ -323,11 +246,11 @@ StatusMonitor 的矮面板单行模式由原 status-content 高度容器查询�
 1. 职责与范围：StatusCharts 持时间轴显示，StatusMonitor 的异步组件持加载；不改变采样和历史保留。
 2. 子功能与目录：沿 features/status-monitor/components，StatusChartLoading 只呈现加载网格和提示，不画模拟曲线。
 3. 依赖方向：StatusMonitor → 原异步 StatusCharts → Chart.js/vue-chartjs；加载组件仅依赖原 i18n。
-4. 类型与转换：无新协议、共享或模型类型；原 history → TimedChartPoint 转换不变，加载组件不透传业务属性到 DOM。
-5. 入口与安装：原指标点击打开趋势及范围切换不变；网络上下行图例位于原history-heading内的标题右侧；网络标题不可收缩省略，速率区作为inline-size容器使两个速率字号随自身可用宽度缩放、上限沿原11px/scale，保持单行左右布局。手机弹窗复用同一组件；范围选项仍在其下，不改变CPU等单值位置。X 轴禁用 tick 留白，标签水平显示，字体与间距抵消父面板缩放。
-6. 数据、事务与并发：历史和最新时间仍归原 session controller；加载无自己的采样/请求/缓存或持久状态。
-7. 生命周期与失败：复用 defineAsyncComponent 的原 delay、模块缓存及异常传播；加载网格用 CSS 呼吸效果，prefers-reduced-motion 下静止，无新增计时器或监听。
-8. 当前能力与验收：图表既有数据与视觉保持；vue-chartjs的排队更新在执行前通过临时依赖补丁复核原实例，已销毁实例不再更新，退役条件见DEPLOYMENT。真实Canvas的时间戳、零值和快速销毁由Playwright直接验证。此前只调整时间刻度占位与趋势加载呈现；范围、孤立点、缺测断线及 tooltip 保持原逻辑，指定 CDP 与静态结果见 testing。
+   原 history → TimedChartPoint 转换不变，加载组件不透传业务属性到 DOM。
+4. 入口与安装：原指标点击打开趋势及范围切换不变；网络上下行图例位于原history-heading内的标题右侧；网络标题不可收缩省略，速率区作为inline-size容器使两个速率字号随自身可用宽度缩放、上限沿原11px/scale，保持单行左右布局。手机弹窗复用同一组件；范围选项仍在其下，不改变CPU等单值位置。X 轴禁用 tick 留白，标签水平显示，字体与间距抵消父面板缩放。
+5. 数据、事务与并发：历史和最新时间仍归原 session controller；加载无自己的采样/请求/缓存或持久状态。
+6. 生命周期与失败：复用 defineAsyncComponent 的原 delay、模块缓存及异常传播；加载网格用 CSS 呼吸效果，prefers-reduced-motion 下静止，无新增计时器或监听。
+7. 当前能力与验收：图表既有数据与视觉保持；vue-chartjs的排队更新在执行前通过临时依赖补丁复核原实例，已销毁实例不再更新，退役条件见DEPLOYMENT。真实Canvas的时间戳、零值和快速销毁由Playwright直接验证。此前只调整时间刻度占位与趋势加载呈现；范围、孤立点、缺测断线及 tooltip 保持原逻辑，指定 CDP 与静态结果见 testing。
 
 ### 手动重置 SSH 终端
 
@@ -355,10 +278,6 @@ StatusMonitor 的矮面板单行模式由原 status-content 高度容器查询�
 7. **生命周期与失败**：读取后复核原scope和permission；reset取消旧scope、替换队列并清空缓存，晚返回不能发布。恢复读取失败保留阻断；未知写入继续阻断，普通读取成功同样恢复。追加确认后读取失败单独记录，不误报追加失败或重发命令。
 8. **当前能力与验收**：USAGE个人历史说明操作与恢复；CDP隔离故障及静态证据归testing，新实际SSH回执丢失E2E待远程执行，生产原始触发原因未据此确认。
 
-### Agent 执行结果未确认
-
-Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 与 NativeToolCallDetails 在原错误区域呈现三语说明。后台 Job 故障由后端结束所属 Run/族并失效待审批工具。isNativeRunActive 仅表示 pending/running，unknown 停止状态订阅等待；canCancelNativeRun 另保留 unknown 的显式结束资格，原 composer/详情结束入口与续发保护同步消费，避免把已停止的执行与尚未人工结束的围栏混为一谈。不新增等待计时、重试入口或 UI 布局。明确说明任务已停止、远端可能仍在运行，并要求核对后再操作。状态与原因通过原 HTTP/WS codec 读取，历史重读不派发命令。
-
 ### 文件拖动悬停导航
 
 1. **职责与范围**：FileManager持有一次内部拖动的原始条目和悬停手势；browser只持当前目录快照，目录变化清选择不清本次拖动源。
@@ -375,17 +294,17 @@ Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 
 1. **职责与范围**：FileEditor拥有路径/服务器、编码/换行符及操作按钮的底栏排版；原编辑会话仍持有文档和保存状态。
 2. **子功能与目录**：沿features/file-editor/components/FileEditor.vue的既有容器查询，不增加响应式布局组件或共享UI规则。
 3. **依赖方向**：Workspace的弹窗/嵌入容器→FileEditor→原UiSelect/UiButton/session，依赖不变。
-4. **类型与转换**：纯CSS调整，无模型、协议或类型迁移。
-5. **入口与安装**：沿原560px容器断点为路径/服务器保留独立行，目录可截断、文件名优先、服务器留出独立空间；第二行固定编码/换行符及搜索/刷新/保存，编码使用剩余空间，换行符保留5rem，最多两行；保存状态占首行右侧，路径布局为它让位，宽屏仍沿原单行布局。
-6. **数据与并发**：不增加测量、状态、计时或网络请求；编码/换行符、草稿和保存串行语义不变。
-7. **生命周期与失败**：只读/保存中禁用、错误提示、选择菜单portal和视口碰撞仍归原owner；极小且低矮容器的原紧凑规则保留。
-8. **当前能力与验收**：操作说明归USAGE编辑章节，指定CDP的遮挡前后几何、菜单/保存行为和静态证据归testing，正式移动端SSH回归单列实际执行范围。
+
+4. **入口与安装**：沿原560px容器断点为路径/服务器保留独立行，目录可截断、文件名优先、服务器留出独立空间；第二行固定编码/换行符及搜索/刷新/保存，编码使用剩余空间，换行符保留5rem，最多两行；保存状态占首行右侧，路径布局为它让位，宽屏仍沿原单行布局。
+5. **数据与并发**：不增加测量、状态、计时或网络请求；编码/换行符、草稿和保存串行语义不变。
+6. **生命周期与失败**：只读/保存中禁用、错误提示、选择菜单portal和视口碰撞仍归原owner；极小且低矮容器的原紧凑规则保留。
+7. **当前能力与验收**：操作说明归USAGE编辑章节，指定CDP的遮挡前后几何、菜单/保存行为和静态证据归testing，正式移动端SSH回归单列实际执行范围。
 
 ### 共用确认弹窗排版
 
 1. **职责与范围**：Foundation的UiConfirmationPanel持有确认弹窗布局和风险配色，shared/feedback的DialogHost/store持有确认状态，原用例持有最终动作。
-2. **子功能与目录**：沿foundation/ui/UiConfirmationPanel.vue与foundation/ui/styles/confirmation-actions.css确认选择器；DialogHost覆盖全部feedback确认/提示，UploadConflictModal和Agent的ModelProviderSettings、AppIntegrationEditor、AppManagementSettings直接共用基础确认面板；普通表单Dialog与管理/批量按钮保留各自职责。
-3. **依赖方向**：用例→feedback→DialogHost→确认面板/Overlay/ActionGroup；上传冲突及Agent受控确认直接消费原面板，不在业务组件复制标题、正文和操作区排版。
+2. **子功能与目录**：沿foundation/ui/UiConfirmationPanel.vue与foundation/ui/styles/confirmation-actions.css确认选择器；普通表单Dialog与管理/批量按钮保留各自职责。
+3. **依赖方向**：用例→feedback→DialogHost→确认面板/Overlay/ActionGroup；
 4. **类型与转换**：复用原title/description/tone/icon和default/actions槽；无新增类型、边界或持久化。
 5. **入口与安装**：图标和标题为紧凑标题行，正文独占全宽；空默认槽不产生留白，详情/复选项仍在正文之后；底部细分隔及浅底对齐按钮，手机同排等宽且至少44px高，复用原96px按钮基准换行，多操作与长文案不挤出面板。
 6. **数据与并发**：纯模板/CSS，取消位于危险确认之前，不改变原文案、风险语义或状态更新，不新增请求/计时器；原删除版本/排空与数据清理流程仍由原owner负责。
@@ -425,43 +344,6 @@ Run/Tool 安全原因增加 tool_result_unconfirmed，继续由 AgentAppSurface 
 7. **生命周期与失败**：导航条隐藏、DOM替换和组件卸载时断开观察并清除引用；不留下定时器或改变原登录/注销 owner。
 8. **当前能力与验收**：保持自动居中、横向拖动和页面缓存，性能及宽窄视口证据见 testing；不承诺消除动态模块下载或页面自身的所有渲染成本。
 
-### 插件目录与卸载意图
-
-usePluginManagement 分别持已确认包安装和 App 组合快照；包不因提供 UI/工具/Skills 自动成为 App，相同 App appId/revision 序列不重复发布，避免父组件重新读取 App/定义。retainedAppIds 来自后端同事务目录，不用本地已卸载列表猜测；Host、App 行及市场为当前投影建立 Map/Set，包 hash/publisher/定义版本匹配条件保留。AppManagementSettings的操作组在640px起继承父行items-center垂直居中，不设置self-end覆盖；更窄视口沿原全宽三列grid排列。App 卸载弹窗使用全局确认组件和默认关闭的清除选项；确认后顺序等待卸载、可选清除，只有整段成功才发布成功。清除的 operationId 留原意图，部分完成失败只重读；撤销后不回填旧状态，不自动重放。市场对应插件行显示保留数据标记及清除/重装；原目录不可用时以真实安装/版本信息显示清除行，不伪造可安装包。清除确认沿原 composable/API，移除独立保留数据面板及无消费者的原 JSON 编辑组件。清除不删除聊天、历史、记忆或文件，必要墓碑不作为可用 App 展示。
-
-### Agent 启用与插件安装引导
-
-1. **职责与范围**：AgentSettingsPanel 开关接 useAgentOnboarding，安装确认与执行总开关仍是两个明确写入。
-2. **子功能与目录**：复用原 onboarding composable/modal 和 Plugin API；Host 删除 builtin 分支和无用 definitions 请求；DEV 删除手工创建 App，仅使用已安装 App UUID。
-3. **依赖方向**：设置 → 原 composable/API → Shared；Host 按 App 组合及所选签名 UI 包的完整身份映射 iframe。
-4. **类型与转换**：声明移除 defaultEnabled；删除无消费者的 DEV App 创建类型/API/翻译，原插件版本哈希与 publisher 白名单转换保持。
-5. **入口与安装**：关闭直接写总开关；开启先读推荐，未装时准备 App 包及依赖预览后显示 Nexus Agent 确认，已装复用，安装和 App 组合成功才写总开关。引导新装由后端原子初始化启用状态与完整声明授权，已有安装不重置；普通市场安装仍需单独启用与授权。引导底部安全提示独立一行；桌面安装/取消并排，手机两个按钮各占一行、文字保持单行，局部样式不修改全局 UiFormActions；手机面板使用16px内边距，标题与发布者标记可自然换行。
-6. **数据、事务与并发**：无本地默认 App/旧 ID 兼容；Host 仅匹配真实 App 组合及已安装的签名包 manifest、版本、hash 和 publisher；依赖预览没有持久流程 ID，目录 Map 索引保持。
-7. **生命周期与失败**：取消/读取失败/安装失败不开启；复用 view/session generation、未知写围栏与只读核对；视图失效后的晚结果不写总开关。
-8. **当前能力与验收**：USAGE 同步首启说明；各轮定向浏览器验收与静态结果见 testing；推荐新装初始化全部声明授权，已有安装不自动恢复权限。安装按钮的新排版按 D17 留 Windows/手机实机验收。
-
-### 插件化后的 Agent 设置
-
-1. **职责与范围**：宿主管理 Provider/模型、执行额度、权限和 Browser 可信连接；插件业务设置由签名 schema 与可选设置页面提供，MCP/ACP 使用独立服务实例。
-2. **子功能与目录**：`settings/AppIntegrationSettings` 仅列出当前 App 中声明 HTTP/远端进程连接能力的实例，读取和编辑复用 `plugins` 的实例配置、连接 API 与 `PluginInstanceSettings`。
-3. **依赖方向**：管理组件经本功能 API 使用 Shared；独立设置页面经公开前端 SDK 调用同一 Host 设置 owner，不引用本体私有组件。
-4. **类型与转换**：Shared `plugins/settings`、`plugins/connection` 持实际契约；前端 Model 显式投影。连接种类来自签名服务贡献，当前 grant 不改变配置适用性，执行仍逐次授权。
-5. **入口与安装**：已安装包行的“设置”管理 App/逻辑实例；MCP/ACP 页是所选服务实例的快捷入口，复用同一弹窗，不使用已移除的 `/apps/:id/integrations`。压缩偏好只在 App 插件设置，宿主预算页不再保留无消费者副本。
-6. **数据、事务与并发**：配置使用包修订、配置修订、schema 修订和操作键；连接使用独立 CAS 与 keep/clear/replace 凭据意图。停用实例不清空连接或凭据；迁移59删除旧宿主压缩字段，业务路径只消费新结构。
-7. **生命周期与失败**：目录读取绑定当前页面、App 和 generation；切换、离页、身份撤销取消旧读取，晚结果不覆盖新选择。写入未知保留原意图，人工与 Agent 走同一配置 owner。
-8. **当前能力与验收**：源码与静态已接通；真实服务配置、凭据保留/清除、App 隔离、压缩持久化及 SSH ACP 审批/取消的正式回归见 PLAN/testing。
-
-### 插件仓库呈现
-
-1. **职责与范围**：PluginRepositorySettings 拥有仓库管理、搜索和插件目录的排版，不改变信任、包校验及安装授权。
-2. **子功能与目录**：沿原设置组件模板和 scoped CSS；基础按钮、输入框及提示复用 Foundation，无新增布局组件。
-3. **依赖方向**：原管理组件 → composable/API → Shared；布局只依赖组件容器尺寸，不以视口宽度推断设置面板宽度。
-4. **类型与转换**：无Shared或协议变化；表单显隐归本组件且随视图撤销清空，来源组仅合并已确认配置和实际目录，原目录、安装及保留数据投影继续使用原 owner。
-5. **入口与安装**：标题下方仅搜索与仓库管理入口。独立UiModal持仓库来源、固定展开的地址输入、添加/刷新/删除；地址输入在添加按钮左侧，窄屏操作只留图标。添加成功清空输入但保持表单展开，关闭/视图撤销清空草稿。已配置但未加载或失败的来源保留管理入口，官方不可删除，删除不卸载插件；弹窗外不显示仓库行。PluginRepositorySettings消费model/mergePluginCatalogs：按包ID生成唯一卡片，选项完整保留source/catalog/entry及source+publisher+ID+version+sha256稳定key。版本标签显示官方/第三方及具体来源，同版本不同源不丢失。默认先已安装发布者，再兼容稳定候选、官方/配置顺序及同源最新版本；显式选择仅在对应准确key仍存在时保留。搜索核对分组全部选项的翻译及来源，计数为唯一ID数。安装/trust始终消费选中选项，保留签名与身份边界。插件名称及简介自然换行；每张卡片按顶部图标/名称/右侧状态、中部简介、底部版本/操作三行排布；底部UiSelect与UiButton统一使用comfortable密度，避免页面局部覆盖控件高度。市场容器48rem起显示两列等宽卡片，其他尺寸单列，多个按钮整枚换行，按钮内文字不拆行。AgentExtensionsSettings持三个子页签的等分满宽圆角导航，不包围整体内容边框；市场及来源条不叠加装饰底色，只保留各插件卡片的边框与内部留白，不以手机flex覆盖；总开关区不显示活跃App计数。移除重复的算法装饰文字，实际校验与状态保留。AgentExtensionsSettings在Agent App子页编排上方AppManagementSettings和下方InstalledPluginsSettings，集中持有PluginInstanceSettings弹窗及点击App的initialAppId；两区共用InstalledPluginRow的身份、版本、状态和操作布局。窄容器操作转为同尺寸图标按钮，宽容器显示文字；Agent的AppGovernanceEditor仍由原selectedId展开，保留权限编辑/保存、启停和卸载确认。InstalledPluginsSettings只列非App的未移除包，保留设置、卸载及排空取消；市场移除已安装区，保留数据归对应目录卡片，来源不可用时只投影清理卡片。引用/依赖检查归plugin-package-rules，两页消费同一纯规则；无新增HTTP或轮询。已无消费者的应用定义摘要读取、mapper、类型和翻译随旧行摘要一起移除，权限定义仍来自实际grants接口。PluginManagementSettings的受信区域只投影未撤销发布者，添加表单归独立UiModal，复用标准modal样式和原trust owner；取消/视图撤销清空草稿，提交中禁止关闭，确认成功后才关闭。
-6. **数据、事务与并发**：模板、来源/受信项投影及临时表单状态，无新端点、缓存、测量或持久化；安装、仓库配置CAS、信任及清除仍复用原owner。trust返回真实确认布尔结果；弹窗用本次generation核对晚回执，不能据清空输入或整体刷新结果猜测写入成功。
-7. **生命周期与失败**：复用原 busy/disabled、读取恢复、unknown 围栏、视图撤销及清除确认；加载图标与正常图标互斥，避免双图标占位。useAgentManagementOperation统一提供recoveryRequired展示投影：只有原refreshRequired要求核对、请求空闲且已发生真实失败时才显示恢复；首次未加载、视图撤销后重入和正常成功后核对不显示警告。插件市场、受信发布者弹窗、安全策略及插件连接共用这一投影，不增加并行状态；展示条件不改变原refreshRequired写入围栏，网络读取失败即使未产生Toast文案也保留只读恢复。
-8. **当前能力与验收**：USAGE 对应操作同步；D17下源码/静态与视觉验收分别记录；既有320/390/820/1440px市场验收继续按原版本引用；本轮工具栏、来源与紧凑行验证320/390/1440px，发布者弹窗、取消及焦点恢复单独验收，具体主题/语言及读写范围见testing/HISTORY。真实手机触摸、长名称和多操作组合仍按对应正式回归判断。
-
 ### 网络切换与自动恢复
 
 1. **职责与范围**：WorkspaceSocket 归类真实传输失败/响应等待超时，RuntimeSession 持自动恢复策略与未知结果围栏，WorkspacePage 持浏览器恢复事件及挂起目录协调；不重发输入或文件副作用。
@@ -487,24 +369,17 @@ usePluginManagement 分别持已确认包安装和 App 组合快照；包不因�
 ### 设置分类加载与分组排版
 
 1. **职责与范围**：SettingsPage持有路由分类、已访问集合与维护区展开状态；各feature持有表单、读取和写入围栏。UiSettingsGroup负责标题与操作的通用响应式排版。
-2. **子功能与目录**：沿app/pages/settings、各功能public与Agent/settings；安全和IP控制分别加载自身面板，备份、诊断、恢复经原feature异步loader加载。没有新全局设置缓存。
-3. **依赖方向**：Page只经feature公开入口装配；Agent内部按子分类异步导入扩展、运行时浏览器、安全网络和扩展下的集成/市场/预算面板。Foundation排版不识别具体业务名称。
-4. **类型与转换**：分类和展开状态仅归页面，组件沿原props/events；无Shared、持久字段或接口迁移。安全面板不再承担IP控制分支。
-5. **入口与安装**：首次访问先解析路由再登记实际分类，不顺带挂载工作区。已访问分类保持实例以保留草稿；诊断/恢复首次展开才挂载，关闭时撤销active，重新展开按原owner读取。
-6. **数据、事务与并发**：设置编辑仍使用原版本快照与CAS，完整presentation读取、失效恢复和未知写入不变；减少无关挂载不替代新鲜度与权限核对。
-7. **生命周期与失败**：原KeepAlive/auth scope继续负责失活、取消和晚返回；维护区展开状态仅控制原active契约，不重放后台写入。异步模块复用Vue组件加载缓存，业务读取失败仍由各自恢复源处理。
-8. **当前能力与验收**：设置分组标题保留可读宽度，动作按可用空间整组换行且不横向越界；桌面有足够空间时仍同排。按USAGE、分类请求计数、宽窄/多语言及原保存/冲突/备份/安全E2E验收，开发模式请求计数不宣称真实弱网提速倍数。
+   安全和IP控制分别加载自身面板，备份、诊断、恢复经原feature异步loader加载。没有新全局设置缓存。
+2. **依赖方向**：Page只经feature公开入口装配；Foundation排版不识别具体业务名称。
+3. **类型与转换**：分类和展开状态仅归页面，组件沿原props/events；无Shared、持久字段或接口迁移。安全面板不再承担IP控制分支。
+4. **入口与安装**：首次访问先解析路由再登记实际分类，不顺带挂载工作区。已访问分类保持实例以保留草稿；诊断/恢复首次展开才挂载，关闭时撤销active，重新展开按原owner读取。
+5. **数据、事务与并发**：设置编辑仍使用原版本快照与CAS，完整presentation读取、失效恢复和未知写入不变；减少无关挂载不替代新鲜度与权限核对。
+6. **生命周期与失败**：原KeepAlive/auth scope继续负责失活、取消和晚返回；维护区展开状态仅控制原active契约，不重放后台写入。异步模块复用Vue组件加载缓存，业务读取失败仍由各自恢复源处理。
+7. **当前能力与验收**：设置分组标题保留可读宽度，动作按可用空间整组换行且不横向越界；桌面有足够空间时仍同排。按USAGE、分类请求计数、宽窄/多语言及原保存/冲突/备份/安全E2E验收，开发模式请求计数不宣称真实弱网提速倍数。
 
 ### 设置读取失效与缓存页面恢复
 
-1. **职责与范围**：原个人偏好 editor、后端日志和 Agent 执行设置 controller 拥有读取状态；全局 settings-reload 只汇总真实失败，不把正常初始化或视图撤销算成故障。
-2. **子功能与目录**：复用 preferences/composables/use-preferences-editor、logging/composables/use-backend-logging 和原三个设置面板；没有新状态模块。
-3. **依赖方向**：面板消费 controller 失败/忙碌状态并注册 Shared Feedback 恢复源，读取仍经原功能 API/Store。
-4. **类型与转换**：沿原应用及 Shared 请求/回执 mapper，无新协议和存储形状。
-5. **入口与安装**：mount 首读，KeepAlive 激活后等待视图 scope 恢复再按 needsRefresh 只读加载；初始化和加载中的源不触发恢复提示。
-6. **数据、事务与并发**：原 busy/读写围栏阻止并发；失活清理旧错误，返回只读核对后才解除写入围栏，不重放原写入。
-7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。外观 Store 的恢复读取在发起时绑定故障修订，发布快照、清空预览或解除围栏前复核该修订；过早排队的读取不能覆盖后续故障和草稿。首份读取返回后先复核取消，再派发主题与HTML库读取；身份重置后不启动后续请求。机器突变恢复也在发布错误前复核故障修订，保留后续未知提交的原始因果；被新选择取代的旧详情错误不污染当前选择，身份重置后的晚详情明确取消且不发布。
-8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归的正式 Actions 证据见 testing，静态与设备视觉证据分开。
+全局 settings-reload 只汇总真实失败，不把正常初始化或视图撤销算成故障。2. **子功能与目录**：复用 preferences/composables/use-preferences-editor、logging/composables/use-backend-logging 和原三个设置面板；没有新状态模块。3. **依赖方向**：面板消费 controller 失败/忙碌状态并注册 Shared Feedback 恢复源，读取仍经原功能 API/Store。4. **类型与转换**：沿原应用及 Shared 请求/回执 mapper，无新协议和存储形状。5. **入口与安装**：mount 首读，KeepAlive 激活后等待视图 scope 恢复再按 needsRefresh 只读加载；初始化和加载中的源不触发恢复提示。6. **数据、事务与并发**：原 busy/读写围栏阻止并发；失活清理旧错误，返回只读核对后才解除写入围栏，不重放原写入。7. **生命周期与失败**：原 signal/current scope 屏蔽晚返回与 finally；真实读失败、冲突和未确认写继续提供原重新读取入口，重读失败不开放写入。外观 Store 的恢复读取在发起时绑定故障修订，发布快照、清空预览或解除围栏前复核该修订；过早排队的读取不能覆盖后续故障和草稿。首份读取返回后先复核取消，再派发主题与HTML库读取；身份重置后不启动后续请求。机器突变恢复也在发布错误前复核故障修订，保留后续未知提交的原始因果；被新选择取代的旧详情错误不污染当前选择，身份重置后的晚详情明确取消且不发布。8. **当前能力与验收**：USAGE 同步返回页面与失败恢复行为；新增缓存往返及原真实失败回归的正式 Actions 证据见 testing，静态与设备视觉证据分开。
 
 ### 工作区工具栏的响应调度
 
@@ -539,16 +414,16 @@ usePluginManagement 分别持已确认包安装和 App 组合快照；包不因�
 7. **生命周期与失败**：loadQueryActions 的原页面 signal/current 检查阻止失活或注销后的晚返回派发；布局失败走原设置重读入口，连接仍由 Registry/Runtime 持有关闭、未知结果和恢复，不因布局慢创建第二份 SSH。WorkspaceConnectionList只对具名TargetRequestFailure/cancelled过滤被单条配置刷新取代的旧列表读取通知，保留真实读取失败的原刷新提示，不修改Store快照与请求时序。
 8. **当前能力与验收**：消除布局读取与连接流程之间的代码串行依赖，真实收益取决于读取与握手耗时；USAGE 见终端章节，静态/构建及待验边界归 PLAN/testing。
 
-### 图片预览容量与聊天 GIF
+### 文件图片预览容量
 
-1. **职责与范围**：个人偏好拥有文件管理器与Agent文件库共用的imagePreviewMaxMiB；聊天Artifact图片使用原生img展示GIF，不转码。
-2. **子功能与目录**：preferences的两个正式设置面板复用UiNumberInput和原保存流程；file-preview/providers/previewRegistry按格式计算读取预算，Session负责新开与刷新，Workspace/ArtifactLibraryView/FilePreview负责装配。
-3. **依赖方向**：预览Session接收读取最新值的getter，不依赖Pinia；Workspace Registry在创建会话时经preferences/public获得controller，恢复和重置沿同一工厂。Agent文件库及独立组件同样注入，未注入的独立Session使用Shared默认20。
+1. **职责与范围**：文件管理器图片预览按用户偏好控制读取预算，保留当前布局和正常交互。
+2. **子功能与目录**：preferences的正式设置面板复用UiNumberInput和原保存流程，file-preview拥有实际读取。
+3. **依赖方向**：预览Session接收读取最新值的getter，不依赖Pinia；Workspace Registry在创建会话时经preferences/public获得controller，恢复和重置沿同一工厂。
 4. **类型与转换**：UserPreferences保持本地类型与projectPreferences白名单；Shared字段以整数MiB表示，0映射为无图片大小预算，其余乘1024²。非图片预算不变，值仅在每次读取开始时取一次。
-5. **入口与安装**：工作区文件组及另一正式偏好面板均支持编辑/保存；两处图片预览复用已有超限提示、重试/刷新与取消入口。聊天Markdown仍只允许本站已授权Artifact preview相对URL。图片下载控件在原图片仍挂载时插入，再移动图片并清理空包装；链接或强调标签中的图片沿同一路径，后续段落仅在独占一个对应下载链接时折叠，说明文字不整段删除。
+5. **入口与安装**：工作区文件组及正式偏好面板支持编辑/保存；图片预览复用已有超限提示、重试/刷新与取消入口。
 6. **数据、事务与并发**：保存继续走原expectedVersion/CAS、草稿与未知写入围栏；仅已确认偏好生效。未自动重载已打开图片，显式刷新取得最新预算。WS文件读取按请求预算累计实际字节，不再叠加固定64MiB总量上限；帧大小、背压与并发机制不变。
 7. **生命周期与失败**：关闭、替换、清空沿原AbortController/token检查，旧响应不发布；初次超限保留原tooLarge提示，刷新失败保留原图。0不代表浏览器内存无限，分块读取后仍需整体ArrayBuffer/Blob供预览。Socket在复制/合并分配抛错时reject原等待并清空分块，未完成文件读取同时发送取消；不会因先移除pending/timer而遗留等待。
-8. **当前能力与验收**：产品入口见USAGE文件管理器、Agent聊天/文件库及界面偏好章节；类型/格式/生产构建与源码审核归testing；既有CDP验证GIF动画、保存/持久化、两处新开/刷新/65MiB/0，取消/身份撤销/分配失败组合仍待正式回归。
+8. **当前能力与验收**：类型/格式/生产构建与源码审核归testing；已有证据与待验边界独立记录，不继承旧聊天功能验收。
 
 ### RDP 证书确认
 
@@ -574,13 +449,13 @@ usePluginManagement 分别持已确认包安装和 App 组合快照；包不因�
 
 ## 前端分级诊断
 
-1. **职责与范围**：`client/logging/logger.ts` 是浏览器 Pino 唯一实例；偏好 Store 是生效等级的唯一 owner，覆盖启动、认证、导航、传输、工作区和 Agent。日志不上传、不持久化、不改变 UI。
+1. **职责与范围**：`client/logging/logger.ts` 是浏览器 Pino 唯一实例；日志不上传、不持久化、不改变 UI。
 2. **子功能与目录**：沿既有 logger、transport-diagnostics 与 app/bootstrap/runtimeDiagnostics；真实状态 owner 记录状态变化，传输 owner 记录安全技术元数据，不新增并行日志系统。
 3. **依赖方向**：logger 消费 Shared `FRONTEND_LOG_LEVELS/FrontendLogLevel`；Client、Runtime 和 Feature 依赖 logger；Client 不反向依赖 Feature。
 4. **类型与转换**：错误通过 Pino 的浏览器 `err` serializer 白名单投影类型及源码位置；忽略错误正文和自定义字段。HTTP/WS 只投影 pathname、本地关联编号、状态、耗时与缓冲字节，不记录查询参数、凭据、正文及聊天/终端内容。
 5. **入口与安装**：main 安装全局和 Vue 错误诊断；偏好同步沿原 Store watcher；Axios 与 fetch 共用 HTTP 诊断，正式构建不包含 `build/e2e-browser-diagnostics.ts` 测试入口。
 6. **数据、事务与并发**：不涉及数据库或迁移；HTTP 回调仅结算一次，Axios 通过 WeakMap 关联配置与诊断，不修改请求头、重试、错误或未知结果契约；页面内编号不等于服务端请求 ID。
-7. **生命周期与失败**：全局监听与 PerformanceObserver 属于页面生命周期；WS 与 Agent 沿原关闭/重连 owner，不新增 timer。取消/主动关闭记 debug，恢复失败记 warn，协议/未捕获异常记 error；trace 走 console.debug 避免逐帧捕获堆栈，长任务先检查等级再聚合。
+7. **生命周期与失败**：全局监听与 PerformanceObserver 属于页面生命周期；取消/主动关闭记 debug，恢复失败记 warn，协议/未捕获异常记 error；trace 走 console.debug 避免逐帧捕获堆栈，长任务先检查等级再聚合。
 8. **当前能力与验收**：新增正式浏览器场景覆盖等级动态过滤、silent、脱敏、HTTP 关联与取消以及 window/Promise/Vue 异常；实际执行、静态结果与远程待验分开记录在 testing/HISTORY。
 
 ## OIDC 登录与安全设置
@@ -628,10 +503,6 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 7. **生命周期与失败**：仅活动可见终端响应交互；停用、关闭、重置、未知结果围栏不接受新恢复；晚响应沿原page scope处理。成功/连接中撤去恢复卡片，失败保留一份；手机/短面板卡片限制在当前终端高度内并可滚动。
 8. **当前能力与验收**：桌面/手机真实Chromium和SSH专项证据见testing；真实手机输入法、运营商网络与未列故障仍按PLAN推进。
 
-### Agent 日志存储等待
-
-现有任务侧栏资源卡消费 Shared waitingOutputJobs，经 NativeResourceSession mapper 显式转换；非零时显示释放磁盘空间后继续或停止任务的提示。状态仍通过原 Run 订阅更新，不轮询日志正文、不改变取消确认或任务终态。
-
 ### 终端失活输入与历史准入
 
 1. **职责与范围**：TerminalView持可交互状态、DOM用户输入和历史展示；Workspace Runtime继续持连接/租约与命令派发。不改UI、字号策略或后台协议应答。
@@ -656,14 +527,10 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 
 ### 增量正文、语言加载与独立交互 owner
 
-1. **职责与范围**：Agent Runtime 持有正文和游标；`use-native-transcript` 只投影工具归属和稳定行。文件拖动与进度恢复位置分别持有自己的交互状态、监听和清理；原组件模板与样式不变。
-2. **子功能与目录**：Agent 的原地续写、历史 prepend/回收规则归 `model/native-run-rules`；Filesystem `use-file-manager-drag` 持悬停导航、边缘滚动和右键取消；Workspace `use-progress-restore-position` 持位置保存与视口约束。`app/i18n` 持语言选择，`build/locale-messages` 持构建目录和完整性校验。
-3. **依赖方向**：容器编排 composable，拖动通过原认证视图与导航队列操作 Browser；不越过功能 public 边界。语言构建插件只在构建端枚举 app/i18n/messages 与各功能三语 JSON、白名单合并并校验键，浏览器动态导入所选语言。
-4. **类型与转换**：NativeConversationEntry 保留首片段位置，独立游标记录传输进度；NativeTranscriptRow 归 Agent Model。续写保留消息对象，prepend 只重建跨页边界消息；可见行索引变化不改消息标识。语言取值归 locale-values，原三语键仍是唯一正文来源。
-5. **入口与安装**：AgentAppSurface 消费稳定行并在跟随最新时报告第一条可见消息；Vite 正式入口和 E2E 客户端都安装 localeMessages，main 等待首种语言加载后挂载，切换通过异步 setLocale。
-6. **数据、事务与并发**：正文回收复用原 128 条/256 Ki UTF-16 字符缓存预算，只释放视口之前的完整消息；正在阅读历史或向前加载时不回收。新首条使用事件起点作为反向分页边界，不把首片段结束位置误作起点；服务器数据不变，单条长消息不截断。工具锚点被回收时不移到列表末尾，重新读回原消息后恢复；工具元数据仍按独立分页持有，并非所有会话内存都已固定有界。
-7. **生命周期与失败**：历史读取保留身份/selection generation 与滚动锚点，空增量不复制数组。语言选择只允许最后请求发布，失败保留原语言；首次加载失败仍属于启动资源失败，恢复网络后重载。拖动在视图撤销、卸载和失活时取消，迟到悬停核对原目录、通道、元素和权限。
-8. **当前能力与验收**：构建校验重复/缺失/多余语言键；正式 E2E 新增正文/行 identity、跨页恢复和并发语言切换，原拖动、弹层及 Agent 视觉场景保持。性能比例和真实手机滚动不由静态检查证明，执行范围见 testing。
+`use-native-transcript` 只投影工具归属和稳定行。文件拖动与进度恢复位置分别持有自己的交互状态、监听和清理；原组件模板与样式不变。
+Filesystem `use-file-manager-drag` 持悬停导航、边缘滚动和右键取消；Workspace `use-progress-restore-position` 持位置保存与视口约束。`app/i18n` 持语言选择，`build/locale-messages` 持构建目录和完整性校验。
+不越过功能 public 边界。4. **类型与转换**：NativeConversationEntry 保留首片段位置，独立游标记录传输进度；续写保留消息对象，prepend 只重建跨页边界消息；可见行索引变化不改消息标识。语言取值归 locale-values，原三语键仍是唯一正文来源。
+Vite 正式入口和 E2E 客户端都安装 localeMessages，main 等待首种语言加载后挂载，切换通过异步 setLocale。6. **数据、事务与并发**：正文回收复用原 128 条/256 Ki UTF-16 字符缓存预算，只释放视口之前的完整消息；正在阅读历史或向前加载时不回收。新首条使用事件起点作为反向分页边界，不把首片段结束位置误作起点；服务器数据不变，单条长消息不截断。工具锚点被回收时不移到列表末尾，重新读回原消息后恢复；工具元数据仍按独立分页持有，并非所有会话内存都已固定有界。7. **生命周期与失败**：历史读取保留身份/selection generation 与滚动锚点，空增量不复制数组。语言选择只允许最后请求发布，失败保留原语言；首次加载失败仍属于启动资源失败，恢复网络后重载。拖动在视图撤销、卸载和失活时取消，迟到悬停核对原目录、通道、元素和权限。8. **当前能力与验收**：构建校验重复/缺失/多余语言键；性能比例和真实手机滚动不由静态检查证明，执行范围见 testing。
 
 ### 文件预览底栏
 
@@ -679,13 +546,13 @@ OIDC 设置/写入/回调类型在 Auth model；api 逐字段构造 Shared 请�
 ## 终端 iOS IME 输入交付
 
 1. **职责与范围**：终端输入库负责合成输入与按键去重，TerminalView继续持有可交互状态；不在业务层重发空格，不改UI。
-2. **子功能与目录**：沿用scripts/patches的xterm 6.0.0补丁，同步CompositionHelper、CoreBrowserTerminal、内部接口和ESM/UMD产物，保留原渲染补丁。
-3. **依赖方向**：TerminalView继续使用xterm公开接口；修复参考上游5836，补充input与计时器共用增量基线，不在组件访问私有core。
-4. **类型与转换**：DOM事件和textarea差异仅归xterm内部，按完整Unicode码点计算变化后交付原onData；无Shared、HTTP或数据库契约变化。
-5. **入口与安装**：pnpm patchedDependencies与锁文件固定补丁；keydown229建立基线，input、keyup和原零延时计时器共用同一交付状态。
-6. **数据、事务与并发**：每次交付先更新基线，重复事件不重复发送；仅发送变化的后缀与对应退格，不重发整段累积文本。compositionstart和普通按键清除旧229周期。
-7. **生命周期与失败**：229周期的计时器在两种fallback结束或清除时释放，失焦、禁用输入和终端销毁同步清理旧基线与计时器；实际输入资格仍由TerminalView和原disableStdin控制，离开终端的迟到输入继续被拦截。
-8. **当前能力与验收**：正式terminal-lifecycle用例覆盖空格事件顺序、替换、组合输入、桌面与失活；CDP受控事件证据归testing/HISTORY，桌面Chrome不能代替iPhone真机输入法验收。升级xterm时检查上游正式修复后退役本项补丁，保留尚未被上游覆盖的原渲染修复。
+
+2. **依赖方向**：TerminalView继续使用xterm公开接口；修复参考上游5836，补充input与计时器共用增量基线，不在组件访问私有core。
+3. **类型与转换**：DOM事件和textarea差异仅归xterm内部，按完整Unicode码点计算变化后交付原onData；无Shared、HTTP或数据库契约变化。
+4. **入口与安装**：pnpm patchedDependencies与锁文件固定补丁；keydown229建立基线，input、keyup和原零延时计时器共用同一交付状态。
+5. **数据、事务与并发**：每次交付先更新基线，重复事件不重复发送；仅发送变化的后缀与对应退格，不重发整段累积文本。compositionstart和普通按键清除旧229周期。
+6. **生命周期与失败**：229周期的计时器在两种fallback结束或清除时释放，失焦、禁用输入和终端销毁同步清理旧基线与计时器；实际输入资格仍由TerminalView和原disableStdin控制，离开终端的迟到输入继续被拦截。
+7. **当前能力与验收**：正式terminal-lifecycle用例覆盖空格事件顺序、替换、组合输入、桌面与失活；CDP受控事件证据归testing/HISTORY，桌面Chrome不能代替iPhone真机输入法验收。升级xterm时检查上游正式修复后退役本项补丁，保留尚未被上游覆盖的原渲染修复。
 
 ### 监控订阅与传输操作的恢复
 

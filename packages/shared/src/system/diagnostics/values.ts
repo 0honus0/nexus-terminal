@@ -6,7 +6,7 @@ export type HostDiagnosticErrorCode = (typeof HOST_DIAGNOSTIC_ERROR_CODES)[numbe
 
 export const DIAGNOSTIC_MODULE_IDS = [
 	'access',
-	'agent',
+
 	'operations',
 	'preferences',
 	'remote',
@@ -42,8 +42,6 @@ export const DIAGNOSTIC_RESOURCE_UNITS = {
 	worker_heap_total_bytes: 'bytes',
 	worker_external_bytes: 'bytes',
 	worker_array_buffer_bytes: 'bytes',
-	active_runs: 'count',
-	pending_run_writes: 'count',
 	status_subscriptions: 'count',
 } as const;
 

@@ -27,23 +27,25 @@ docker compose logs --tail=100 backend
 
 ## 配置与数据
 
-| 配置/路径                    | 用途                                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `NEXUS_IMAGE_REPOSITORY/TAG` | 镜像地址与已发布版本，开发镜像使用 `dev`                                                   |
-| `NEXUS_HTTP_PORT`            | Frontend 发布端口，默认 18111                                                              |
-| `NEXUS_PUBLIC_ORIGIN`        | 实际公开协议、域名和非默认端口，不带路径                                                   |
-| `NEXUS_DATA_DIR`             | Compose 宿主数据目录，默认 `./data`；自定义后备份命令中的 `data` 也需替换为该目录          |
-| `NEXUS_ENCRYPTION_KEY`       | 必填、固定的 32-byte 标准 base64 实例密钥；不可每次重启重新生成                            |
-| `NEXUS_TRUSTED_PROXIES`      | IP/CIDR 或 proxy-addr 具名范围；Compose 默认 `loopback,uniquelocal`，只适用于受控隔离网络  |
-| `./data`                     | `nexus-terminal.db` 和 `appearance/`、`artifacts/`、`plugins/`；备份包含完整目录及实例密钥 |
-| `.env`                       | Compose 插值和 Backend env_file；基础设置首次初始化，OIDC部署配置每次启动应用              |
-| `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                             |
+| 配置/路径                    | 用途                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `NEXUS_IMAGE_REPOSITORY/TAG` | 镜像地址与已发布版本，开发镜像使用 `dev`                                                  |
+| `NEXUS_HTTP_PORT`            | Frontend 发布端口，默认 18111                                                             |
+| `NEXUS_PUBLIC_ORIGIN`        | 实际公开协议、域名和非默认端口，不带路径                                                  |
+| `NEXUS_DATA_DIR`             | Compose 宿主数据目录，默认 `./data`；自定义后备份命令中的 `data` 也需替换为该目录         |
+| `NEXUS_ENCRYPTION_KEY`       | 必填、固定的 32-byte 标准 base64 实例密钥；不可每次重启重新生成                           |
+| `NEXUS_TRUSTED_PROXIES`      | IP/CIDR 或 proxy-addr 具名范围；Compose 默认 `loopback,uniquelocal`，只适用于受控隔离网络 |
+| `./data`                     | `nexus-terminal.db` 和 `appearance/`；备份包含完整目录及实例密钥                          |
+| `.env`                       | Compose 插值和 Backend env_file；基础设置首次初始化，OIDC部署配置每次启动应用             |
+| `NEXUS_IPV6_SUBNET/GATEWAY`  | 默认 `fd01::/80` / `fd01::1`，与宿主冲突时修改                                            |
 
-数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`、`artifacts/`、`plugins/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
+数据库文件的父目录即实例数据目录；每个实例使用独立目录。资源目录使用 `appearance/`，实例数据与密钥一起保留。Compose 的数据库固定为容器内 `/app/data/nexus-terminal.db`，通过 `.env` 的 `NEXUS_DATA_DIR` 配置宿主目录，默认仍为 `./data`。运行中可能出现 SQLite WAL/SHM、恢复日志和临时目录，勿手动清除正在使用的恢复文件。
 
-当前迁移链从 v1 初始结构连续追加至 v66，包含 v4 Access OIDC、SDK4 插件/Run/Operation 数据升级、v59 移除宿主压缩偏好、v60 持久安全故障原因及 v66 移除 OIDC 独立显示开关；每条迁移的顺序、签名与安装入口见 `packages/backend/src/bootstrap/schema.ts`。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取迁移后的格式。
+启动在数据库迁移前只读校验恢复日志。损坏或包含当前版本不支持文件根的日志会阻止升级和启动，数据库版本及恢复证据保持不变；先用对应版本完成原恢复流程，不删除日志绕过。通过校验后才迁移数据库、对账恢复文件并安装模块。
 
-首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。插件仓库与信任 Publisher 由管理接口配置，不使用旧 catalog 环境变量。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
+当前迁移链从 v1 连续追加至 v69；v67 删除旧 Agent 的72张运行表，v68 将其机器突变来源转换为 retired 并保留围栏及人工核对证据，v69 清理该功能的审计、投递与订阅。v1–v66 的版本与签名保持不变，必要历史依赖只留迁移私有快照。更新启动时自动顺序迁移，重复启动跳过已执行记录；业务代码只读取新结构。
+
+首次 Passkey 站点从公开 Origin 推导；多站点可用 `NEXUS_PASSKEY_SITES` JSON 初始化。CAPTCHA 和 Passkey 站点配置在设置页维护，按界面提示重启激活；IP 白名单、登录封禁策略、监控周期和资源缓存 TTL 保存后热更新。白名单保存前确认当前来源仍被允许，保留部署恢复入口。写操作依赖当前会话、同源 Origin/Fetch Metadata，不使用旧 CSRF token 端点。
 
 ```bash
 docker compose up -d --force-recreate
@@ -109,7 +111,7 @@ location / {
 
 旧数值、单位、JSON 字段和约束通过 SQL 或迁移脚本转换，业务代码及持久解码只接受新格式。真实 SQL 仍由所属 SQLite Adapter 持有，模块 migrations 与 Bootstrap 负责顺序编排，复用现有 `SchemaMigration` 与 `schema_version`。脚本只在对应迁移应用时执行；迁移和版本记录同事务提交，失败不写入成功标记，未知提交先核对持久结果，不盲目重放。重复启动校验已应用版本和签名，只执行尚未应用的迁移。
 
-v4 创建 Access OIDC 配置/绑定、流程及会话归属；后续 SDK4 迁移由各数据 owner 安装，v59 删除宿主执行偏好中的旧压缩字段，App 插件独立配置保持。v60 新增 Operation 安全诊断表，与操作终态同事务记录有限原因码；不保存供应商错误正文，也不修改未知效果围栏。v61创建附件文件删除队列；v62按已确认的破坏性策略删除SDK1–3运行历史及旧执行表；v63删除旧App/包档案并登记附件清理；v64将旧官方Browser全局目标复制到未配置的已有插件实例并删除旧配置表。没有对应实例的旧全局配置随表删除，新实例从插件默认配置开始。v65将官方Agent工具已有未配置实例的有效召回偏好转入插件，清除全局、App覆盖、冻结任务及硬限确认中的旧字段，已编辑实例不覆盖。当前SDK4与非Agent数据保留，旧快照不兼容；启动恢复失败保留删除意图，排除故障后重启继续。v66删除OIDC独立显示开关，保留已验证绑定、配置和会话。完整链以 `packages/backend/src/bootstrap/schema.ts` 为准；升级和重复启动均由同一迁移机制负责。
+v4 与 v66 保留 Access OIDC 配置、绑定、流程及会话迁移。v67–v69 退役旧 Agent；若仍有未收敛的外部工具效果或插件进程，升级明确停止，先在原版本确认停止与核对结果。已存在的远端突变围栏及人工证据不因功能移除而解除。旧 Agent 的文件目录不再被打开，也不在启动时递归删除。完整链以 `packages/backend/src/bootstrap/schema.ts` 为准。
 
 交付前验证上一发布基线升级、多条迁移顺序执行、连续 dev 升级、重复启动跳过、空库安装、数据保留、完整性/外键、失败回滚及快照恢复边界。后续功能文档记录对应迁移版本、转换内容与验证结果，升级流程由版本内迁移承担。
 

@@ -15,7 +15,6 @@
 	import { useAuthSession } from '@/features/auth/public';
 	import { BackupRecoveryOverlay, useBackupStore } from '@/features/backup/public';
 	import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
-	import { AgentSurfaceHost } from '@/features/agent/public';
 	import { refreshConnection } from '@/features/connections/public';
 	import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
 	import { usePreferences } from '@/features/preferences/public';
@@ -187,9 +186,6 @@
 				</RuntimeErrorBoundary>
 			</RouterView>
 		</div>
-		<RuntimeErrorBoundary v-if="authenticatedShellVisible" scope="agent" :reset-key="auth.user.value?.id ?? null">
-			<AgentSurfaceHost />
-		</RuntimeErrorBoundary>
 		<RemoteDesktopModal
 			v-if="remoteDesktopVisible"
 			:visible="true"

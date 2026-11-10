@@ -33,7 +33,6 @@ test('actual host diagnostics project all resource owners and reject incomplete 
 	}
 	expect(value.modules.map((module) => module.id).sort()).toEqual([
 		'access',
-		'agent',
 		'operations',
 		'preferences',
 		'remote',
@@ -74,7 +73,7 @@ test('actual host diagnostics project all resource owners and reject incomplete 
 		node.remove();
 	});
 	mounted.use(pinia).use(i18n).mount(node);
-	await vi.waitFor(() => expect(node.querySelectorAll('[data-diagnostic-module]')).toHaveLength(8), {
+	await vi.waitFor(() => expect(node.querySelectorAll('[data-diagnostic-module]')).toHaveLength(7), {
 		timeout: 15000,
 	});
 	vi.stubGlobal('fetch', async (path, input) =>

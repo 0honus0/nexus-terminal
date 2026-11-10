@@ -129,7 +129,7 @@
       "imagePreviewLimits": {
         "title": "Image preview",
         "label": "Image preview size limit (MiB)",
-        "hint": "Shared by the file manager and Agent file library. Use 0 for no size limit. Applies when opening or refreshing an image. Larger images use more browser memory.",
+        "hint": "Used by the file manager. Use 0 for no size limit. Applies when opening or refreshing an image. Larger images use more browser memory.",
         "invalid": "Enter a non-negative integer in MiB whose byte value fits in the safe integer range."
       },
       "spreadsheetPreviewLimits": {

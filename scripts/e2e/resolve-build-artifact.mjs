@@ -1,7 +1,7 @@
 import { findArtifactForJob } from './job-artifacts.mjs';
 
 export async function resolveBuildArtifact({ github, owner, repo, runId, sha, kind }) {
-	if (kind !== 'application' && kind !== 'plugin-candidates' && kind !== 'environment') {
+	if (kind !== 'application' && kind !== 'environment') {
 		throw new Error('Unknown test artifact kind');
 	}
 	const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {

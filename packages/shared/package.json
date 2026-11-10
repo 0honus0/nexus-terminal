@@ -8,34 +8,6 @@
     "check": "tsc --noEmit"
   },
   "exports": {
-    "./agent/plugins/host-operations": {
-      "types": "./dist/agent/plugins/host-operations.d.ts",
-      "default": "./dist/agent/plugins/host-operations.js"
-    },
-    "./agent/plugins/host-operations-codec": {
-      "types": "./dist/agent/plugins/host-operations-codec.d.ts",
-      "default": "./dist/agent/plugins/host-operations-codec.js"
-    },
-    "./agent/tools/identity": {
-      "types": "./dist/agent/tools/identity.d.ts",
-      "default": "./dist/agent/tools/identity.js"
-    },
-    "./agent/tools/identity-codec": {
-      "types": "./dist/agent/tools/identity-codec.d.ts",
-      "default": "./dist/agent/tools/identity-codec.js"
-    },
-    "./agent/plugins/package-update-http-codec": {
-      "types": "./dist/agent/plugins/package-update-http-codec.d.ts",
-      "default": "./dist/agent/plugins/package-update-http-codec.js"
-    },
-    "./agent/plugins/remote-files": {
-      "types": "./dist/agent/plugins/remote-files.d.ts",
-      "default": "./dist/agent/plugins/remote-files.js"
-    },
-    "./agent/plugins/remote-files-codec": {
-      "types": "./dist/agent/plugins/remote-files-codec.d.ts",
-      "default": "./dist/agent/plugins/remote-files-codec.js"
-    },
     "./remote/tools/values": {
       "types": "./dist/remote/tools/values.d.ts",
       "default": "./dist/remote/tools/values.js"
@@ -51,94 +23,6 @@
     "./remote/tools/http-codec": {
       "types": "./dist/remote/tools/http-codec.d.ts",
       "default": "./dist/remote/tools/http-codec.js"
-    },
-    "./agent/tools/model": {
-      "types": "./dist/agent/tools/model.d.ts",
-      "default": "./dist/agent/tools/model.js"
-    },
-    "./agent/tools/http": {
-      "types": "./dist/agent/tools/http.d.ts",
-      "default": "./dist/agent/tools/http.js"
-    },
-    "./agent/tools/http-codec": {
-      "types": "./dist/agent/tools/http-codec.d.ts",
-      "default": "./dist/agent/tools/http-codec.js"
-    },
-    "./agent/tools/values": {
-      "types": "./dist/agent/tools/values.d.ts",
-      "default": "./dist/agent/tools/values.js"
-    },
-    "./agent/governance/values": {
-      "types": "./dist/agent/governance/values.d.ts",
-      "default": "./dist/agent/governance/values.js"
-    },
-    "./agent/governance/model": {
-      "types": "./dist/agent/governance/model.d.ts",
-      "default": "./dist/agent/governance/model.js"
-    },
-    "./agent/governance/http": {
-      "types": "./dist/agent/governance/http.d.ts",
-      "default": "./dist/agent/governance/http.js"
-    },
-    "./agent/governance/http-codec": {
-      "types": "./dist/agent/governance/http-codec.d.ts",
-      "default": "./dist/agent/governance/http-codec.js"
-    },
-    "./agent/providers/values": {
-      "types": "./dist/agent/providers/values.d.ts",
-      "default": "./dist/agent/providers/values.js"
-    },
-    "./agent/providers/model": {
-      "types": "./dist/agent/providers/model.d.ts",
-      "default": "./dist/agent/providers/model.js"
-    },
-    "./agent/providers/http": {
-      "types": "./dist/agent/providers/http.d.ts",
-      "default": "./dist/agent/providers/http.js"
-    },
-    "./agent/providers/http-codec": {
-      "types": "./dist/agent/providers/http-codec.d.ts",
-      "default": "./dist/agent/providers/http-codec.js"
-    },
-    "./agent/providers/registry": {
-      "types": "./dist/agent/providers/registry.d.ts",
-      "default": "./dist/agent/providers/registry.js"
-    },
-    "./agent/http": {
-      "types": "./dist/agent/http.d.ts",
-      "default": "./dist/agent/http.js"
-    },
-    "./agent/scope/values": {
-      "types": "./dist/agent/scope/values.d.ts",
-      "default": "./dist/agent/scope/values.js"
-    },
-    "./agent/scope/model": {
-      "types": "./dist/agent/scope/model.d.ts",
-      "default": "./dist/agent/scope/model.js"
-    },
-    "./agent/scope/http": {
-      "types": "./dist/agent/scope/http.d.ts",
-      "default": "./dist/agent/scope/http.js"
-    },
-    "./agent/scope/http-codec": {
-      "types": "./dist/agent/scope/http-codec.d.ts",
-      "default": "./dist/agent/scope/http-codec.js"
-    },
-    "./agent/runs/values": {
-      "types": "./dist/agent/runs/values.d.ts",
-      "default": "./dist/agent/runs/values.js"
-    },
-    "./agent/runs/model": {
-      "types": "./dist/agent/runs/model.d.ts",
-      "default": "./dist/agent/runs/model.js"
-    },
-    "./agent/runs/http": {
-      "types": "./dist/agent/runs/http.d.ts",
-      "default": "./dist/agent/runs/http.js"
-    },
-    "./agent/runs/http-codec": {
-      "types": "./dist/agent/runs/http-codec.d.ts",
-      "default": "./dist/agent/runs/http-codec.js"
     },
     "./access/http": {
       "types": "./dist/access/http.d.ts",
@@ -328,14 +212,6 @@
       "types": "./dist/remote/suspend/http.d.ts",
       "default": "./dist/remote/suspend/http.js"
     },
-    "./agent/http-codec": {
-      "types": "./dist/agent/http-codec.d.ts",
-      "default": "./dist/agent/http-codec.js"
-    },
-    "./agent/values": {
-      "types": "./dist/agent/values.d.ts",
-      "default": "./dist/agent/values.js"
-    },
     "./remote/transfers/values": {
       "types": "./dist/remote/transfers/values.d.ts",
       "default": "./dist/remote/transfers/values.js"
@@ -407,22 +283,6 @@
     "./system/status/http-codec": {
       "types": "./dist/system/status/http-codec.d.ts",
       "default": "./dist/system/status/http-codec.js"
-    },
-    "./agent/collaboration/values": {
-      "types": "./dist/agent/collaboration/values.d.ts",
-      "default": "./dist/agent/collaboration/values.js"
-    },
-    "./agent/collaboration/model": {
-      "types": "./dist/agent/collaboration/model.d.ts",
-      "default": "./dist/agent/collaboration/model.js"
-    },
-    "./agent/collaboration/http": {
-      "types": "./dist/agent/collaboration/http.d.ts",
-      "default": "./dist/agent/collaboration/http.js"
-    },
-    "./agent/collaboration/http-codec": {
-      "types": "./dist/agent/collaboration/http-codec.d.ts",
-      "default": "./dist/agent/collaboration/http-codec.js"
     },
     "./preferences/configuration/values": {
       "types": "./dist/preferences/configuration/values.d.ts",
@@ -503,54 +363,6 @@
     "./preferences/presentation/http-codec": {
       "types": "./dist/preferences/presentation/http-codec.d.ts",
       "default": "./dist/preferences/presentation/http-codec.js"
-    },
-    "./agent/memory/values": {
-      "types": "./dist/agent/memory/values.d.ts",
-      "default": "./dist/agent/memory/values.js"
-    },
-    "./agent/memory/model": {
-      "types": "./dist/agent/memory/model.d.ts",
-      "default": "./dist/agent/memory/model.js"
-    },
-    "./agent/memory/http": {
-      "types": "./dist/agent/memory/http.d.ts",
-      "default": "./dist/agent/memory/http.js"
-    },
-    "./agent/memory/http-codec": {
-      "types": "./dist/agent/memory/http-codec.d.ts",
-      "default": "./dist/agent/memory/http-codec.js"
-    },
-    "./agent/artifacts/values": {
-      "types": "./dist/agent/artifacts/values.d.ts",
-      "default": "./dist/agent/artifacts/values.js"
-    },
-    "./agent/artifacts/model": {
-      "types": "./dist/agent/artifacts/model.d.ts",
-      "default": "./dist/agent/artifacts/model.js"
-    },
-    "./agent/artifacts/http": {
-      "types": "./dist/agent/artifacts/http.d.ts",
-      "default": "./dist/agent/artifacts/http.js"
-    },
-    "./agent/artifacts/http-codec": {
-      "types": "./dist/agent/artifacts/http-codec.d.ts",
-      "default": "./dist/agent/artifacts/http-codec.js"
-    },
-    "./agent/execution/values": {
-      "types": "./dist/agent/execution/values.d.ts",
-      "default": "./dist/agent/execution/values.js"
-    },
-    "./agent/execution/model": {
-      "types": "./dist/agent/execution/model.d.ts",
-      "default": "./dist/agent/execution/model.js"
-    },
-    "./agent/execution/http": {
-      "types": "./dist/agent/execution/http.d.ts",
-      "default": "./dist/agent/execution/http.js"
-    },
-    "./agent/execution/http-codec": {
-      "types": "./dist/agent/execution/http-codec.d.ts",
-      "default": "./dist/agent/execution/http-codec.js"
     },
     "./operations/http-codec": {
       "types": "./dist/operations/http-codec.d.ts",
@@ -660,110 +472,6 @@
       "types": "./dist/preferences/html-themes/http-codec.d.ts",
       "default": "./dist/preferences/html-themes/http-codec.js"
     },
-    "./agent/integrations/browser-values": {
-      "types": "./dist/agent/integrations/browser-values.d.ts",
-      "default": "./dist/agent/integrations/browser-values.js"
-    },
-    "./agent/integrations/browser-model": {
-      "types": "./dist/agent/integrations/browser-model.d.ts",
-      "default": "./dist/agent/integrations/browser-model.js"
-    },
-    "./agent/plugins/values": {
-      "types": "./dist/agent/plugins/values.d.ts",
-      "default": "./dist/agent/plugins/values.js"
-    },
-    "./agent/plugins/model": {
-      "types": "./dist/agent/plugins/model.d.ts",
-      "default": "./dist/agent/plugins/model.js"
-    },
-    "./agent/plugins/http": {
-      "types": "./dist/agent/plugins/http.d.ts",
-      "default": "./dist/agent/plugins/http.js"
-    },
-    "./agent/plugins/http-codec": {
-      "types": "./dist/agent/plugins/http-codec.d.ts",
-      "default": "./dist/agent/plugins/http-codec.js"
-    },
-    "./agent/plugins/events": {
-      "types": "./dist/agent/plugins/events.d.ts",
-      "default": "./dist/agent/plugins/events.js"
-    },
-    "./agent/plugins/rpc-codec": {
-      "types": "./dist/agent/plugins/rpc-codec.d.ts",
-      "default": "./dist/agent/plugins/rpc-codec.js"
-    },
-    "./agent/plugins/repository-model": {
-      "types": "./dist/agent/plugins/repository-model.d.ts",
-      "default": "./dist/agent/plugins/repository-model.js"
-    },
-    "./agent/plugins/repository-http": {
-      "types": "./dist/agent/plugins/repository-http.d.ts",
-      "default": "./dist/agent/plugins/repository-http.js"
-    },
-    "./agent/plugins/repository-http-codec": {
-      "types": "./dist/agent/plugins/repository-http-codec.d.ts",
-      "default": "./dist/agent/plugins/repository-http-codec.js"
-    },
-    "./agent/plugins/backend-sdk": {
-      "types": "./dist/agent/plugins/backend-sdk.d.ts",
-      "default": "./dist/agent/plugins/backend-sdk.js"
-    },
-    "./agent/plugins/intent-values": {
-      "types": "./dist/agent/plugins/intent-values.d.ts",
-      "default": "./dist/agent/plugins/intent-values.js"
-    },
-    "./agent/plugins/intent-model": {
-      "types": "./dist/agent/plugins/intent-model.d.ts",
-      "default": "./dist/agent/plugins/intent-model.js"
-    },
-    "./agent/plugins/intent-http": {
-      "types": "./dist/agent/plugins/intent-http.d.ts",
-      "default": "./dist/agent/plugins/intent-http.js"
-    },
-    "./agent/plugins/intent-http-codec": {
-      "types": "./dist/agent/plugins/intent-http-codec.d.ts",
-      "default": "./dist/agent/plugins/intent-http-codec.js"
-    },
-    "./agent/plugins/runtime-values": {
-      "types": "./dist/agent/plugins/runtime-values.d.ts",
-      "default": "./dist/agent/plugins/runtime-values.js"
-    },
-    "./agent/plugins/runtime-model": {
-      "types": "./dist/agent/plugins/runtime-model.d.ts",
-      "default": "./dist/agent/plugins/runtime-model.js"
-    },
-    "./agent/plugins/runtime-http-codec": {
-      "types": "./dist/agent/plugins/runtime-http-codec.d.ts",
-      "default": "./dist/agent/plugins/runtime-http-codec.js"
-    },
-    "./agent/plugins/runtime-http": {
-      "types": "./dist/agent/plugins/runtime-http.d.ts",
-      "default": "./dist/agent/plugins/runtime-http.js"
-    },
-    "./agent/plugins/frontend-events": {
-      "types": "./dist/agent/plugins/frontend-events.d.ts",
-      "default": "./dist/agent/plugins/frontend-events.js"
-    },
-    "./agent/plugins/frontend-rpc-codec": {
-      "types": "./dist/agent/plugins/frontend-rpc-codec.d.ts",
-      "default": "./dist/agent/plugins/frontend-rpc-codec.js"
-    },
-    "./agent/plugins/migration-model": {
-      "types": "./dist/agent/plugins/migration-model.d.ts",
-      "default": "./dist/agent/plugins/migration-model.js"
-    },
-    "./agent/plugins/migration-http-codec": {
-      "types": "./dist/agent/plugins/migration-http-codec.d.ts",
-      "default": "./dist/agent/plugins/migration-http-codec.js"
-    },
-    "./agent/plugins/migration-http": {
-      "types": "./dist/agent/plugins/migration-http.d.ts",
-      "default": "./dist/agent/plugins/migration-http.js"
-    },
-    "./agent/plugins/frontend-sdk": {
-      "types": "./dist/agent/plugins/frontend-sdk.d.ts",
-      "default": "./dist/agent/plugins/frontend-sdk.js"
-    },
     "./system/backups/values": {
       "types": "./dist/system/backups/values.d.ts",
       "default": "./dist/system/backups/values.js"
@@ -860,25 +568,9 @@
       "types": "./dist/remote/monitoring/workspace-codec.d.ts",
       "default": "./dist/remote/monitoring/workspace-codec.js"
     },
-    "./agent/scope/workspace-http": {
-      "types": "./dist/agent/scope/workspace-http.d.ts",
-      "default": "./dist/agent/scope/workspace-http.js"
-    },
-    "./agent/scope/workspace-http-codec": {
-      "types": "./dist/agent/scope/workspace-http-codec.d.ts",
-      "default": "./dist/agent/scope/workspace-http-codec.js"
-    },
-    "./agent/runs/events": {
-      "types": "./dist/agent/runs/events.d.ts",
-      "default": "./dist/agent/runs/events.js"
-    },
     "./common/version": {
       "types": "./dist/common/version.d.ts",
       "default": "./dist/common/version.js"
-    },
-    "./agent/plugins/agent-extension": {
-      "types": "./dist/agent/plugins/agent-extension.d.ts",
-      "default": "./dist/agent/plugins/agent-extension.js"
     },
     "./access/oidc/http": {
       "types": "./dist/access/oidc/http.d.ts",
@@ -891,137 +583,17 @@
     "./access/oidc/http-codec": {
       "types": "./dist/access/oidc/http-codec.d.ts",
       "default": "./dist/access/oidc/http-codec.js"
-    },
-    "./agent/plugins/tool-schema": {
-      "types": "./dist/agent/plugins/tool-schema.d.ts",
-      "default": "./dist/agent/plugins/tool-schema.js"
-    },
-    "./agent/plugins/ui-http": {
-      "types": "./dist/agent/plugins/ui-http.d.ts",
-      "default": "./dist/agent/plugins/ui-http.js"
-    },
-    "./agent/plugins/ui-http-codec": {
-      "types": "./dist/agent/plugins/ui-http-codec.d.ts",
-      "default": "./dist/agent/plugins/ui-http-codec.js"
-    },
-    "./agent/plugins/ui-events": {
-      "types": "./dist/agent/plugins/ui-events.d.ts",
-      "default": "./dist/agent/plugins/ui-events.js"
-    },
-    "./agent/plugins/ui-events-codec": {
-      "types": "./dist/agent/plugins/ui-events-codec.d.ts",
-      "default": "./dist/agent/plugins/ui-events-codec.js"
-    },
-    "./agent/plugins/install-plan": {
-      "types": "./dist/agent/plugins/install-plan.d.ts",
-      "default": "./dist/agent/plugins/install-plan.js"
-    },
-    "./agent/plugins/install-plan-codec": {
-      "types": "./dist/agent/plugins/install-plan-codec.d.ts",
-      "default": "./dist/agent/plugins/install-plan-codec.js"
-    },
-    "./agent/plugins/package-values": {
-      "types": "./dist/agent/plugins/package-values.d.ts",
-      "default": "./dist/agent/plugins/package-values.js"
-    },
-    "./agent/memory/events": {
-      "types": "./dist/agent/memory/events.d.ts",
-      "default": "./dist/agent/memory/events.js"
-    },
-    "./agent/plugins/ui-streams": {
-      "types": "./dist/agent/plugins/ui-streams.d.ts",
-      "default": "./dist/agent/plugins/ui-streams.js"
-    },
-    "./agent/plugins/ui-streams-codec": {
-      "types": "./dist/agent/plugins/ui-streams-codec.d.ts",
-      "default": "./dist/agent/plugins/ui-streams-codec.js"
-    },
-    "./agent/plugins/registry": {
-      "types": "./dist/agent/plugins/registry.d.ts",
-      "default": "./dist/agent/plugins/registry.js"
-    },
-    "./agent/plugins/registry-codec": {
-      "types": "./dist/agent/plugins/registry-codec.d.ts",
-      "default": "./dist/agent/plugins/registry-codec.js"
-    },
-    "./agent/plugins/runtime": {
-      "types": "./dist/agent/plugins/runtime.d.ts",
-      "default": "./dist/agent/plugins/runtime.js"
-    },
-    "./agent/plugins/runtime-codec": {
-      "types": "./dist/agent/plugins/runtime-codec.d.ts",
-      "default": "./dist/agent/plugins/runtime-codec.js"
-    },
-    "./agent/operations/values": {
-      "types": "./dist/agent/operations/values.d.ts",
-      "default": "./dist/agent/operations/values.js"
-    },
-    "./agent/plugins/content": {
-      "types": "./dist/agent/plugins/content.d.ts",
-      "default": "./dist/agent/plugins/content.js"
-    },
-    "./agent/plugins/app-runtime": {
-      "types": "./dist/agent/plugins/app-runtime.d.ts",
-      "default": "./dist/agent/plugins/app-runtime.js"
-    },
-    "./agent/plugins/run-context": {
-      "types": "./dist/agent/plugins/run-context.d.ts",
-      "default": "./dist/agent/plugins/run-context.js"
-    },
-    "./agent/plugins/connection": {
-      "types": "./dist/agent/plugins/connection.d.ts",
-      "default": "./dist/agent/plugins/connection.js"
-    },
-    "./agent/plugins/connection-codec": {
-      "types": "./dist/agent/plugins/connection-codec.d.ts",
-      "default": "./dist/agent/plugins/connection-codec.js"
-    },
-    "./agent/plugins/data": {
-      "types": "./dist/agent/plugins/data.d.ts",
-      "default": "./dist/agent/plugins/data.js"
-    },
-    "./agent/plugins/settings": {
-      "types": "./dist/agent/plugins/settings.d.ts",
-      "default": "./dist/agent/plugins/settings.js"
-    },
-    "./agent/plugins/settings-codec": {
-      "types": "./dist/agent/plugins/settings-codec.d.ts",
-      "default": "./dist/agent/plugins/settings-codec.js"
-    },
-    "./agent/plugins/service-transport": {
-      "types": "./dist/agent/plugins/service-transport.d.ts",
-      "default": "./dist/agent/plugins/service-transport.js"
-    },
-    "./agent/plugins/service-transport-codec": {
-      "types": "./dist/agent/plugins/service-transport-codec.d.ts",
-      "default": "./dist/agent/plugins/service-transport-codec.js"
-    },
-    "./agent/plugins/app-outcome": {
-      "types": "./dist/agent/plugins/app-outcome.d.ts",
-      "default": "./dist/agent/plugins/app-outcome.js"
-    },
-    "./agent/integrations/browser-codec": {
-      "types": "./dist/agent/integrations/browser-codec.d.ts",
-      "default": "./dist/agent/integrations/browser-codec.js"
-    },
-    "./agent/plugins/onboarding": {
-      "types": "./dist/agent/plugins/onboarding.d.ts",
-      "default": "./dist/agent/plugins/onboarding.js"
-    },
-    "./agent/plugins/onboarding-codec": {
-      "types": "./dist/agent/plugins/onboarding-codec.d.ts",
-      "default": "./dist/agent/plugins/onboarding-codec.js"
     }
   },
   "devDependencies": {
     "@types/semver": "^7.8.0",
     "typescript": "catalog:node-build"
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "semver": "7.8.6",
     "zod": "4.6.7"
-  },
-  "files": [
-    "dist"
-  ]
+  }
 }

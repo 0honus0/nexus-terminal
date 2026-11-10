@@ -5,9 +5,8 @@
   "type": "module",
   "scripts": {
     "check": "pnpm --filter @nexus-terminal/shared build && tsc --noEmit",
-    "build": "pnpm --filter @nexus-terminal/shared build && node --input-type=module -e \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\" && tsc && node build/build-plugin-backend-sdk.mjs && node build/copy-plugin-frontend-sdk.mjs",
-    "start": "node dist/main.js",
-    "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-backend-sdk.mjs"
+    "build": "pnpm --filter @nexus-terminal/shared build && node --input-type=module -e \"import { rm } from 'node:fs/promises'; await rm('dist', { recursive: true, force: true });\" && tsc",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.5",
@@ -18,7 +17,6 @@
     "@simplewebauthn/server": "^14.0.3",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
-    "ajv": "8.20.0",
     "archiver": "^8.0.0",
     "fast-xml-parser": "5.12.0",
     "fastify": "5.12.8",
@@ -27,19 +25,15 @@
     "ipaddr.js": "^2.5.0",
     "lru-cache": "11.5.3",
     "nodemailer": "^10.3.1",
-    "openai": "7.51.0",
     "openid-client": "6.8.9",
     "otplib": "13.6.0",
     "p-limit": "7.3.3",
     "p-retry": "^9.0.0",
     "pino": "catalog:",
     "proxy-addr": "^2.0.8",
-    "puppeteer-core": "catalog:",
     "qrcode": "^1.5.4",
     "semver": "7.8.6",
     "ssh2": "^1.17.0",
-    "tar": "^7.5.22",
-    "undici": "^8.12.3",
     "ws": "^8.22.1"
   },
   "devDependencies": {
@@ -51,7 +45,7 @@
     "@types/semver": "^7.8.0",
     "@types/ssh2": "^1.15.6",
     "@types/ws": "^8.18.2",
-    "esbuild": "0.28.2",
-    "typescript": "catalog:node-build"
+    "typescript": "catalog:node-build",
+    "undici": "^8.12.3"
   }
 }

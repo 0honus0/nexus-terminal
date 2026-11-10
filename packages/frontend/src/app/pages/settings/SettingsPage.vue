@@ -4,7 +4,6 @@
 	import { useI18n } from 'vue-i18n';
 	import { useRoute, useRouter } from 'vue-router';
 	import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
-	import { AgentSettingsPanel } from '@/features/agent/public';
 	import { loadBackupSettingsPanel } from '@/features/backup/public';
 	import { loadMutationRecoveryPanel } from '@/features/mutation-recovery/public';
 	import { loadHostDiagnosticsPanel } from '@/features/system-overview/public';
@@ -25,7 +24,7 @@
 	const HostDiagnosticsPanel = defineAsyncComponent(loadHostDiagnosticsPanel);
 	const SecuritySettingsPanel = defineAsyncComponent(loadSecuritySettingsPanel);
 	const IpAccessPanel = defineAsyncComponent(loadIpAccessPanel);
-	type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'agent' | 'about';
+	type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'about';
 
 	const { t, locale } = useI18n();
 	const route = useRoute();
@@ -117,20 +116,6 @@
 					icon: 'fa-solid fa-palette',
 					iconColor: 'text-purple-500',
 					iconBg: 'bg-purple-500/10',
-				},
-			],
-		},
-		{
-			id: 'intelligence',
-			titleKey: 'settings.groups.intelligence',
-			items: [
-				{
-					value: 'agent',
-					labelKey: 'agent.settings.tab',
-					icon: 'fa-solid fa-wand-magic-sparkles',
-					iconColor: 'text-violet-500',
-					iconBg: 'bg-violet-500/10',
-					badge: 'AI',
 				},
 			],
 		},
@@ -585,14 +570,6 @@
 							role="tabpanel"
 							:aria-label="tabLabel('appearance')"
 							@customize="appearance.openCustomizer()"
-						/>
-						<AgentSettingsPanel
-							:active="active === 'agent'"
-							v-if="visited.has('agent')"
-							v-show="active === 'agent'"
-							id="settings-panel-agent"
-							role="tabpanel"
-							:aria-label="tabLabel('agent')"
 						/>
 						<AboutPanel
 							v-if="visited.has('about')"

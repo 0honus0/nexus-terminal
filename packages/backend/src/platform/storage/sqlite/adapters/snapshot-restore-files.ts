@@ -176,6 +176,11 @@ export class NativeSnapshotRestoreFiles {
 		});
 	}
 
+	/** Reject incompatible recovery evidence before a schema upgrade changes the database. */
+	async validateRecovery(): Promise<void> {
+		await this.read();
+	}
+
 	async stage(files: SnapshotArchive['files'], signal: AbortSignal): Promise<RestoreJournal> {
 		if (await this.read()) {
 			throw new SnapshotFailure('unavailable');

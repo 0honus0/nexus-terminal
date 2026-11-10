@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { request } from 'node:http';
 import { createApp } from '../../../packages/backend/dist/bootstrap/create-app.js';
-import { send, expectStatus } from '../protocols/openssh-fixture.mjs';
+import { send, expectStatus, openWorkspace } from '../protocols/openssh-fixture.mjs';
 import WebSocket from '../../../packages/backend/node_modules/ws/index.js';
 
 const origin = 'http://127.0.0.1:0';
@@ -140,4 +140,62 @@ export async function openManagement(
 			await app?.close();
 		},
 	};
+}
+
+/** Ordinary saved SSH connection; no Agent package or runtime is installed. */
+export async function openSshManagement(directory, ssh) {
+	const application = await openManagement(directory);
+	try {
+		expectStatus(
+			await application.api('POST', '/api/v1/targets/host-keys/confirm', {
+				host: '127.0.0.1',
+				port: ssh.port,
+				fingerprint: ssh.fingerprint,
+			}),
+			201,
+		);
+		const key = expectStatus(
+			await application.api('POST', '/api/v1/targets/ssh-keys', {
+				name: 'Protocol key',
+				privateKey: ssh.privateKey,
+			}),
+			201,
+		);
+		const imported = expectStatus(
+			await application.api('POST', '/api/v1/targets/connections/import', {
+				items: [
+					{
+						connection: {
+							name: 'Protocol SSH',
+							type: 'SSH',
+							host: '127.0.0.1',
+							port: ssh.port,
+							username: ssh.user,
+							route: 'direct',
+							proxyId: null,
+							notes: null,
+							tagIds: [],
+							jumpIds: [],
+						},
+						credential: { kind: 'ssh_key', sshKeyId: key.id },
+					},
+				],
+			}),
+			200,
+		);
+		const connection = imported.items[0];
+		if (connection?.status !== 'ok') throw new Error('SSH connection import failed');
+		return Object.assign(application, {
+			connectionId: connection.id,
+
+			openWorkspace: () => openWorkspace(application.address, application.getSessionCookie()),
+		});
+	} catch (cause) {
+		try {
+			await application.close();
+		} catch (cleanup) {
+			throw new AggregateError([cause, cleanup], 'SSH management setup and cleanup failed');
+		}
+		throw cause;
+	}
 }

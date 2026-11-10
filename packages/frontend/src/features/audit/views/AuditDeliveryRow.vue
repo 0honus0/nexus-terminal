@@ -134,10 +134,6 @@
 		--audit-kind-color: #5f7cfa;
 	}
 
-	.audit-delivery-row[data-kind='agent'] {
-		--audit-kind-color: #d8679b;
-	}
-
 	.audit-delivery-row[data-kind='configuration'] {
 		--audit-kind-color: #d99a43;
 	}

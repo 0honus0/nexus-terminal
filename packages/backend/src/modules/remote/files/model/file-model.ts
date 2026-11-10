@@ -93,7 +93,7 @@ export class RemoteFileModel {
 				opened.machine,
 				lease,
 				serverKeyFingerprint,
-				(reusable) => this.machines.release(opened.machine, reusable),
+				() => this.machines.release(opened.machine),
 			);
 		} catch (error) {
 			const failure = this.failure(error);
@@ -106,7 +106,7 @@ export class RemoteFileModel {
 				}
 			}
 			try {
-				await this.machines.release(opened.machine, false);
+				await this.machines.release(opened.machine);
 			} catch (closeError) {
 				failures.push(closeError);
 			}

@@ -53,7 +53,7 @@ async function killedAt(directory, phase) {
 async function fixture(t, originals = true) {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-crash-'));
 	const path = join(directory, 'state.db');
-	const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
+	const roots = new Map(Object.entries(resolveDataPaths(path)));
 	let db;
 	t.after(async () => {
 		try {
@@ -180,7 +180,7 @@ for (const phase of ['published', 'committed']) {
 		const remove = fs.rm;
 		let intercepted = 0;
 		t.mock.method(fs, 'rename', async (source, destination) => {
-			if (source.endsWith('.previous/plugins')) {
+			if (source.endsWith('.previous/appearance')) {
 				intercepted += 1;
 				throw failure;
 			}
@@ -208,10 +208,10 @@ for (const phase of ['published', 'committed']) {
 			if (phase === 'published') {
 				assert.equal(
 					await readFile(
-						join(f.path + '.restore-' + journal.id + '.previous', 'plugins', 'original.txt'),
+						join(f.path + '.restore-' + journal.id + '.previous', 'appearance', 'original.txt'),
 						'utf8',
 					),
-					'original:plugins',
+					'original:appearance',
 				);
 			}
 		} finally {
@@ -239,7 +239,7 @@ for (const phase of ['staged', 'published']) {
 	await test(`Actual application startup reconciles ${phase} SIGKILL before opening HTTP`, async (t) => {
 		const directory = await mkdtemp(join(tmpdir(), 'nexus-b10-snapshot-startup-'));
 		const path = join(directory, 'state.db');
-		const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
+		const roots = new Map(Object.entries(resolveDataPaths(path)));
 		let app;
 		t.after(async () => {
 			try {
@@ -334,7 +334,7 @@ for (const damage of ['json', 'oversized', 'unknown-root', 'duplicate-root', 'sy
 			await writeFile(journalPath, JSON.stringify(journal));
 		}
 		if (damage === 'duplicate-root') {
-			journal.swaps[1].root = journal.swaps[0].root;
+			journal.swaps.push({ ...journal.swaps[0] });
 			await writeFile(journalPath, JSON.stringify(journal));
 		}
 		if (damage === 'symlink') {

@@ -76,7 +76,7 @@
  *
  * Before this existed the same idea was spelled three ways: a bare muted line
  * (settings lists), a dashed box with one sentence, and a centred card with
- * icon + title + description + button (the main Agent surface). Same product,
+ * icon + title + description + button (full-page states). Same product,
  * three languages. One component, two sizes:
  *   - default: centred card, for a whole pane / list that has nothing in it;
  *   - dense:   one row, for "this sub-list is empty" inside a settings section.

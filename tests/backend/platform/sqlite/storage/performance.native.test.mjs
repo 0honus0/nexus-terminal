@@ -11,9 +11,6 @@ import { SqliteNotificationStorage } from '../../../../../packages/backend/dist/
 import { SqliteAccountStorage } from '../../../../../packages/backend/dist/modules/access/accounts/adapters/sqlite/account-sql.js';
 import { SqliteHistoryStorage } from '../../../../../packages/backend/dist/modules/preferences/history/adapters/sqlite/history-sql.js';
 import { registerOperationsSnapshot } from '../../../../../packages/backend/dist/modules/operations/snapshots/adapters/sqlite/snapshot-registration.js';
-import { ProviderModel } from '../../../../../packages/backend/dist/modules/agent/providers/model/provider-model.js';
-import { RunChanges } from '../../../../../packages/backend/dist/modules/agent/runs/model/run-changes.js';
-import { providerStorageDouble, threadStorageDouble } from '../../../../support/agent-storage-doubles.mjs';
 
 async function database(t, version = applicationMigrations.length) {
 	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-performance-'));
@@ -65,17 +62,6 @@ test('Performance: v4 upgrade preserves notification membership and independent 
 	const ledger = await db.all('SELECT * FROM schema_version ORDER BY version');
 	await initializeSchema(db, applicationMigrations);
 	assert.deepEqual(await db.all('SELECT * FROM schema_version ORDER BY version'), ledger);
-	for (const [table, column, index] of [
-		['agent_operation_model_reservations', 'root_id', 'agent_operation_model_reservations_root'],
-		['agent_operations', 'run_id', 'agent_operations_run_state'],
-		['agent_operation_approvals', 'status', 'agent_operation_approvals_requested'],
-	]) {
-		const plan = await db.all(`EXPLAIN QUERY PLAN SELECT * FROM ${table} WHERE ${column}=?`, ['fixture']);
-		assert.ok(
-			plan.some((row) => row.detail.includes(index)),
-			JSON.stringify(plan),
-		);
-	}
 	assert.deepEqual(await db.all('PRAGMA foreign_key_check'), []);
 	assert.equal((await db.one('PRAGMA integrity_check')).integrity_check, 'ok');
 });
@@ -201,65 +187,6 @@ test('Performance: caught, detached and late state participants cannot commit pa
 		db.transaction(() => db.transaction(async () => undefined)),
 		(error) => error.kind === 'transaction',
 	);
-});
-
-test('Performance: Run notifications isolate unrelated runs but retain thread, child and app invalidation', async () => {
-	const changes = new RunChanges();
-	const scope = { userId: 1, appId: 'app' };
-	const seen = [];
-	let stopped = 0;
-	const close = changes.subscribe(
-		scope,
-		(kind) => seen.push(kind),
-		() => {
-			stopped++;
-		},
-		(change) => ['root', 'child'].includes(change.runId) || change.threadId === 'thread',
-	);
-	changes.notify({ ...scope, runId: 'other' }, 'text');
-	changes.notify({ ...scope, runId: 'root' }, 'text');
-	changes.notify({ ...scope, runId: 'child' });
-	changes.notify({ ...scope, threadId: 'thread' });
-	changes.notify(scope);
-	changes.notify({ userId: 2, appId: 'app' });
-	const failure = new Error('commit not confirmed');
-	await assert.rejects(
-		changes.after({ ...scope, runId: 'root' }, async () => {
-			throw failure;
-		}),
-		(error) => error === failure,
-	);
-	assert.deepEqual(seen, ['text', 'state', 'state', 'state', 'state']);
-	changes.quiesce();
-	assert.equal(stopped, 1);
-	close();
-});
-
-test('Performance: Provider guards use typed generation facts and reject every stale credential state', async () => {
-	let generation = { enabled: true, version: 4, credentialRevision: 2 };
-	const storage = providerStorageDouble({ generation: async () => generation });
-	const model = new ProviderModel(storage, null, null);
-	const current = { userId: 1, id: 'provider', version: 4, credentialRevision: 2 };
-	await model.guardCurrent(current);
-	for (const value of [
-		null,
-		{ ...generation, enabled: false },
-		{ ...generation, version: 5 },
-		{ ...generation, credentialRevision: 3 },
-	]) {
-		generation = value;
-		await assert.rejects(model.guardCurrent(current), (error) => error.code === 'provider_configuration_stale');
-	}
-	const threads = threadStorageDouble({ withState: async (_access, _admit, work) => work() });
-	assert.equal(
-		await threads.withState(
-			{},
-			() => {},
-			async () => 7,
-		),
-		7,
-	);
-	await assert.rejects(threads.list(), /Unexpected storage call/);
 });
 
 test('Performance: history retention preserves the just-used old id at equal timestamps', async (t) => {

@@ -26,8 +26,6 @@ docker compose up -d
 
 Open `http://localhost:18111` · [Deployment & updates](./DEPLOYMENT.md)
 
-Agent File/Shell/ACP operations use explicitly authorized SSH connections; Browser integration uses Backend CDP.
-
 ## Features
 
 A browser-based SSH / SFTP / RDP / VNC remote access tool with suspended terminal sessions and cross-device session list updates, file management, online editing, server-to-server transfers, remote dependency installation with confirmation, Agent and plugin marketplaces, security controls, module resource diagnostics, mobile support, and interface customization. RDP / VNC use browser SDKs and an authenticated backend bridge without guacd. Remote software is installed only after confirmation.

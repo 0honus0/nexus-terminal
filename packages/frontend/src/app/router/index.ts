@@ -6,7 +6,6 @@ import { preloadWorkspaceTerminalSurface } from '@/runtimes/workspace/public';
 import { loadConnectionsView } from '@/features/connections/public';
 import { loadProxiesView } from '@/features/proxies/public';
 import { loadTargetsNextDevView } from '@/features/targets-next/public';
-import { loadAgentNextDevView } from '@/features/agent/public';
 import { loadNotificationsView } from '@/features/notifications/public';
 import { loadAuditLogView } from '@/features/audit/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
@@ -134,11 +133,6 @@ if (import.meta.env.DEV) {
 		name: 'TargetsNextDev',
 		component: loadTargetsNextDevView,
 	});
-	routes.splice(catchAllIndex < 0 ? routes.length : catchAllIndex, 0, {
-		path: '/__agent-next',
-		name: 'AgentNextDev',
-		component: loadAgentNextDevView,
-	});
 }
 
 export const createAppRouter = (pinia: Pinia) => {
@@ -175,7 +169,7 @@ export const createAppRouter = (pinia: Pinia) => {
 
 	router.beforeEach(async (to) => {
 		// DEV inspection view; it uses the same Backend as the formal application.
-		if (import.meta.env.DEV && (to.name === 'TargetsNextDev' || to.name === 'AgentNextDev')) return true;
+		if (import.meta.env.DEV && to.name === 'TargetsNextDev') return true;
 		await auth.resolveSetupState();
 		if (!auth.setupResolved) {
 			return to.name === 'Login' ? true : { name: 'Login' };

@@ -9,10 +9,6 @@ const checks = [
 	// Backend check builds Shared declarations before either consumer checks its imports.
 	['Backend type check', ['--filter', '@nexus-terminal/backend', 'check']],
 	[
-		'Typed test storage contracts',
-		['--filter', '@nexus-terminal/backend', 'exec', 'tsc', '-p', '../../tests/tsconfig.contracts.json'],
-	],
-	[
 		'Test source and configuration types',
 		['--filter', '@nexus-terminal/frontend', 'exec', 'vue-tsc', '--noEmit', '-p', '../../tests/tsconfig.json'],
 	],

@@ -7,7 +7,6 @@
     "dev": "vite --host",
     "build": "pnpm run check && vite build",
     "preview": "vite preview",
-    "build:plugin-sdk": "pnpm --filter @nexus-terminal/shared build && node build/build-plugin-frontend-sdk.mjs",
     "check": "vue-tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/typecheck.tsbuildinfo"
   },
   "dependencies": {
@@ -84,7 +83,6 @@
     "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/compiler-sfc": "^3.5.44",
-    "esbuild": "0.28.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.5",
     "vue-tsc": "^3.3.14"

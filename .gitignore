@@ -39,7 +39,6 @@ bower_components
 build/Release
 
 # Dependency directories
-/.agent-tmp/
 node_modules/
 jspm_packages/
 # Snowpack dependency directory (https://snowpack.dev/)
@@ -147,10 +146,8 @@ dist-scripts/
 # Sub-package specific ignores
 /packages/backend/node_modules/
 /packages/backend/dist/
-/packages/backend/dist-plugin-sdk/
 /packages/frontend/node_modules/
 /packages/frontend/dist/
-/packages/frontend/dist-plugin-sdk/
 /packages/frontend/.vite/
 
 # Ignore specific generated file in root

@@ -9,7 +9,6 @@ const ROUTE_SCOPES = [
 	['/api/v1/targets/tags', 'tags'],
 	['/api/v1/settings/notifications', 'notifications'],
 	['/api/v1/settings', 'settings'],
-	['/api/v1/agent', 'agent'],
 	['/api/v1/auth', 'account'],
 ] as const;
 
@@ -30,10 +29,9 @@ const EVENT_SCOPES = [
 	['SETTINGS_', 'settings'],
 	['CAPTCHA_', 'settings'],
 	['IP_WHITELIST_', 'settings'],
-	['AGENT_', 'agent'],
 ] as const;
 
-export type AuditEventKind = 'security' | 'connection' | 'agent' | 'configuration' | 'activity';
+export type AuditEventKind = 'security' | 'connection' | 'configuration' | 'activity';
 
 export interface AuditEventVisual {
 	kind: AuditEventKind;
@@ -61,7 +59,6 @@ export function auditEventVisual(event: string): AuditEventVisual {
 	if (event === 'PASSWORD_CHANGED' || event.startsWith('2FA_') || event.startsWith('SSH_KEY_')) {
 		return { kind: 'security', icon: 'fa-solid fa-key' };
 	}
-	if (event.startsWith('AGENT_')) return { kind: 'agent', icon: 'fa-solid fa-robot' };
 	if (event.startsWith('SSH_CONNECT_') || event === 'SSH_SHELL_FAILURE') {
 		return { kind: 'connection', icon: 'fa-solid fa-terminal' };
 	}

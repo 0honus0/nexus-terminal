@@ -45,7 +45,6 @@
       "countsOnlyShort": "件数のみ",
       "modules": {
         "access": "認証とアクセス",
-        "agent": "Agent",
         "operations": "ログ・監査・通知",
         "preferences": "設定と外観",
         "remote": "ターミナルとリモート操作",
@@ -75,8 +74,6 @@
         "worker_heap_total_bytes": "DB Worker ヒープ容量",
         "worker_external_bytes": "DB Worker 外部メモリ",
         "worker_array_buffer_bytes": "DB Worker ArrayBuffer",
-        "active_runs": "実行・終了処理中の Agent タスク",
-        "pending_run_writes": "処理中の Agent 書き込み",
         "status_subscriptions": "サーバー状態の購読",
         "database_operations": "DB 開始済み操作数",
         "database_queue_wait_ms": "DB 累積待機時間",

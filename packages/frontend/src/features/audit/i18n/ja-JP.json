@@ -111,11 +111,6 @@
     },
     "paginationInfo": "{currentPage} ページ / 全 {totalPages} ページ ({totalLogs} 件のログ)",
     "actions": {
-      "AGENT_MEMORY_PROPOSED": "Agent メモリーの審査待ち",
-      "AGENT_MEMORY_PUBLISHED": "Agent メモリーを公開",
-      "AGENT_MEMORY_REJECTED": "Agent メモリーを却下",
-      "AGENT_MEMORY_REVOKED": "Agent メモリーを撤回",
-
       "LOGIN_SUCCESS": "ログイン成功",
       "LOGIN_FAILURE": "ログイン失敗",
       "LOGOUT": "ログアウト",
@@ -152,17 +147,9 @@
       "PASSKEY_NAME_UPDATED": "パスキー名更新済み",
       "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし",
       "CAPTCHA_SETTINGS_UPDATED": "CAPTCHA 設定を更新",
-      "AGENT_APPROVAL_REQUIRED": "Agent の承認待ち",
-      "AGENT_ATTENTION_REQUIRED": "Agent の確認が必要です",
-      "AGENT_RUN_COMPLETED": "Agent の実行が完了しました",
-      "AGENT_RUN_FAILED": "Agent の実行に失敗しました",
-      "AGENT_RUN_INTERRUPTED": "Agent の実行が中断されました",
       "IP_BLOCKED": "IP をブロックしました",
       "HTTP_MUTATION": "データを更新しました",
       "HTTP_MUTATION_FAILED": "データの更新に失敗しました",
-      "AGENT_EXECUTION_SETTINGS_UPDATED": "Agent 実行設定を更新しました",
-      "AGENT_ARTIFACT_CREATED": "Agent ファイルを作成しました",
-      "AGENT_ARTIFACT_DELETED": "Agent ファイルを削除しました",
       "REMOTE_MUTATION_EVIDENCE_RECORDED": "リモート変更の証跡を記録しました",
       "REMOTE_MUTATION_RELEASED": "リモート変更の証跡を解放しました"
     },
@@ -175,7 +162,6 @@
       "tags": "タグ",
       "notifications": "通知設定",
       "settings": "システム設定",
-      "agent": "Agent",
       "account": "アカウントとセキュリティ",
       "system": "システムデータ"
     },

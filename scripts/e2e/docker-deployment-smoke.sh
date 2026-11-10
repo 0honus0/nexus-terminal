@@ -94,7 +94,6 @@ services="$(compose config --services)"
 printf '%s\n' "$services" | grep -qx frontend
 printf '%s\n' "$services" | grep -qx backend
 if printf '%s\n' "$services" | grep -qx guacd; then echo 'Default Compose unexpectedly includes guacd.' >&2; exit 1; fi
-if printf '%s\n' "$services" | grep -qx agent-runner; then echo 'Default Compose unexpectedly includes agent-runner.' >&2; exit 1; fi
 compose up -d --wait --wait-timeout 60
 compose exec -T backend node --input-type=module - <<'NODE'
 import { readSystemHealthResponse } from '@nexus-terminal/shared/system/status/http-codec';

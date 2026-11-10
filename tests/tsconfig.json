@@ -17,5 +17,5 @@
     "types": ["vite/client", "node"]
   },
   "include": ["**/*.ts", "../packages/frontend/src/**/*.d.ts"],
-  "exclude": ["node_modules", "e2e/fixtures/agent/plugin-source"]
+  "exclude": ["node_modules"]
 }

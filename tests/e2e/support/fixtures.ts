@@ -13,58 +13,24 @@ export type E2EDatabaseMode = 'seed' | 'empty' | 'mutation-recovery';
 type E2EFixtures = {
 	e2eDatabaseMode: E2EDatabaseMode;
 	e2eServices: readonly E2EServiceName[];
-	expectExecutionUnknown: () => void;
 	_e2eTestReset: void;
 };
 
 type E2EWorkerFixtures = { _e2eServiceOwner: ControlledServices };
 
-export const resetE2EBaseline = async (mode: E2EDatabaseMode, expectedShutdown?: 'execution_unknown') => {
+export const resetE2EBaseline = async (mode: E2EDatabaseMode) => {
 	const token = process.env.NEXUS_E2E_CONTROL_TOKEN;
 	if (!token) throw new Error('NEXUS_E2E_CONTROL_TOKEN is required');
 	// A reset with a lost response is unknown; never retry replacement of the baseline.
 	const response = await fetch(E2E_URLS.backendControlOrigin + '/reset', {
 		method: 'POST',
 		headers: { 'X-Nexus-E2E-Control': token, 'Content-Type': 'application/json' },
-		body: JSON.stringify({ mode, expectedShutdown }),
+		body: JSON.stringify({ mode }),
 		signal: AbortSignal.timeout(60_000),
 	});
 	baseExpect(response.ok, 'Backend-next isolated baseline reset failed: HTTP ' + response.status).toBeTruthy();
 	await baseExpect(response.json()).resolves.toEqual({ reset: true, mode });
 };
-
-async function resetExternalFixtures(services: readonly E2EServiceName[]): Promise<void> {
-	// The previous application must close successfully before these shared
-	// controls change. Never erase an unknown-effect or resource-cleanup fence.
-	const origins = services.flatMap((name) => {
-		switch (name) {
-			case 'provider':
-				return [E2E_URLS.openAiProviderOrigin];
-			case 'plugins':
-				return [E2E_URLS.pluginRepositoryOrigin];
-			case 'deployment':
-				return [E2E_URLS.deploymentPageOrigin];
-			case 'browser':
-				return [E2E_URLS.browserControlOrigin];
-			default:
-				return [];
-		}
-	});
-	const results = await Promise.allSettled(
-		origins.map(async (origin) => {
-			const response = await fetch(origin + '/reset', {
-				method: 'POST',
-				signal: AbortSignal.timeout(10_000),
-			});
-			await response.arrayBuffer();
-			baseExpect(response.status, 'External fixture reset failed: ' + origin).toBe(204);
-		}),
-	);
-	const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
-	if (failures.length) {
-		throw new AggregateError(failures, 'External E2E baseline reset failed');
-	}
-}
 
 async function retainE2EBaseline(): Promise<void> {
 	const response = await fetch(E2E_URLS.backendControlOrigin + '/retain', {
@@ -79,17 +45,6 @@ async function retainE2EBaseline(): Promise<void> {
 export const test = base.extend<E2EFixtures, E2EWorkerFixtures>({
 	e2eDatabaseMode: ['seed', { option: true }],
 	e2eServices: [[], { option: true }],
-
-	expectExecutionUnknown: async ({}, use) => {
-		let expected = false;
-		await use(() => {
-			expected = true;
-		});
-		// Only a test that has asserted a deliberate unknown effect can request this.
-		// The controller verifies the exact shutdown cause and retains its database;
-		// cleanup failures and a missing expected fence still fail the test.
-		if (expected) await resetE2EBaseline('empty', 'execution_unknown');
-	},
 
 	_e2eServiceOwner: [
 		async ({}, use, workerInfo) => {
@@ -117,15 +72,12 @@ export const test = base.extend<E2EFixtures, E2EWorkerFixtures>({
 		{ scope: 'worker', timeout: 120_000 },
 	],
 	_e2eTestReset: [
-		async ({ e2eDatabaseMode, e2eServices, _e2eServiceOwner, expectExecutionUnknown }, use, testInfo) => {
-			// This dependency holds expected-shutdown verification until evidence retention finishes.
-			void expectExecutionUnknown;
+		async ({ e2eDatabaseMode, e2eServices, _e2eServiceOwner }, use, testInfo) => {
 			await resetE2EBaseline(e2eDatabaseMode);
 			let failure: { cause: unknown } | null = null;
 			try {
 				await _e2eServiceOwner.ensure(e2eServices);
 				if (e2eServices.includes('ssh')) await resetTestSshFilesystem();
-				await resetExternalFixtures(e2eServices);
 				await use();
 			} catch (cause) {
 				failure = { cause };

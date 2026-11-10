@@ -72,12 +72,6 @@ function event(route: HttpRoute, status: number, responseUserId: number | null):
 	if (route.url === '/api/v1/settings/logging' || route.url === '/api/v1/settings') {
 		return 'SETTINGS_UPDATED';
 	}
-	if (
-		route.url === '/api/v1/agent/execution-settings' ||
-		route.url === '/api/v1/agent/execution-settings/hard-limits/confirm'
-	) {
-		return 'AGENT_EXECUTION_SETTINGS_UPDATED';
-	}
 	const domains: { path: string; create: OperationEvent; update: OperationEvent; remove: OperationEvent }[] = [
 		{
 			path: '/api/v1/targets/connections',

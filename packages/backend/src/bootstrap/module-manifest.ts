@@ -1,10 +1,8 @@
-import { NativeTextLogStore } from '../platform/blobs/adapters/native-text-log-store.js';
 import { ACCESS_SESSION_COOKIE_NAME } from '@nexus-terminal/shared/access/values';
 import { readRequestCookie } from '../platform/http/http-request.js';
 import { sqliteSchemaSignature } from '../platform/storage/sqlite/schema-signature.js';
 import type { Logger } from '../platform/logging/logger.js';
 import { logDiagnostic } from '../platform/logging/diagnostic-log.js';
-import { readPackageVersion } from '../platform/packages/adapters/node-package-version.js';
 import { NativeBoundedFetch } from '../platform/network/adapters/native-bounded-fetch.js';
 import { NativeImageInspector } from '../platform/images/adapters/native-image-inspector.js';
 import {
@@ -33,8 +31,6 @@ import {
 } from '../modules/access/register.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { HttpRoute, HttpWebSocketRoute } from '../platform/http/http-types.js';
-import { registerAgent, registerAgentBackup } from '../modules/agent/register.js';
-import type { AgentStateApi } from '../modules/agent/public.js';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { registerSystem, type BackupMaintenance } from '../modules/system/register.js';
@@ -55,7 +51,7 @@ export interface RegisteredModules {
 	targets: TargetsPublicApi;
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
-	agent: AgentStateApi;
+
 	quiesce(): void;
 	close(): Promise<void>;
 	retireForRestore(): Promise<void>;
@@ -135,9 +131,7 @@ export async function registerModules({
 }: ModuleRegistrationOptions): Promise<RegisteredModules> {
 	const paths = resolveDataPaths(sqlite.path);
 	const backgrounds = await NativeBlobStore.open(paths.appearance);
-	const artifacts = await NativeBlobStore.open(paths.artifacts);
-	const toolLogs = await NativeTextLogStore.open(paths.toolLogs);
-	const plugins = await NativeBlobStore.open(paths.plugins);
+
 	const preferences = await registerPreferences({
 		sqlite,
 		secrets,
@@ -227,47 +221,18 @@ export async function registerModules({
 			[
 				registerTargetsBackup(secrets),
 				registerPreferencesBackup(secrets),
-				registerAgentBackup(secrets),
 				registerRemoteBackup(),
 				registerOperationsBackup(secrets),
 			],
-			new Map([
-				['appearance', backgrounds],
-				['artifacts', artifacts],
-				['plugins', plugins],
-			]),
+			new Map([['appearance', backgrounds]]),
 			BACKUP_MAX_SNAPSHOT_BYTES,
 			sqliteSchemaSignature(applicationMigrations),
 			registerAccessBackupExclusions(),
-			new NativeSnapshotRestoreFiles(
-				sqlite.path,
-				new Map([
-					['appearance', paths.appearance],
-					['artifacts', paths.artifacts],
-					['plugins', paths.plugins],
-				]),
-			),
+			new NativeSnapshotRestoreFiles(sqlite.path, new Map([['appearance', paths.appearance]])),
 		);
 		const system = registerSystem(access.publicApi, sqlite, snapshot, secrets, maintenance, logger);
 		owners.set('system', system);
-		const agent = registerAgent(
-			sqlite,
-			secrets,
-			targets.publicApi,
-			targets.trustedSshTargets,
-			remote.operations,
-			artifacts,
-			toolLogs,
-			operations.publicApi,
-			system.diagnostics,
-			plugins,
-			await readPackageVersion(new URL('../../package.json', import.meta.url)),
-			logger,
-		);
-		agent.installTransactionIdentityReader(access.readTransactionIdentity);
-		owners.set('agent', agent);
 		system.registerResourceCollector(remote.resourceCollector);
-		system.registerResourceCollector(agent.resourceCollector);
 
 		const admitHttp = (routes: HttpRoute[]): HttpRoute[] =>
 			routes.map((route) => ({
@@ -367,9 +332,6 @@ export async function registerModules({
 				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'operations', mode });
 				await operations.initialize(mode);
 				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'operations', mode });
-				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'agent', mode });
-				await agent.initialize(mode);
-				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'agent', mode });
 				logDiagnostic(logger, 'info', 'MODULE_INITIALIZING', { module: 'remote', mode });
 				await remote.initialize();
 				logDiagnostic(logger, 'info', 'MODULE_READY', { module: 'remote', mode });
@@ -382,7 +344,6 @@ export async function registerModules({
 							...system.observeDiagnosticRoutes('access', access.routes(secureCookies)),
 							...system.observeDiagnosticRoutes('targets', targets.routes(access.publicApi)),
 							...system.observeDiagnosticRoutes('remote', remote.httpRoutes()),
-							...system.observeDiagnosticRoutes('agent', agent.routes(access.publicApi)),
 							...system.observeDiagnosticRoutes('system', system.httpRoutes()),
 							...system.observeDiagnosticRoutes('preferences', preferences.routes(access.publicApi)),
 							...system.observeDiagnosticRoutes('operations', operations.routes(access.publicApi)),
@@ -392,13 +353,11 @@ export async function registerModules({
 					...system.maintenanceRoutes(),
 				]),
 
-			webSocketRoutes: () =>
-				admitWebSocket([...remote.webSocketRoutes(), ...agent.webSocketRoutes(access.publicApi)]),
+			webSocketRoutes: () => admitWebSocket(remote.webSocketRoutes()),
 
 			targets: targets.publicApi,
 			trustedSshTargets: targets.trustedSshTargets,
 			remote: remote.publicApi,
-			agent: agent.publicApi,
 
 			quiesce: () => {
 				quiesceModuleOwners(
@@ -406,7 +365,6 @@ export async function registerModules({
 						['access', access],
 						['operations', operations],
 						['preferences', preferences],
-						['agent', agent],
 						['system', system],
 						['remote', remote],
 					]),

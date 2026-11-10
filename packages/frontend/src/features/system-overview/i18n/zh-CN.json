@@ -45,7 +45,6 @@
       "countsOnlyShort": "仅统计数量",
       "modules": {
         "access": "身份与访问",
-        "agent": "Agent",
         "operations": "日志、审计与通知",
         "preferences": "偏好与外观",
         "remote": "终端与远程操作",
@@ -75,8 +74,6 @@
         "worker_heap_total_bytes": "数据库 Worker 堆容量",
         "worker_external_bytes": "数据库 Worker 外部内存",
         "worker_array_buffer_bytes": "数据库 Worker ArrayBuffer",
-        "active_runs": "运行及收尾中的 Agent 任务",
-        "pending_run_writes": "在途 Agent 写入",
         "status_subscriptions": "服务器状态订阅",
         "database_operations": "数据库已开始操作数",
         "database_queue_wait_ms": "数据库累计排队时间",

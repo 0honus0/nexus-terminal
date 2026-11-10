@@ -1,5 +1,6 @@
 import type { SqlExecutor } from '../../../../../platform/storage/sqlite/sql-types.js';
 
+/** Original v1 schema; retired producer values are converted by migration v68. */
 export async function initializeMachineMutations(tx: SqlExecutor): Promise<void> {
 	await tx.exec(`CREATE TABLE remote_machine_mutation_claims (
 		id TEXT PRIMARY KEY,

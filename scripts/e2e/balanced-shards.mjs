@@ -148,7 +148,6 @@ function prepareApplication() {
 	}
 	for (const file of [
 		'backend/dist/bootstrap/create-app.js',
-		'backend/dist-plugin-sdk/backend-v4.mjs',
 		'shared/dist/access/http.js',
 		'frontend/dist/index.html',
 		'frontend/dist/__e2e__/browser-clients.js',

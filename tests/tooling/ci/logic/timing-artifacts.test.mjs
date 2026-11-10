@@ -114,23 +114,6 @@ test('a full build rerun cannot use an earlier build artifact', async () => {
 	);
 });
 
-test('plugin candidates follow the original build lifetime on partial reruns and reject stale full reruns', async () => {
-	const artifacts = [
-		{ ...artifact(21, 1, 1), name: 'e2e-plugin-candidates-test-sha-1' },
-		{ ...artifact(22, 1, 2), name: 'e2e-plugin-candidates-test-sha-2' },
-	];
-	const input = source([{ ...job(1, 1), name: 'Checks and format', run_attempt: 2 }], artifacts);
-	assert.equal(await resolveBuildArtifact({ ...input, sha: 'test-sha', kind: 'plugin-candidates' }), '21');
-	await assert.rejects(
-		resolveBuildArtifact({
-			...source([{ ...job(1, 2), name: 'Checks and format' }], artifacts.slice(0, 1)),
-			sha: 'test-sha',
-			kind: 'plugin-candidates',
-		}),
-		/plugin-candidates artifact unavailable/,
-	);
-});
-
 test('API failures propagate without publishing partial IDs', async () => {
 	const input = source([], []);
 	const failure = new Error('API unavailable');

@@ -172,7 +172,7 @@
 
 	const moduleIcons: Record<DiagnosticModule['id'], string> = {
 		access: 'fa-solid fa-key',
-		agent: 'fa-solid fa-wand-magic-sparkles',
+
 		operations: 'fa-solid fa-bell',
 		preferences: 'fa-solid fa-sliders',
 		remote: 'fa-solid fa-terminal',
@@ -525,10 +525,6 @@
 
 	.host-diagnostics__module[data-diagnostic-module='access'] {
 		--module-accent: #8492ff;
-	}
-
-	.host-diagnostics__module[data-diagnostic-module='agent'] {
-		--module-accent: #b488ff;
 	}
 
 	.host-diagnostics__module[data-diagnostic-module='operations'] {

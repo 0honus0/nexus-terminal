@@ -19,11 +19,6 @@ export const E2E_PORTS = {
 	sshTransferTarget: parsePort('NEXUS_E2E_SSH_TRANSFER_TARGET_PORT', 22225),
 	sshControl: parsePort('NEXUS_E2E_SSH_CONTROL_PORT', 22223),
 	smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
-	pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
-	openAiProvider: parsePort('NEXUS_E2E_OPENAI_PROVIDER_PORT', 29091),
-	browserControl: parsePort('NEXUS_E2E_BROWSER_CONTROL_PORT', 29093),
-	browserCdp: parsePort('NEXUS_E2E_BROWSER_CDP_PORT', 29094),
-	deploymentPage: parsePort('NEXUS_E2E_DEPLOYMENT_PAGE_PORT', 29097),
 } as const;
 
 const publicPort = E2E_PORTS.frontend;
@@ -37,10 +32,4 @@ export const E2E_URLS = {
 	frontendWsOrigin: `ws://localhost:${publicPort}`,
 	desktopControlOrigin: `http://127.0.0.1:${E2E_PORTS.desktopControl}`,
 	sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
-	pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,
-	openAiProviderOrigin: `http://127.0.0.1:${E2E_PORTS.openAiProvider}`,
-	browserControlOrigin: `http://127.0.0.1:${E2E_PORTS.browserControl}`,
-	browserCdpOrigin: `http://127.0.0.1:${E2E_PORTS.browserCdp}`,
-	browserCdpEndpoint: `ws://127.0.0.1:${E2E_PORTS.browserCdp}/browser`,
-	deploymentPageOrigin: `http://127.0.0.1:${E2E_PORTS.deploymentPage}`,
 } as const;

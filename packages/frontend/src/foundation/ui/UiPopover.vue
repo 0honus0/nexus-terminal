@@ -26,7 +26,6 @@
 			iconOnly?: boolean;
 			wrapperClass?: string;
 			triggerClass?: string;
-			panelMarkerAttribute?: `data-${string}`;
 			anchor?: ReferenceElement;
 		}>(),
 		{
@@ -44,16 +43,11 @@
 			iconOnly: false,
 			wrapperClass: '',
 			triggerClass: '',
-			panelMarkerAttribute: undefined,
 		},
 	);
 
 	const model = defineModel<boolean>('open', { default: false });
 	const emit = defineEmits<{ 'open-change': [open: boolean] }>();
-
-	const panelMarkerAttributes = computed(() =>
-		props.panelMarkerAttribute ? { [props.panelMarkerAttribute]: '' } : {},
-	);
 
 	const wrapper = ref<HTMLElement | null>(null);
 	let restoreFocus = true;
@@ -140,7 +134,6 @@
 				<PopoverContent
 					data-ui="popover-panel"
 					data-ui-gen="2"
-					v-bind="panelMarkerAttributes"
 					data-surface="glass"
 					:side="props.placement"
 					:side-offset="props.offset"

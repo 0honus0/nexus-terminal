@@ -1,3 +1,6 @@
+import { retireMutationOrigin } from '../modules/remote/migrations.js';
+import { removeRetiredEvents } from '../modules/operations/migrations.js';
+import { removeRetiredAgent } from '../platform/storage/sqlite/adapters/migrations/remove-retired-agent.js';
 import { initializeOperationsSchema, migrateOperationsPendingNotifications } from '../modules/operations/migrations.js';
 import { initializePreferencesSchema } from '../modules/preferences/migrations.js';
 import { initializeRemoteSchema } from '../modules/remote/migrations.js';
@@ -10,10 +13,10 @@ import {
 	migrateAgentToolOutputs,
 	agentPerformanceMigrations,
 	agentModularMigrations,
-} from '../modules/agent/migrations.js';
+} from '../platform/storage/sqlite/adapters/migrations/agent-history/backend/migrations.js';
 import { initializeSnapshotRestoreSchema } from '../platform/storage/sqlite/adapters/snapshot-restore-sql.js';
 
-/** First-release schema: install the current layout atomically, without development upgrade history. */
+/** Append-only published migration chain; retired feature SQL remains private to historical upgrades. */
 export const applicationMigrations: readonly SchemaMigration[] = [
 	{
 		version: 1,
@@ -44,4 +47,7 @@ export const applicationMigrations: readonly SchemaMigration[] = [
 	},
 	...agentModularMigrations,
 	{ version: 66, signature: 'access-oidc-binding-visibility-20261109', apply: removeOidcVisibilitySwitch },
+	{ version: 67, signature: 'remove-retired-agent-20261110', apply: removeRetiredAgent },
+	{ version: 68, signature: 'remote-retired-producer-origin-20261110', apply: retireMutationOrigin },
+	{ version: 69, signature: 'operations-remove-retired-agent-events-20261110', apply: removeRetiredEvents },
 ];

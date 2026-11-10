@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createWriteStream, readFileSync, type WriteStream } from 'node:fs';
+import { createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
@@ -9,10 +9,6 @@ import { E2E_URLS } from '../../support/protocols/test-environment';
 const definitions = {
 	ssh: { entry: 'controlled-ssh-server.mjs', health: E2E_URLS.sshControlOrigin + '/health' },
 	desktop: { entry: 'desktop-server.mjs', health: E2E_URLS.desktopControlOrigin + '/health' },
-	browser: { entry: 'browser-server.mjs', health: E2E_URLS.browserControlOrigin + '/contexts' },
-	provider: { entry: 'model/openai-provider.mjs', health: E2E_URLS.openAiProviderOrigin + '/health' },
-	plugins: { entry: 'plugin-repository.mjs', health: E2E_URLS.pluginRepositoryOrigin + '/health' },
-	deployment: { entry: 'deployment-page.mjs', health: E2E_URLS.deploymentPageOrigin + '/state' },
 };
 
 export type E2EServiceName = keyof typeof definitions;
@@ -106,11 +102,6 @@ export class ControlledServices {
 		await mkdir(this.directory, { recursive: true });
 		const definition = definitions[name];
 		const env = { ...process.env };
-		if (name === 'plugins')
-			env.NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM = readFileSync(
-				new URL('../fixtures/agent/keys/official-e2e-private.pem', import.meta.url),
-				'utf8',
-			);
 		const log = createWriteStream(path.join(this.directory, name + '.log'));
 		const failures: Error[] = [];
 		log.on('error', (error) => failures.push(error));

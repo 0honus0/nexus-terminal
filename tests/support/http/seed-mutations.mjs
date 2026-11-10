@@ -19,7 +19,7 @@ export async function prepareDatabase(database, encryptionKey) {
 					id,
 					keys: [key],
 					ownerId: randomUUID(),
-					origin: index % 2 ? 'agent' : 'files',
+					origin: index % 2 ? 'retired' : 'files',
 					targets: [{ targetId: index, fingerprint: key }],
 					now: Date.now() - 10000,
 				}),

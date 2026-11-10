@@ -5,8 +5,7 @@ repo_root="$(cd "$(dirname "$0")/../.." && pwd -P)"
 shard="$1"
 shards="$2"
 artifacts="${NEXUS_TEST_ARTIFACT_DIR:?An absolute artifact directory is required}"
-plugin_root="${NEXUS_TEST_PLUGIN_SOURCE_ROOT:?Pinned plugin source is required}"
-mkdir -p "$artifacts/reports" "$artifacts/metrics" "$artifacts/plugin-interop/reports"
+mkdir -p "$artifacts/reports" "$artifacts/metrics"
 
 measure() {
   NEXUS_TEST_LOG_DIR="$artifacts/logs" bash "$repo_root/scripts/e2e/measure-command.sh" "$artifacts/metrics/$1.json" "${@:2}"
@@ -70,17 +69,7 @@ if [[ "$shard" == 1 ]]; then
 fi
 
 cd "$repo_root"
-measure host-browser env -u NEXUS_TEST_PLUGIN_SET node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" || failed=1
+measure host-browser node scripts/e2e/balanced-shards.mjs run --shards "$shards" --shard "$shard" || failed=1
 
-cd "$plugin_root"
-NEXUS_TEST_ARTIFACT_DIR="$artifacts/plugin-interop" measure plugin-interop \
-  node --test --test-concurrency=1 --test-shard="$shard/$shards" \
-  --test-reporter=spec --test-reporter=junit --test-reporter-destination=stdout \
-  --test-reporter-destination="$artifacts/plugin-interop/reports/interop.xml" \
-  'tests/interoperability/**/*.native.test.mjs' || failed=1
-
-NEXUS_TEST_ARTIFACT_DIR="$artifacts/plugin-browser" \
-  NEXUS_E2E_DATA_ROOT="$artifacts/plugin-browser/backend" \
-  measure plugin-browser pnpm test:browser --shard "$shard/$shards" || failed=1
 
 exit "$failed"

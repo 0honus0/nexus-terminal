@@ -39,7 +39,7 @@
     "origins": {
       "files": "文件",
       "docker": "Docker",
-      "agent": "Agent",
+      "retired": "已移除功能",
       "tools": "工具安装"
     },
     "states": {

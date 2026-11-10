@@ -12,7 +12,7 @@
       "imported": "Backup imported.",
       "importFailed": "Backup import failed.",
       "importedWithCounts": "Backup restored: {rows} rows and {files} files. Reload before using the restored data.",
-      "description": "Export the current business configuration, Agent state, audit/notification records and referenced background, Artifact and plugin files. Account credentials, Passkeys and active resources are excluded.",
+      "description": "Export the current business configuration, audit/notification records and referenced background files. Account credentials, Passkeys and active resources are excluded.",
       "importDescription": "Backups from this instance can be imported while signed in without a backup password. Backups from another instance require the login password used when that backup was exported. Import replaces the backed-up business data and custom theme files.",
       "backupFile": "Backup file",
       "chooseFile": "Choose file",

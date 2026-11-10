@@ -69,7 +69,7 @@ export class SftpFileResource implements FileResource {
 		machine: MachineConnection,
 		lease: MachineSftpLease,
 		readonly serverKeyFingerprint: string,
-		private readonly releaseMachine: (reusable: boolean) => Promise<void>,
+		private readonly releaseMachine: () => Promise<void>,
 	) {
 		this.#machine = machine;
 		this.#lease = lease;
@@ -848,7 +848,7 @@ export class SftpFileResource implements FileResource {
 			failures.push(error);
 		}
 		try {
-			await this.releaseMachine(this.usable && failures.length === 0);
+			await this.releaseMachine();
 		} catch (error) {
 			failures.push(error);
 		}

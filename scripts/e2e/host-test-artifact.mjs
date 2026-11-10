@@ -3,14 +3,8 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { HOST_HARNESS_API_VERSION } from '../../tests/support/plugins/artifact-contract.mjs';
 
-const directories = [
-	'packages/backend/dist',
-	'packages/backend/dist-plugin-sdk',
-	'packages/shared/dist',
-	'packages/frontend/dist',
-];
+const directories = ['packages/backend/dist', 'packages/shared/dist', 'packages/frontend/dist'];
 
 async function fingerprint(root) {
 	const files = [];
@@ -45,7 +39,6 @@ export async function writeHostArtifact({ root, revision }) {
 	const manifest = {
 		schemaVersion: 1,
 		revision,
-		harnessApiVersion: HOST_HARNESS_API_VERSION,
 		node: process.versions.node,
 		files: await fingerprint(root),
 	};
@@ -57,7 +50,6 @@ export async function verifyHostArtifact({ root, revision }) {
 	const manifest = JSON.parse(await readFile(join(root, 'packages/host-test-artifact.json'), 'utf8'));
 	assert.equal(manifest.schemaVersion, 1, 'Unsupported Host build artifact');
 	assert.equal(manifest.revision, revision, 'Host source and build revisions differ');
-	assert.equal(manifest.harnessApiVersion, HOST_HARNESS_API_VERSION, 'Host harness contract differs');
 	assert.equal(manifest.node, process.versions.node, 'Host build and test Node versions differ');
 	assert.deepEqual(manifest.files, await fingerprint(root), 'Host build content differs from the immutable artifact');
 	return manifest;

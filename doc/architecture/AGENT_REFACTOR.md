@@ -1,530 +1,703 @@
 # Agent 重构
 
-> 2026-11-06重新设计，2026-11-07完成本轮实现、正式验收及发布。本文维护SDK4动态扩展边界和持续验收判据，替代此前五阶段App策略及D27-C1服务方案；具体版本、测试范围与发布证据见[当前验收基线](../testing/E2E.md#当前验收基线)。
+> 2026-11-10 重新规划，尚未实施。本页为目标架构及通用插件宿主设计，API 名称表示目标语义，不是当前 SDK 使用说明。当前实现见 [AGENT](AGENT.md)，上一轮设计保留在 [SDK4 设计参考](AGENT_SDK4_DESIGN.md)，任务与决定见 [PLAN](../PLAN.md#agent-动态插件架构重新设计)。
 
-本文是 Agent、插件市场及前后端动态扩展设计的唯一正文。决定、实施顺序与审核表见 [PLAN](../PLAN.md#agent-动态插件架构重新设计)，当前源码说明见 [AGENT](AGENT.md)，产品已实现行为见 [USAGE](../USAGE.md#agent)。产品操作仅在USAGE维护，不恢复旧Agent运行协议。
+旧 Agent 本体及独立插件仓现已按用户要求清空旧实现，见[整体移除清单与历史参考](AGENT_REMOVAL.md)。本体只保留必要的私有历史迁移；插件仓主分支从空树重新开始，两仓旧代码均可通过 `archive/pre-agent-reset-20261110` 标签查阅。本页继续作为后续重建目标，新通用宿主及八项API尚未实现，不保留旧运行兼容。
 
 ## 1. 职责与范围
 
-目标是：**用户安装一个 App，为它选择插件；App 自己编排任务，插件提供能力，Nexus 宿主统一执行授权和资源管理。** 工具、服务、应用流程和 UI 在公开 SDK 支持的范围内独立更新，不要求本体同步发布。
+按“项目已有基础能力 → 基础插件公开 API → 其余功能插件”设计。基础能力从本项目已有实现派生；基础插件负责适配和注册接口。供应商、Agent Loop、工具与 UI 等均属于普通插件，运行实现归独立插件仓。本体原 Agent 目录按职责拆除，通用宿主统一归 `plugins` 域，不把旧 Agent 模块整体改名后保留。
 
-保留聊天、图片、思考等级、历史、文件、完整日志、审批、Memory、Skills、Browser、MCP/ACP、子 Agent 与资源管理等主要功能。可以重设接口和内部流程，不保留旧名称、旧五阶段或单模型运行假设。酒馆类应用用于检查架构是否支持不同应用逻辑，本轮不开发酒馆产品。
+目标是插件可独立安装、配置、替换和发布，普通插件新增服务方法、事件或 UI 实现时不要求本体增加业务枚举。新增真正的宿主特权、传输能力或不兼容的宿主协议仍需要本体更新。第一版完成通用服务调用、订阅及前后端桥接，不要求复制 dsh 全部功能包。
 
-支持多个 App 并存和并行运行，同一个 App 包可创建多个拥有独立 appId 的 App 实例；不是每种包只能装一个可用应用。每个 App 独立选择插件实例/配置/UI 与授权，持有自己的会话、Run 和私有数据；不同 App 可复用不可变包文件，不能因此共享调用权限或协议 session。切换当前 App 只改变视图可见性，不停止其它 App 的后台任务；明确关闭/删除只影响目标实例及其资源，共用包的卸载则先检查所有引用者。共享模型预算和机器带宽等仍按真实宿主资源管理，不把逻辑隔离宣称为物理性能无影响。
-
-### 1.1 整体示意图
-
-图中 Host 是可信宿主；虚线表示描述或展示，实线表示受管调用。插件 UI 不能直接调用宿主内部对象，后端插件不能借用浏览器登录身份。
+宿主拥有真实身份、权限判定、包信任、隔离进程、浏览器挂载边界与资源释放。宿主不定义模型供应商、Agent Run、会话消息、工具目录、压缩、命名、MCP/ACP 或聊天状态机；这些业务对象由插件定义。需要跟踪真实 I/O 派发和未确认效果的基础能力继续保留必要事实，不因移出 Agent 业务而放弃权限、去重与资源收尾。
 
 ```mermaid
 flowchart TB
-    User["用户：安装 App，选择插件，配置与授权"]
-    subgraph Front["浏览器"]
-        Shell["本体界面壳<br/>窗口、市场、可信批准"]
-        Surface["通用 Surface 容器<br/>iframe + MessagePort"]
-        AppUI["App UI 插件<br/>聊天或其他应用界面"]
-        SettingsUI["插件 Settings 页面"]
-        Shell --> Surface
-        Surface --> AppUI
-        Surface --> SettingsUI
-    end
-    subgraph Host["Nexus 后端宿主"]
-        Packages["包与实例管理<br/>安装、组合、升级、配置"]
-        Registry["动态能力目录<br/>注册、发现、准确绑定"]
-        Runtime["通用执行核心<br/>Run / Operation / 取消 / 恢复"]
-        Trusted["可信宿主能力<br/>授权审批、模型、SSH、文件、Browser、存储"]
-        Packages --> Registry
-        Registry --> Runtime
-        Runtime --> Trusted
-    end
-    subgraph Extensions["隔离的后端插件"]
-        App["App 完整调度循环<br/>模型、工具、并行、上下文、结束判断"]
-        Tools["工具与业务服务插件"]
-        Protocols["MCP / ACP 服务插件<br/>官方 SDK 与协议会话"]
-        App -->|"发现与调用"| Registry
-        Tools -.->|"注册描述与处理器引用"| Registry
-        Protocols -.->|"注册服务与动态能力"| Registry
-        Runtime -->|"调用准确实例"| App
-        Runtime -->|"调用准确实例"| Tools
-        Runtime -->|"调用准确实例"| Protocols
-        Tools -->|"受管 SDK"| Runtime
-        Protocols -->|"受管传输"| Runtime
-    end
-    User --> Shell
-    Surface <-->|"认证 HTTP + 复用事件 WS"| Host
+    UI[Chat / 设置等前端插件] --> FB[前端宿主：挂载、代理、环境]
+    FB --> GW[认证网关：调用、流、订阅]
+    GW --> HOST[后端宿主：目录、绑定、作用域、权限]
+    APP[Agent Loop / Provider / MCP / ACP 等后端插件] --> HOST
+    HOST --> APP
+    HOST --> BASE[八项基础插件 API]
+    BASE --> OWNER[项目已有 SSH / SFTP / SQLite / Node 能力]
 ```
 
-这是职责示意，不是每个方框建立一个进程或独立 npm 包。前端壳、插件进程与可信服务通过明确协议通信；模型和协议网络请求始终由拥有实际连接的 owner 管理。
+## 2. 基础能力与现有归属
 
-### 1.2 本体核心与可插拔功能
+以下八项已确认，均按“已有基础能力 → 基础插件 → 公共 API”描述，到 API 层为止；名称表示职责，具体契约与发布包划分后续确定。
 
-| 层次         | 唯一职责                                                                       | 不承担的业务                                               |
-| ------------ | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| 通用执行核心 | Run、Operation、作用域、幂等、取消、资源收敛、结果引用与恢复条件               | 聊天循环、模型选择、标题、压缩、MCP/ACP 协议、具体工具算法 |
-| 插件平台     | 包身份、验签安装、实例、用户组合、动态注册、绑定及配置存取                     | 为 App 决定工具顺序、默认模型或任务是否完成                |
-| 可信宿主     | 身份、秘密、当前授权、批准、预算、实际模型/网络/SSH/文件/Browser I/O、持久化   | 插件业务 schema、角色、提示词、远端协议的完整执行算法      |
-| App 插件     | 完整调度、模型选择和请求组织、工具曝光、并行与分支、上下文/压缩/标题、展示内容 | 签发权限、修改宿主账本、绕过真实效果准入                   |
-| 能力插件     | 工具、可供其它插件调用的服务、MCP/ACP 协议、说明和业务配置                     | 自行提高调用者权限、持有其它 App 数据或全局管理身份        |
-| 前端插件     | App UI、插件设置页、私有业务交互                                               | 宿主 Cookie、可信批准与秘密输入、全局 Vue/路由注入         |
+### Remote
 
-“小核心”是依赖方向，不是把所有可信实现改名为 core。新增功能若只组合已有受管能力，只更新插件；若需要宿主从未提供的特权访问或新的内核数据结构，仍需本体升级。插件私有文档/schema 的变化使用自己的 namespace 和数据迁移，不为新增角色、记忆类型或工具参数增加宿主 SQL 表或 Shared 业务联合。
+```text
+Remote 基础能力（项目已有 SSH、远程进程及 PTY 实现）
+    → Remote 基础插件
+    → Remote API（命令、进程、终端输入输出、尺寸及生命周期）
+```
 
-核心自身只依赖作用域/准入、调用与回执、内容引用和资源关闭契约。模型、SSH、文件、Browser 是独立的可信能力实现，经装配交给调用侧，不成为运行核心必须依赖的服务。Memory 的分类/检索、Skills 组织、标题、压缩、提示词和思考策略由插件持有；本体只提供已有授权的数据/文件/模型能力。检验边界时应能在未安装聊天、MCP、Browser 的情况下启动核心并运行一个确定性 App。
+复用 Backend `modules/remote` 与 `platform/ssh`，连接配置、凭据、代理及主机信任沿用本体。
 
-扩展机制按真实消费者渐进实现：一个作用域 Registry、一个调用入口、一套资源生命周期即可，不复制工具/服务两套调度器。新业务 contract 和实例内事件使用发布者命名空间与独立 API 版本，Host 不维护所有业务名称枚举；App、工具、服务、UI 是贡献用途，不是互斥包类型，一个包可同时提供多个用途。新增一种宿主交互位置或特权仍需明确的宿主支持，不能靠任意 hooks 绕过边界。
+### RemoteFile
 
-### 1.3 dsh 借鉴依据
+```text
+RemoteFile 基础能力（项目已有远程文件实现，以 SFTP 为主）
+    → RemoteFile 基础插件
+    → RemoteFile API（目录、文件信息、读写、传输、移动及删除）
+```
 
-固定参考 [deepseek-harness / fcc0ad46](https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159)，不以其当前主分支的变化替代本次证据。
+复用 Backend `modules/remote/files`；必要的远端命令沿用已有 Remote 能力，不另建连接管理。
 
-| 已核实机制                                                                                                                                                                                                                                                                                                  | Nexus 的取法                                                                |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Agent registry 与独立 agent-loop](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/agent/src/index.ts)                                                                                                                                          | App 注册实际运行入口，自己执行完整循环；Host 不硬编码默认循环               |
-| [工具 register、resolve 与 disposer](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/tools/src/index.ts#L128)                                                                                                                                   | 作用域注册、每次决策固定已解析定义、准确撤销，不按全局同名工具重新路由      |
-| [scope 生命周期](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/scope/src/index.ts#L137)、[Cordis 依赖者释放](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/reflect.ts#L291) | 注册及资源有明确归属；依赖就绪后启用消费者，先排空消费者再释放 provider     |
-| [每实例 MCP client](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/mcp/mcp-client/src/index.ts#L203)                                                                                                                                                | 协议客户端、动态目录与生命周期归服务插件，不留在本体专用 IntegrationService |
-| [出站 ACP provider](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/subagent/subagent-acp/src/index.ts#L76)                                                                                                                                          | ACP 可作为可选服务；与其 packages/acp/acp 入站 server 区分                  |
+### Database
 
-dsh 不是只能运行单 Agent；其 registry、子 Agent 和 ACP provider 支持多种装配。酒馆的多角色发言也不必等同于多个独立 Agent，角色与发言顺序可以是一个 App 的私有调度。
+```text
+Database 基础能力（本体现有 SQLite 实现）
+    → Database 基础插件
+    → Database API（记录读写、条件查询、索引及事务/原子更新）
+```
 
-借鉴机制，不直接引入 Cordis 进程内 Context。dsh 的对象/函数注入依赖可信进程环境；Nexus 跨进程、跨浏览器传递描述快照和受管引用，额外保留身份、权限、持久效果与恢复边界。不增加另一套 DI 框架、通用工作流 DSL 或全局事件总线。
+业务数据结构由使用方插件定义，公开契约与数据隔离方式后续细化。Database 操作记录与事务，LocalFile 操作路径、目录和文件字节；插件按需选择，不增设统一 Storage 中间层。
 
-## 2. 子功能与目录
+### SecretBox
 
-### 2.1 本体目录
+```text
+SecretBox 基础能力（本体现有 Node crypto AES-256-GCM 实现）
+    → 加密基础插件
+    → 加密 API（字符串加密、解密及上下文绑定）
+```
 
-前后端继续使用一致的 `agent/plugins` 归属；不恢复独立 `packages/plugin-frontend-sdk`，也不为尚无其它消费者的“通用插件平台”提前抽顶层产品模块。以下路径对应当前源码，不按概念方框机械增加目录层级。
+复用 Backend `platform/security/secret-box.ts`，实例密钥由宿主管理，不向插件暴露。上下文由宿主根据调用身份与授权范围绑定，不能由插件任意指定其他用户或插件的范围；上下文校验不代替权限校验。当前仅有内部工具实现，公开 API 尚未实现。
 
-| 当前路径                                                                              | 职责与真实消费者                                                                                                          |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Backend `modules/agent/plugins/{service,model,storage,adapters}`                      | 包、仓库、安装、组合、实例、配置与连接；分别由具名 Plugin/Repository/Instance/Connection Service、Model 及存储 owner 承担 |
-| Backend `modules/agent/plugins/registry/model`                                        | 作用域描述、注册代、发现、准确 binding 与事件；App、工具、服务及 Surface 消费                                             |
-| Backend `modules/agent/plugins/service/plugin-runtime-service.ts`、`adapters/runtime` | 隔离进程、实例注册、调用与释放；技术进程由 Platform owner 持有                                                            |
-| Backend `modules/agent/plugins/sdk`                                                   | 公开后端 SDK4；只暴露受管能力，不导出 Service 容器                                                                        |
-| Backend `modules/agent/{scope,runs,operations}`                                       | App/会话身份、通用 Run、操作账本与资源归属；Operation 不依赖模型 step 或工具名称                                          |
-| Backend `modules/agent/{governance,providers,artifacts,tools,integrations}`           | 准入、模型、内容及受管 I/O；经窄能力装配到执行侧，插件持业务算法和协议客户端                                              |
-| Backend `modules/agent/interfaces`、`register.ts`                                     | HTTP/WS/RPC 边界及唯一装配                                                                                                |
-| Frontend `features/agent/plugins/{api,model,components,composables}`                  | 市场、已安装列表、配置与连接编辑的边界、状态和组件                                                                        |
-| Frontend `features/agent/plugins/{host,sdk}`                                          | App/Settings iframe、可信交互与浏览器 SDK；应用壳保留窗口、App 选择及通用执行观察                                         |
-| Shared `agent/{plugins,runs,operations}`                                              | 双端协议、公开 SDK 类型、严格解码及安全错误；不承载执行实现或存储行                                                       |
+### LocalProcess
 
-每个有实际数据/用例的子功能按既有 Service → Model → storage/Adapter 分层。Service 持流程与政策，Model 做应用/存储/技术转换，Adapter 持 SQL 与技术资源；不能因为动态注册而绕过 H-04–H-08。内部协作使用窄契约，不绕到 HTTP 或模块 public 做一次空转。
+```text
+LocalProcess 基础能力（Node 子进程）
+    → LocalProcess 基础插件
+    → LocalProcess API（启动、标准输入输出、退出通知、取消及关闭）
+```
 
-### 2.2 独立插件仓库
+支持参数、工作目录与环境变量，进程生命周期绑定插件作用域，不依赖 Agent Run；PTY 按实际需求确定。LocalProcess 负责本机执行，Remote 负责远端执行。MCP stdio、ACP 客户端可使用本机进程能力，其协议与业务仍归普通插件。
 
-正式实现仍放在 [nexus-agent-plugins](https://github.com/0honus0/nexus-agent-plugins)。以下是发布职责，不要求每个小功能单独建包：
+### HTTP
 
-| 包/发布职责                                | 内容                                                                     |
-| ------------------------------------------ | ------------------------------------------------------------------------ |
-| `nexus.agent`                              | 默认聊天/图片 App 的完整循环、上下文、压缩、标题、思考等级解释与展示策略 |
-| `nexus.ui.chat`                            | 聊天 UI、虚拟历史、输入区、文件/GIF 预览和工具展示；仅消费公开前端 SDK   |
-| `nexus.tools.remote`                       | 远程工具定义、命令组织、分页/检索和结果适配                              |
-| `nexus.tools.browser`                      | Browser 工具定义与业务组合                                               |
-| `nexus.tools.agent`                        | 发现/按需加载、Skills/Memory 检索、子 Agent 和允许的插件配置工具         |
-| `nexus.tools.integrations`                 | MCP/ACP 的模型工具适配；消费服务契约，不另建协议客户端                   |
-| `nexus.services.mcp`、`nexus.services.acp` | 官方协议 SDK、连接/会话算法、动态贡献和各自设置页面                      |
+```text
+HTTP 基础能力（Node HTTP／fetch）
+    → HTTP 基础插件
+    → HTTP API（请求、流式响应及取消）
+```
 
-服务方法不自动曝光给模型；App 可以直接消费服务，工具包也可以把服务包装成模型工具。普通工具插件可自行注册模型工具，安装第三方工具不要求修改 integrations 包。推荐组合是可编辑预设，不能变成 App 签名中的全部可选插件白名单。
+负责后端出站 HTTP 通信；供应商协议、鉴权方式与重试策略由使用方插件负责。宿主仍负责调用身份、权限与资源生命周期，前端到宿主的通信另归插件宿主机制。
 
-MCP/ACP 等包可以携带后端、设置页、schema 和说明。UI-only 包可单独更新；若同一包包含后端，整个包更新须按后端影响排空。完整包独立克隆、构建和测试，不从本体复制源文件或引用私有路径。Full-stack 示例保留为模板/测试用途，不进入默认产品推荐。
+### WebSocket
+
+```text
+WebSocket 基础能力（后端 WebSocket 客户端）
+    → WebSocket 基础插件
+    → WebSocket API（连接、收发、关闭及状态事件）
+```
+
+负责后端出站双向通信，连接绑定插件作用域；消息协议、心跳与重连策略由使用方插件负责。浏览器与宿主之间的通信归插件宿主机制。
+
+### LocalFile
+
+```text
+LocalFile 基础能力（Node 文件系统）
+    → LocalFile 基础插件
+    → LocalFile API（目录、文件信息、读写、移动及删除）
+```
+
+操作本体所在机器的文件，支持流式读写，访问范围由宿主授权。配置、附件、日志等业务语义由普通插件负责；本机文件操作与 Database 的记录、查询及事务分别提供能力。
+
+### 插件宿主机制
+
+采用统一的服务契约、事件声明与作用域机制。基础插件与普通插件共用注册、依赖、调用和订阅规则，基础插件额外通过可信适配访问原资源 owner。
+
+#### 子功能与代码归属
+
+本体采用 Backend `modules/plugins`、Frontend `features/plugins`、Shared `plugins`，双 SDK 各放所属模块的 `sdk`。这是目标目录，尚未移动源码；当前实现仍见 AGENT。一次替换真实消费者，不保留 `agent/plugins` 重导出或旧入口兼容树。
+
+```text
+nexus-terminal/
+└── packages/
+    ├── backend/src/
+    │   ├── bootstrap/                     # 装配现有模块与通用插件宿主
+    │   ├── modules/
+    │   │   ├── plugins/
+    │   │   │   ├── packages/              # 仓库、发布者信任、验签、安装与更新
+    │   │   │   ├── instances/             # 逻辑实例、组合选择、激活配置引用
+    │   │   │   ├── registry/              # 契约、目录、依赖及精确绑定
+    │   │   │   ├── runtime/               # 作用域、调用、流、订阅及资源排空
+    │   │   │   ├── permissions/           # 授权、委托和可信批准
+    │   │   │   ├── foundations/           # 八项基础插件的可信适配
+    │   │   │   ├── snapshots/             # 宿主元数据及插件命名空间的备份接入
+    │   │   │   ├── interfaces/            # http / ws / ipc 的唯一插件协议入口
+    │   │   │   ├── sdk/                   # 后端公开 SDK 源码
+    │   │   │   ├── public.ts              # 真正跨模块的安全接口
+    │   │   │   ├── public-errors.ts
+    │   │   │   ├── register.ts
+    │   │   │   └── migrations.ts          # 只编排，不放 SQL
+    │   │   ├── remote/                    # 原 SSH、SFTP、远端进程及突变 owner
+    │   │   ├── targets/                   # 原连接、凭据、代理及目标配置
+    │   │   └── ...                        # access / operations 等原有模块
+    │   └── platform/                      # Node、SQLite、网络、加密、隔离等技术实现
+    ├── frontend/src/
+    │   ├── features/plugins/
+    │   │   ├── management/                # 市场、已安装项、来源与实例管理
+    │   │   ├── host/                      # iframe、Surface、可信交互及通用窗口壳
+    │   │   ├── permissions/               # 宿主授权与确认展示
+    │   │   ├── i18n/                      # 仅宿主管理与可信交互的文案
+    │   │   ├── api/                       # 宿主 HTTP/WS 接入与 wire 投影
+    │   │   ├── model/                     # 本模块共用的前端应用类型与 mapper
+    │   │   ├── sdk/                       # 前端公开 SDK 源码
+    │   │   └── public.ts
+    │   ├── app/                           # 原产品路由、设置分类和页面装配
+    │   └── foundation/                    # 原通用 UI，不承接聊天或模型逻辑
+    └── shared/src/plugins/
+        ├── packages/                      # 包声明、签名引用、目录及安装协议
+        ├── instances/                     # 实例、组合与宿主激活配置引用协议
+        ├── registry/                      # 契约描述、发现、绑定与目录事件
+        ├── runtime/                       # 调用、流、订阅、生命周期及 SDK 公开类型
+        ├── permissions/                   # 真实宿主权限及批准的通用协议
+        └── foundations/                   # 八项宿主基础 API 的公开契约
+```
+
+这些目录表示职责边界，不要求每个目录立刻创建完整文件模板。Backend 的每个实际子功能按需组织 `service/`、`model/`、`storage/`、`adapters/`，内部类型归所属 `model/*-types.ts`；通信统一在模块 `interfaces`。Frontend 的具体管理与权限应用类型归对应子功能，只把确实跨子功能共用的类型放模块 `model`；不是把所有状态集中进一份 Store。Shared 各实际子域按 `values/model/http/events` 及 codec 组织，不建立全量业务类型入口。
+
+| owner                 | 职责与边界                                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/packages`    | 管包与仓库事实；不负责模型目录，不用“包注册表”混淆运行服务目录                                                                  |
+| `plugins/instances`   | 保存实例启停、服务/UI 选择及已批准配置修订引用；普通插件的配置值、默认值、校验与设置页面仍归 Settings/业务插件                  |
+| `plugins/registry`    | 原子发布契约与可见目录、解析依赖、颁发精确绑定；不执行 Agent 调度                                                               |
+| `plugins/runtime`     | 通用作用域与调用 owner，持 IPC 生命周期、事件、背压及关闭；不建立宿主 Run/Thread 数据模型                                       |
+| `plugins/permissions` | 校验调用身份、基础特权、委托、目标范围和可信批准；模型调用次数等业务预算不放这里                                                |
+| `plugins/foundations` | 按八项基础 API 适配既有可信 owner，做授权、类型转换及资源绑定；不包含模型工具 schema、提示词、MCP/ACP 协议或 Agent 专用日志投影 |
+| `plugins/snapshots`   | 接入宿主包/实例/授权与插件数据命名空间，不逐条解释 Agent 消息、工具或模型业务行                                                 |
+| `features/plugins`    | 插件市场与通用挂载、权限、环境及窗口壳；聊天、模型选择、思考等级及会话虚拟列表归 UI 插件                                        |
+| `shared/plugins`      | 通用宿主及基础 API 契约；业务契约随对应插件/契约包发布，不重新汇总成新的 `shared/agent`                                         |
+
+Service 持有用例和政策，Model 持有应用类型及技术/存储转换，Adapter 持有 SQL、传输与真实资源。模块根 `register.ts` 只装配，按真实子功能提供装配函数，不再形成原 `agent/register.ts` 同时组合模型、Run、工具与安装管理的巨型入口。
+
+#### 八项基础插件放在哪里
+
+本体保留必要的可信适配，在 `modules/plugins/foundations/{remote,remote-file,database,secret-box,local-process,http,websocket,local-file}` 按同一服务注册机制发布 API。它们是宿主提供的基础插件，不再套一层 Agent driver；注册表按契约处理，不按目录名给予特权。
+
+Remote/RemoteFile 调用 `modules/remote/public.ts` 与 Targets 的安全公开接口；SQL 连接、密钥、原生网络/文件/进程句柄留 Platform 或原模块。Foundation 内只能出现实际授权与资源适配，不能复制原 SSH 池、SFTP 实现或数据库引擎。不为八项接口在独立仓再建立八个仅转发调用的空壳包；以后确有独立可更新的组合或转换逻辑时，再作为普通插件交付。
+
+基础插件的公共 API 与这些可信实现一起随本体交付，新增真正的宿主能力需要更新本体。Provider、Agent、工具、Chat 和协议客户端组合已有 API 时可以只更新独立插件，不要求更新本体。基础能力和普通插件分仓的成本与更新边界以此为准。
+
+#### 独立插件仓目标目录
+
+继续使用 [nexus-agent-plugins](https://github.com/0honus0/nexus-agent-plugins)，其主分支已清空旧文件；旧实现从归档标签查阅。以下名称仅表示职责提案，不是已发布的新包，不强制沿用旧插件ID或兼容旧SDK，也不要求为每个业务函数发布一个包。
+
+```text
+nexus-agent-plugins/
+├── plugins/
+│   ├── nexus.agent/                       # Loop、Run、会话、上下文、记忆及调度
+│   ├── nexus.ui.chat/                     # 聊天 UI、会话展示、命名及其后端协调
+│   ├── nexus.providers.openai-compatible/ # 现有模型协议与供应商目录/能力逻辑
+│   ├── nexus.services.settings/           # 配置值、schema、校验与设置组合
+│   ├── nexus.services.credentials/        # 秘密记录、引用及受管使用
+│   ├── nexus.services.content/            # 附件、完整日志与生成文件引用
+│   ├── nexus.services.mcp/                # 现有 MCP 协议服务
+│   ├── nexus.services.acp/                # 现有 ACP 协议服务
+│   ├── nexus.tools.remote/                # 远端工具与模型可见说明
+│   ├── nexus.tools.browser/               # CDP 客户端、浏览器工具及设置
+│   ├── nexus.tools.agent/                 # Agent/子任务等业务工具
+│   └── nexus.tools.integrations/          # MCP/ACP 等协议工具适配
+├── contracts/                            # 仅真正跨包共享的纯契约
+│   ├── model/                            # Provider 与调用者共用
+│   ├── agent/                            # Agent、Chat 与 Agent 工具共用
+│   └── ...                               # content 等按实际消费者加入
+├── lib/                                  # 仅插件仓特有的构建时共享源码
+│   ├── settings-ui/                      # 设置页组合；通用控件从 nexus-terminal/ui 引用
+│   └── ...                               # 按职责命名，不复制已发布的宿主公共库
+├── package.json                          # 声明 nexus-terminal 及真实构建依赖
+├── pnpm-lock.yaml                        # 锁定成品版本与完整性，不保存 sdk 成品副本
+├── templates/                            # 单一插件骨架与生成入口
+├── tests/                                # 跨插件互操作、浏览器产品流程及受控服务
+├── scripts/                              # 统一构建、检查、签包、目录及发布
+└── catalog/                              # 发布目录资产，不放业务实现
+```
+
+契约只由一处定义：仅本包使用的公开契约放该插件 `contracts/`；多个独立包共同实现/消费的放根 `contracts/<域>`，以纯契约包依赖，不再复制到各包或本体 Shared。契约包无运行服务、无安装实例、无生命周期；不引入额外“契约插件”。目录中列出共享域不代表必须预先创建空包。
+
+每个普通插件采用一致的源码布局：
+
+```text
+plugins/<plugin-id>/
+├── manifest.json
+├── package.json
+├── contracts/                    # 本包拥有的公开声明；共用契约改为显式依赖
+├── src/
+│   ├── backend/                  # activate、服务处理器及业务 service/model
+│   ├── frontend/                 # App/设置 UI，按实际需求组织
+│   └── shared/                   # 本包双端私有类型与转换，不复制公共契约
+├── migrations/                   # 本插件数据变更，经 Database API 作用于自己的命名空间
+├── tests/
+│   ├── logic/
+│   └── integration/
+├── docs/                         # 设置说明、工具使用及维护信息
+└── dist/                         # 构建出的 manifest 引用资产，不作为手写源码
+```
+
+仅有前端或后端的插件不创建另一端空目录。小插件在端内用少量具名文件，复杂子功能再按职责细分，不机械给每个函数建立目录。原 `src/run.mjs`、`src/settings`、根 `backend/frontend` 混合布局逐包转为上述源码/产物边界；产物由构建生成，签包从对应 `dist` 读取，不在源码树手工维护第二份实现。
+
+SDK 源码仍只在本体双端模块内，通用 UI 源码归本体 Frontend foundation；从这些唯一 owner 自动构建单一公开包 `nexus-terminal`。独立仓通过标准包依赖消费，不再保存 `sdk/*.mjs`、Shared 压缩包或宿主源码副本；Chat 与各设置页的重复通用控件统一改用公开 UI 入口。`lib/settings-ui` 保留插件设置页组合，不复制宿主基础控件，其余库按真实职责归属。共用代码随消费者构建进包，不成为未经声明的共享可变运行状态。工作区和构建脚本按插件 manifest/实际 workspace 发现模块，不再为新增插件手工追加宿主模块名单。
+
+#### 单包发布与体积边界
+
+用户已确定公开包名为 `nexus-terminal`，先包含双 SDK、宿主公开契约与通用 UI/必要纯工具，后续通过子路径扩展。发布单个 npm 包不新增独立 SDK 源码 workspace，也不发布整个终端应用。以下为目标入口，尚未构建或发布：
+
+| 公开入口                                                                    | 来源与职责                                                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `nexus-terminal/sdk/backend`                                                | Backend `modules/plugins/sdk` 的协议代理及生命周期客户端，不包含 SSH/数据库等宿主实现 |
+| `nexus-terminal/sdk/frontend`                                               | Frontend `features/plugins/sdk` 的 MessagePort 代理，不加载 UI、Vue 或后端模块        |
+| `nexus-terminal/contracts/<子域>`                                           | Shared `plugins` 中实际公开的宿主/基础 API 类型、取值与 codec；插件业务契约仍归独立仓 |
+| `nexus-terminal/ui`、`nexus-terminal/ui/<组件>`                             | Frontend foundation 的通用控件，类型与实现同源；不依赖应用 Router、Store 或业务页面   |
+| `nexus-terminal/ui/styles.css`、`nexus-terminal/ui/styles/<主题或职责>.css` | 通用主题与控件 CSS，明确导入；完整样式入口与实际需要的细分入口均可用                  |
+| `nexus-terminal/utils/<职责>`                                               | 确有公开消费者的纯工具，按需增加，不建立兜底杂项集合                                  |
+
+公开 npm 包、插件安装包、运行服务实例为三种不同对象：npm 包在插件开发/构建时安装，前后端代理通过原宿主机制取得能力；运行服务仍经 registry 绑定，不因 import 获得权限。纯 JS/浏览器依赖编入签名插件成品，用户安装插件时不运行 npm；原生依赖和外部可执行程序若有实际需求，另按其真实运行条件设计，不能假定打包能消除系统依赖。
+
+体积按三个指标分别控制：npm 压缩包与解包文件、依赖安装闭包、插件最终 JS/CSS 产物。子路径和 tree shaking 主要降低最终产物，不让 npm 只下载被导入的部分；单包后续增加公开功能时下载体积仍可能增长。
+
+本体构建按以下边界优化，保持现有应用 UI 与行为：
+
+- 发布从真实 owner 到 `dist/npm/nexus-terminal/` 的生成成品；为该目录单独生成 `package.json`，仓库根仍保持开发入口，不直接解除根 `private` 后发布整个项目。`files` 使用公开 JS、声明、CSS、必要资产及 LICENSE/README 的白名单，排除应用构建、源码快照、测试、媒体及缓存；sourcemap 按调试需求单独交付。
+- 使用 ESM 多入口及显式 `exports`，前后端入口隔离，不建立同时加载 Node 与浏览器模块的根入口。公共模块保留可裁剪的模块结构/共享 chunk，不为每个入口重复内联同一套 codec，也不把整个 Shared 的应用协议作为发布内容。`d.ts` 依赖闭包必须完整，不能遗留私有 `@nexus-terminal/shared`、源码别名或 workspace 路径。
+- UI 采用现有 Vite/Vue 工具的库构建，独立生成 JS/声明及 CSS；没有副作用的 JS 按真实情况标记，CSS 保留 `sideEffects`。初版优先复用现有职责样式，只有确认存在体积收益时再细分，避免为裁剪样式改变原视觉或做新 CSS 框架。
+- 发布依赖根据公开代码的真实闭包生成，不继承本体前后端依赖清单。Vue、Reka 等仅 UI 需要的运行依赖采用明确版本范围的可选 peer，UI 消费方显式安装，SDK-only 消费方无需安装；Node 内置模块保持 external。被设为 external 的其他真实依赖必须有声明，不能靠宿主偶然安装的依赖运行。
+- 不默认交付整套图标字体、编辑器、文档预览、终端、RDP/VNC、模型客户端或数据库引擎。确有公开消费者的资产另设显式入口，不能用移除必要样式/资产换取体积数字。
+- 使用现有构建器输出与 npm pack 清单核对公开闭包，不另造包管理器。CI 记录压缩/解包/依赖及代表插件构建体积，审查相对基线的增加原因，不设置无依据的固定 KB 门槛；包含 frontend-only、backend-only、单 UI 控件及完整设置页的消费检查，确保无跨环境泄漏、重复 Vue 和 CSS 被误裁剪。
+
+源码修改 → 公开入口构建/类型与消费者验收 → CI 发布不可变 `nexus-terminal` 版本 → 插件更新依赖及 lockfile → 重建并签名受影响插件。发布版本与 SDK 协议版本分开，握手继续检查宿主实际支持范围；包升级不让旧宿主获得未实现的特权。共享库版本不自动替换已安装插件的代码。第一版只采用当前 ESM 消费链，不无依据地额外交付第二套 CommonJS 成品。
+
+#### 原 Agent 目录逐项去向
+
+下表描述拆分 owner，不能按目录整体挪动后继续保留 Run 参数；真正的 SQL、凭据与远端效果事实须单独核对。
+
+| 当前目录/内容                                                                                                 | 目标去向                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend `agent/plugins`                                                                                       | 按职责进入本体 `plugins/{packages,instances,registry,runtime,...}`；配置值和凭据业务移 Settings/Credentials 插件                                                     |
+| Backend `agent/scope`                                                                                         | 包实例与组合进入 `plugins/instances`；Thread、会话命名字段及聊天关联移 Agent/Chat 契约与数据；不保留宿主 `AgentStateApi`                                             |
+| Backend `agent/runs`、`context`、`memory`                                                                     | 进入 Agent 插件；通用取消、作用域及资源释放提取到宿主 runtime/真实 I/O owner                                                                                         |
+| Backend `agent/providers`、Agent 专用 `platform/ai`                                                           | 进入 Provider 插件，包括请求适配、目录、协议、推理及用量；主机通用 HTTP/网络保留 Platform                                                                            |
+| Backend `agent/tools`                                                                                         | 工具说明和业务调度进入工具插件；SSH/文件/进程及持久效果收尾回实际基础 owner；不保留宿主的工具名/操作枚举                                                             |
+| Backend `agent/integrations`、Agent 专用 `platform/browser`                                                   | CDP 客户端、节点引用、工具及设置归 Browser 插件，优先通过已有 HTTP/WebSocket API 接入成熟库；实际网络授权和连接生命周期仍受管，不与 RDP/VNC 共用的浏览器能力一起删除 |
+| Backend `agent/execution`                                                                                     | 模型请求数、Token、工具次数与 Agent 业务预算归 Agent/Provider 插件；真实磁盘/进程/连接资源政策留实际 owner，不复制隐含总上限                                         |
+| Backend `agent/governance`                                                                                    | 宿主真实权限、目标限制和可信批准进入 `plugins/permissions`/原目标 owner；Agent 审批记录和模型交互归业务插件，不能把放行权一起搬走                                    |
+| Backend `agent/operations`                                                                                    | 真实 I/O 的派发回执/未确认效果进入实际 owner；Agent 步骤、工具调用、历史投影归插件；普通服务包装不保留万能持久账本                                                   |
+| Backend `agent/artifacts`                                                                                     | 内容目录、引用及清理业务进入 Content 插件；Blob/文件技术实现保留原 Platform，秘密或文件授予仍由真实边界控制                                                          |
+| Backend `agent/snapshots`                                                                                     | 通用宿主快照接入进入 `plugins/snapshots`；插件数据通过 Database/文件资源注册备份，移除本体对具体消息/工具/模型行的解释                                               |
+| Backend `agent/interfaces`、`register.ts`、公共类型与错误                                                     | 通用接口/错误进入 `plugins`；具体业务由插件服务契约公开，删除原固定 Run/模型/工具路由及装配                                                                          |
+| Backend 根部 `agent-errors/failure/storage-failure/tool-identity/validation` 与 `service/agent-request-owner` | 按真实消费者拆分：宿主身份、生命周期与有限错误归对应宿主子功能；Run/工具失败与校验归业务插件；不改名保留全能 Agent 工具集                                            |
+| Frontend `features/agent/plugins` 及 `host`                                                                   | 安装管理与可信挂载移 `features/plugins`；内容相关选择器保留通用文件交互，Artifact 业务投影改由 Content 契约承接                                                      |
+| Frontend `features/agent/settings`、`api/model/composables`                                                   | 安装/授权/宿主状态留 `features/plugins`；Provider、预算、会话、思考等级、任务状态和工具展示移对应插件；逐文件拆分，不整目录平移                                      |
+| Frontend `features/agent/files`、`next`、固定 Run 事件/诊断                                                   | 文件业务和调试面归所属插件；纯开发入口按真实消费者删除或迁移；通用宿主诊断留宿主，不保留第二套聊天页面                                                               |
+| Frontend `features/agent/i18n`、`locale-format.ts`、`runtime/native-tool-summary.ts`、`events` 与 `public.ts` | 市场/授权/挂载文案归 `features/plugins/i18n`；聊天/工具文案及摘要归对应插件；通用格式化复用原基础设施；出口仅暴露实际壳消费者，不遗留业务类型转导出                  |
+| Shared `agent/*`                                                                                              | 通用协议转 `shared/plugins`；Run/Thread/模型/工具/内容业务契约转独立仓；删除旧跨端枚举、解码及失效出口                                                               |
+
+本体最终不再保留 `modules/agent`、`features/agent`、`shared/src/agent` 业务目录。产品中的“Agent”名称、设置分类与启动入口可以继续存在，由原页面装配选择的插件 Surface；它们不要求本体持有 Agent 业务类型，也不借目录迁移修改现有 UI。
+
+#### Platform 逐项剥离
+
+剥离范围包括 `packages/backend/src/platform`，不只调整三个 Agent 目录。技术实现属于哪个 owner，要看它提供的语义、真实消费者和特权边界；不能因为当前只被 Agent 引用就全部搬走，也不能因为位于 Platform 就保留 Agent 专用实现。
+
+| 当前 Platform 内容                                                   | 目标归属与处理                                                                                                                                                                                                                                                   |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ai/*`                                                               | 全部现有模型目录、OpenAI-compatible 协议、请求/流解析、推理状态、图片与文本合批进入 Provider 插件的 `src/backend`；删除宿主模型 Port、模型错误与模型专用配额。真实联网授权、凭据注入、连接/响应关闭仍通过 HTTP/WebSocket 基础 API 执行，不随协议代码迁出可信边界 |
+| `browser/*`                                                          | 当前 BrowserClient 及 Puppeteer/CDP 实现只供 Agent 浏览器使用，进入 Browser 插件的 `src/backend`；节点引用、DOM 快照、截图、操作及控制台语义由插件拥有。经宿主基础 API 适配连接，端点准入与真实网络资源生命周期归宿主                                            |
+| `blobs/text-log-store.ts`、`adapters/native-text-log-store.ts`       | 当前只供 Agent 完整工具日志使用，记录格式、索引、追加/续读与清理策略进入 Content 插件；文件操作改经 LocalFile，不能原样携带 `node:fs` 绕过授权。Bootstrap 不再单独初始化 Agent toolLogs Store                                                                    |
+| `blobs/content-inspector.ts`、`adapters/native-content-inspector.ts` | 当前只供 Agent Artifact 使用，内容类型探测进入 Content 插件；使用成熟 file-type 等库，受管字节流的读取与关闭经基础 API 维持                                                                                                                                      |
+| `blobs/blob-store.ts`、`adapters/native-blob-store.ts`               | 原背景图片与快照恢复也在使用，保留通用 Blob 技术实现；Content 不再深层 import 它，由 LocalFile 等公开 API 提供受管 I/O。目录存在不意味着向 npm 公开原生文件句柄                                                                                                  |
+| `isolation/*`                                                        | 保留隔离进程、IPC、恢复及真实进程清理的技术实现，由通用 `plugins/runtime` 消费；移除 worker 的默认 `agent` 导出、Agent 专用报错及旧双调用签名，采用通用注册/调用协议                                                                                             |
+| `packages/*`、`validation/*`                                         | 保留归档读取、签名验证、本体版本读取及通用 Schema 校验，供插件宿主使用；包信任/安装政策在 `plugins/packages`，动态契约政策在 registry，不能移入不可信普通插件或保留 Agent 业务枚举                                                                               |
+| `network/*`                                                          | 保留受管出站请求、DNS/TLS/目标约束、字节流与真实关闭能力；HTTP/WebSocket 基础适配按需复用/补齐，不复制一份网络栈。供应商认证格式、模型重试和 MCP/ACP 协议语义归使用方插件                                                                                        |
+| `http/*`                                                             | 保留本体 Fastify、入站 HTTP/WS、流交付与关停技术层；原 Agent 业务路由由通用插件网关替换。此处服务端 WS 与出站 WebSocket 基础 API 分别管理                                                                                                                        |
+| `ssh/*`、`commands/*`、`archive/*`、`text/*`、`transfers/*`          | 现有 Remote、文件管理器及跨服务器传输仍消费，保留实际技术 owner。模型可见工具说明、命令批次编排和工具结果渲染归普通插件；通用参数编码、字节读写与既有非 Agent 批处理能力继续由原 owner 提供                                                                      |
+| `desktop/*`、`terminal/*`、`docker/*`、`tools/*`、`system/*`         | RDP/VNC、挂起终端、Docker 管理、远端工具安装与服务器状态仍在使用，保留。`desktop/adapters/browser-desktop.ts` 是远程桌面传输，不属于待迁出的 Agent CDP 实现；`platform/tools` 也不是模型工具目录                                                                 |
+| `storage/*`、`security/*`                                            | 保留 SQLite、快照引擎、密钥、认证、令牌与主机安全技术能力；Agent 业务表/解码不进入这些目录作为运行时兼容层，通用 Database/SecretBox 由可信基础适配公开                                                                                                           |
+| `logging/*`、`lifecycle/*`、`cache/*`、`images/*`、`delivery/*`      | 诊断、资源排空、登录选项缓存、背景图片验证和通知投递有真实非 Agent 消费者，保留。插件只消费公开的诊断及必要纯工具，不深层引用宿主技术实现                                                                                                                        |
+| 空的 `acp/adapters`、`mcp/adapters`                                  | 当前无实现，实施清理时移除空目录；MCP/ACP 协议实现继续归各服务插件，不在 Platform 恢复同名旧实现                                                                                                                                                                 |
+
+`isolation/adapters/module-worker.ts` 当前将 `agent` 作为默认导出，并按是否传入 exportName 切换调用签名；这些是本轮确认要解除的耦合，不能只把上层 Agent 目录改名。通用生命周期方法仍由宿主协议定义，业务方法只来自已注册契约，不开放任意导出名作为调用入口。
+
+现有 `ai/adapters/model-sdk-request.ts` 直接使用 OpenAI SDK/Undici；迁移时保留成熟供应商库，但其网络执行要适配宿主 HTTP。现有 CDP 客户端同样需验证成熟库的受管 transport 接口；原页面 URL 过滤不等于宿主能验证任意远端 CDP 行为，端点准入与插件协议政策须分别验收。纯协议实现移出不能顺带删除真实安全与清理保证。
+
+所有权变化同步依赖和测试：OpenAI/Puppeteer 在本体没有其他真实消费者后移除后端依赖，由 Provider/Browser 插件构建声明；`file-type` 仍被本体背景图片验证使用，不能随 Content 迁移误删。模型协议、CDP、日志格式和内容探测测试随插件迁出；隔离、验签、Schema、网络安全与非 Agent 回归留本体。本轮仅登记目标去向，未修改这些源码、依赖或测试。
+
+#### Backend 旧 plugins 子域继续拆分
+
+`agent/plugins` 并不是可以整体平移的通用宿主。当前注册表、实例、SDK、连接和 Intent 仍引用 `AgentCapability`、Run、工具或 Artifact；以下按真实语义拆分，目标不保留这些业务类型的宿主替身。
+
+| 当前内容（相对 Backend `modules/agent`）                                                                  | 处理与目标 owner                                                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/service/plugin-{service,repository-service,runtime-service}.ts`、包/仓库/验签 Adapter 与 Storage | 包来源、信任、安装、激活及排空能力保留到通用宿主；服务内部的 Agent 执行入口、业务注册字段和业务错误拆出，不整类照搬                                                                                                             |
+| `plugins/registry/model/*`、`plugin-{manifest,dependency,composition,instance}-*` 及相应规则/存储         | 保留动态契约、实例、依赖和精确绑定；清除固定 Agent capability、App execution 选择器及 Agent 专属 callable 分类，按已声明契约处理。通用发布者/版本匹配继续复用 semver                                                            |
+| `plugins/model/plugin-agent-types.ts`、`plugin-run-{types,capability-types}.ts`、`plugin-app-execution-*` | Workspace 分支、Run capability 工厂和 Agent 工具/执行策略移 Agent 插件；通用调用身份、授权委托和实例依赖分别归 runtime/permissions/registry。移除按 `agent.` 前缀区分调用类型的分派                                             |
+| `plugins/model/plugin-skill-types.ts`、`plugin-skill-rules.ts`、`plugin-tool-authority-rules.ts`          | Skill 文档目录/读取、工具暴露与模型说明归 Agent/工具插件；签名包只验证资产路径、摘要及真实权限，不解析 Skill 语义或固定工具名                                                                                                   |
+| `plugins/service/plugin-intent-service.ts`、Intent model/storage/SQL                                      | 当前 Intent 把跨 App 调用、Artifact 交付、权限和持久收据绑在一起；改用通用服务调用/事件及显式资源委托，交付业务归 Chat/Content 等实际插件。迁移已有有效引用与回执后删除专用 Intent RPC/表，不为普通调用默认创建持久信箱         |
+| `plugins/service/plugin-connection-service.ts`、connection model/storage/SQL                              | HTTP endpoint、远端 argv/cwd 和协议连接设置归消费插件/Settings，秘密记录归 Credentials；底层连接、凭据受管使用、目标授权和撤销留可信基础 owner。宿主不保留仅为 MCP/ACP 设计的固定连接类型配置器                                 |
+| `plugins/service/plugin-service-transport.ts`                                                             | HTTP、远端进程字节流、背压、关闭及真实结果查询归基础 API；MCP/ACP 会话、toolCallId 和协议审批映射归服务插件。实际批准仍由宿主验证，批准送达与未知写入证据不得随旧 transport 删除；不延续仅支持 GET/POST/DELETE 的专用 HTTP 联合 |
+| `plugins/model/plugin-data-types.ts`、data/config/extension-data SQL 与私有数据清理                       | 数据与事务统一经 Database 命名空间；业务配置值、schema/defaults/校验归 Settings/业务插件。删除重复 KV/config RPC 和前端宿主表单解释器；宿主保留命名空间归属、授权、备份及保留/清除数据生命周期，配置修订引用仍进入精确绑定      |
+| `plugins/sdk/index.ts`、manifest/IPC codec 及运行错误                                                     | 公开 SDK 改为通用代理；模型/Run/工具/内容便利方法随业务契约迁插件，不靠重命名保留旧方法集合。宿主安全错误与插件业务错误分开，不让 `provider_unavailable` 代表宿主不可用                                                         |
+| `scope` 的 App 管理与执行/治理关联                                                                        | 通用实例启停、授权及 UI 选择留宿主；模型选择、目标偏好、Thread、Agent 执行政策进入对应插件。允许多个 App 和同包多实例，宿主不要求每个实例附带一个 Agent Loop                                                                    |
+
+签名 manifest 可继续携带通用设置 Surface、静态说明和契约声明，但业务字段的解释与编辑交给其服务/设置插件；不能把旧配置系统移到 `plugins/instances` 后继续由本体解释全部插件设置。
+
+#### Frontend 逐项剥离
+
+本轮核对了 `features/agent` 的宿主、管理、设置、API、模型、文件与开发入口，并追到 App、路由、设置装配和 locale 构建。迁移以保持原有桌面/手机界面、主题和交互为判据；下面的“删除”表示替换消费者后删除本体重复实现，不表示删除相应产品功能。
+
+| 当前内容（相对 Frontend `features/agent`）                                                                                                                           | 处理与目标 owner                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/components` 中市场/仓库、安装管理、安装计划、已安装项及相应 API/model/composables                                                                           | 迁 `features/plugins/management`，保留多来源合并、版本切换、信任、安装引导、数据保留/清除及实例设置入口；业务分类与设置内容改由声明驱动                                                                           |
+| `host/{AgentSurfaceHost,AgentHubWindow,AgentLauncher,AgentAppSwitcher}.vue`、`window-manager.ts`                                                                     | 通用 App/Surface 挂载和窗口壳留宿主；列表与可用性读宿主注册/激活状态，不再先读 Agent execution settings。原用户身份/管理员边界继续由授权 owner 决定，不能借解耦放宽访问                                           |
+| `host/agent-host-state.ts`                                                                                                                                           | 拆出通用窗口布局、挂载及不透明 UI 恢复状态；Run/Thread checkpoint 判别、任务/审批业务 Map 移插件。身份变化清理、旧代窗口隔离和布局恢复留宿主                                                                      |
+| `host/NativeThreadPanel.vue`、`composables/use-native-threads.ts`、`api/native-thread-api.ts`、`model/native-thread-*`                                               | 会话增删、搜索、分页、命名及选择移 Chat/Agent 插件；复核独立仓已有会话组件后合并唯一实现，删除本体重复会话面板与固定 Thread 客户端                                                                                |
+| `host/AgentTaskNotice.vue`、`use-agent-task-notices.ts`、`model/task-activity-types.ts`                                                                              | Run/usage/approval 状态解释、完成提醒和操作组合归插件；宿主仅保留确有通用需求的提示壳及显式服务动作，可信批准仍经宿主权限入口，不建立新的通用“任务中心”业务模型                                                   |
+| `plugins/host/{host-bridge,ui-host-bridge,settings-ui-bridge}.ts` 与 runtime/bridge 类型                                                                             | MessagePort、来源/nonce、身份、取消、代际、环境/主题/locale 及关闭保留；固定 `agent.runs.*`、`agent.approvals.*`、用量、内存事件和 Artifact 路径移对应插件契约，通过通用调用/流/订阅代理接入                      |
+| `plugins/host/Plugin{App,Settings}Frame.vue`                                                                                                                         | 保留通用 iframe 隔离和 Surface 生命周期；App/设置均按签名声明及实例绑定加载，移除对宿主 Agent API 的硬依赖                                                                                                        |
+| `plugins/host/HostArtifactPicker.vue`、`host-artifact-selection*`、`files/*`、`use-artifact-{picker,library}.ts`                                                     | 附件库、Thread 附加、预览业务和 Artifact 元数据归 Content/Chat；宿主保留系统文件选择及跨实例文件授予的可信交互，受控读取不由 iframe 自行放行。不能把当前带 `attach(threadId)` 的整个选择器当成基础能力保留        |
+| `settings/ModelProviderSettings*`、`ProviderModelEditor`、`ProviderCatalogCard`、`ModelRegistrySettings`、`use-provider-management`、Provider/Registry API 与 mapper | 模型目录、供应商编辑/测试、协议、默认模型与思考等级移 Provider/消费插件设置；宿主市场注册表不承接模型注册表                                                                                                       |
+| `settings/{ExecutionSettings,AppExecutionPolicySettings,AppExecutionPolicyEditor}.vue`、`use-execution-settings`、execution API/model                                | 请求数、Token、超时、上下文、子任务及存储业务政策进入 Agent/Provider/Content 设置；真实系统资源约束留原 owner，不保留宿主统一 Agent 硬限制系统                                                                    |
+| `settings/{AppManagementSettings,AppGovernanceEditor,SafetyNetworkSettings}.vue`、`use-app-{management,governance}`、`use-agent-resource-control`                    | 通用安装实例/授权、目标限制、出站访问和可信批准拆到宿主；Agent 调度、子任务及工具政策归插件。资源查看/手动关闭按真实资源 owner 接入，不丢失进行中任务确认和撤权清理                                               |
+| `settings/Agent{SettingsPanel,ExtensionsSettings,OnboardingModal}.vue`、`use-agent-onboarding`                                                                       | 设置分组/启用/必需插件安装入口保留为通用管理装配；移除“保存 Agent 预算后才允许启用”的业务依赖。Provider/运行/安全配置由对应插件设置 Surface 承接，保持原视觉与操作可达性                                          |
+| `plugins/components/Plugin{ConfigurationEditor,ConnectionEditor,Capabilities}.vue` 及 config/connection/capability 客户端                                            | 普通配置表单与连接编辑移 Settings/服务插件；真实权限声明、批准和授予展示留宿主。宿主只保存/选择已批准配置修订，不重复校验业务字段                                                                                 |
+| `api/{native-workspace-request,page-stream,native-resource-api}.ts`、`model/native-{run,resource}-*`、`native-target-preferences`、`runtime/native-tool-summary.ts`  | Run 历史/续读、目标偏好、工具摘要与 Agent 资源投影归插件；通用请求/流与取消复用项目已有基础设施，不保留第二套 Agent 请求层                                                                                        |
+| `api/management-*`、`use-agent-management-operation`、`model/management-failure.ts`                                                                                  | 仅保留真实管理操作、配置冲突、未确认写入与重新读取处理；业务失败归对应插件，不再把所有插件错误转换为 Agent 错误枚举                                                                                               |
+| `settings/QuantityInput.vue`、quantity 工具、`locale-format.ts`、i18n、`events/agent-host-events.ts`                                                                 | 确有通用消费者的控件/格式化归原 foundation，业务数量/格式化随设置插件；宿主仅保留管理/授权/挂载文案及事件，业务文案随插件。主题 token 与语言继承保持，不复制整套宿主翻译                                          |
+| `next/*`、`public.ts` 的 Agent Next 出口                                                                                                                             | 删除临时 `AgentNextDevView`、固定 Run controller/API 和专用翻译；App router 同步删除 `/__agent-next` 及其开发守卫分支。先核对其未知写入、游标及取消断言的真实接收者；不连带移除仍有用途的 Targets/Remote 开发入口 |
+
+`app/App.vue`、`app/pages/settings/SettingsPage.vue` 改消费通用插件宿主出口，产品设置分类和启动名称可继续叫 Agent；错误边界随真实 owner 记录。`build/locale-messages.ts` 自动发现功能翻译，迁移后检查键归属、重复键及三语完整性，不为保留旧 Agent 文案创建额外扫描入口。
+
+#### Shared 与模块外消费者
+
+Shared `agent/governance` 和 `agent/operations` 另按权限与效果拆分：真实宿主授权、可信批准及 I/O 效果协议归新宿主/原资源 owner，Agent 审批投影、步骤与工具业务契约归插件；不能随其他业务契约整体迁出可信边界。根部错误、codec、values 和 package exports 同步拆分，不留下新的全量 Agent 入口。
+
+| 当前内容                                                                                                                               | 处理与目标 owner                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shared `agent/{providers,runs,scope,execution,memory,collaboration,artifacts,integrations,tools}` 及业务错误/常量/codec                | 随业务转独立仓唯一契约 owner；删除本体固定业务出口，不将全量 Shared 作为 `nexus-terminal/contracts` 发布                                                                                                   |
+| Shared `agent/plugins` 的包、仓库、信任、安装计划、实例、registry、runtime/UI envelope                                                 | 提取通用部分到 `shared/plugins`；字段、codec 和取值同步实际消费者，Agent/Run 依赖不随目录改名保留                                                                                                          |
+| Shared `agent/plugins/{app-runtime,app-outcome,run-context,agent-extension,tool-schema,content,intent-*}`                              | 业务运行、工具、内容和 Intent 契约分别迁移/替换；通用实例身份、生命周期和实际权限单独提取，不把文件整体重新导出                                                                                            |
+| Shared `agent/plugins/{host-operations*,host-operation-rpc-result,frontend-events,frontend-rpc-codec,ui-streams*,events,rpc-codec}`    | 删除固定业务操作联合、Run/memory 流来源及 Workspace 合并协议；通用 envelope、ACK、代际与取消留宿主，业务输入/输出和事件由签名契约声明，不再每加工具修改本体联合类型                                        |
+| Shared `agent/plugins/{settings*,connection*,data,service-transport*}`                                                                 | 设置/凭据/协议连接归普通插件；Database、HTTP、Remote 字节流、真实批准和资源授权归各基础 API/宿主权限契约。旧 RPC 不作为新 API 的兼容入口                                                                   |
+| `bootstrap/{create-app,module-manifest,schema,data-paths}.ts`                                                                          | 替换 `AgentStateApi`、Agent 错误、register/backup、初始化/路由/WS/资源采集/关停与 owner 映射；删除宿主专用 toolLogs Store 装配，原日志按数据归属迁入 Content 命名空间后再移除旧路径。迁移链保持原版本/签名 |
+| Shared `remote/mutations/values.ts`、Remote `machines/adapters/sqlite/mutation-schema.ts` 和 `service/operation-service.ts`            | 解除 `origin='agent'` 的硬编码和 SQL CHECK 绑定，记录经宿主验证的插件来源/身份；非插件调用来源继续保留。用迁移转换旧来源事实，不能删除已有未确认效果或允许插件自报身份绕过恢复围栏                         |
+| Shared `system/diagnostics/values.ts`、Frontend `HostDiagnosticsPanel.vue` 与 Bootstrap 资源采集                                       | 宿主诊断键从 Agent owner 调整为真实插件宿主 owner，同步图标/配色/采集器；插件诊断作为有身份的子资源，不接受任意插件冒充宿主模块，不因改名丢失资源泄漏观测                                                  |
+| Backend `operations/interfaces/http/operation-observer.ts`、Shared `operations/values.ts`、Frontend `audit/model/auditPresentation.ts` | 替换固定 Agent execution-settings 路由事件映射；新插件行为使用通用宿主调用/权限/效果审计及已验证来源，业务摘要归插件。继续不读取请求秘密；历史 `AGENT_*` 记录可保持既有审计展示，不构成旧业务 API 兼容层   |
+
+扫描同时区分无关同名项：远程桌面 browser adapter、系统远端工具安装、浏览器 userAgent、其他功能的 `next` 和原 SSH/SFTP owner 均不在删除清单。所有清理须以实际 import、路由、构建和数据消费者为依据。
+
+#### 测试、迁移与构建目录
+
+本体测试按新真实 owner 放 `tests/backend/plugins/<子功能>/<层>`、`tests/frontend/plugins/<子功能>/<层>`、`tests/shared/plugins/<子域>` 和 `tests/e2e/specs/plugins`。SSH/SFTP 的技术与效果断言归原 Remote 测试；Agent/Provider/Chat/工具/MCP/ACP 的逻辑及业务集成归各插件 `tests`，跨插件和真实浏览器流程归独立仓根 `tests/interoperability`、`tests/e2e`。保留每个旧场景的断言去向，不因目录剥离直接删除覆盖；宿主不重复运行插件完整业务矩阵。
+
+已发布的数据库迁移不能随旧模块一起删除。按先完整移除旧 Agent 的阶段，旧迁移及必要冻结解码/SQL 依赖归 `platform/storage/sqlite/adapters/migrations/agent-history`，只允许迁移入口消费，不依赖新插件宿主；保留版本、签名及执行语义，新迁移按当前实际 owner 归属。历史数据转换只在迁移路径存在，不再被 runtime 当作兼容读取层。快照、空库安装、跨版本升级和未确认效果依据均单独验收。
+
+本体 SDK 构建、公开资源 URL、package exports、Bootstrap 注册/迁移、前端页面装配与动态加载、独立仓 SDK 来源、workflow 与测试发现同批切换。不为路径改名凭空增加协议版本，但本轮已规划的破坏性协议变更仍需明确新版本；旧路径不转导出。目录和依赖删除前，核对包资产、实际运行消费者及所有构建入口。
+
+| 现有入口/资产                                                                                                                             | 同批替换与删除范围                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 双端 `build/build-plugin-*-sdk.mjs`、Backend `build/copy-plugin-frontend-sdk.mjs`、相应 package scripts                                   | 改为唯一 owner 的公共单包构建，删除旧 SDK 单文件副本和向 Backend Agent 目录复制前端 SDK 的步骤；保留 SDK 消费验证，不用简单删 build 脚本代替新产物                                                        |
+| `plugins/adapters/frontend/plugin-sdk-assets.ts`、`storage/plugin-sdk-assets.ts`、`/sdk/frontend-v4.mjs` 路由                             | 插件已编入版本化 npm SDK 后删除旧 SDK 下载 Adapter/Port/路由及无依据的 1 MiB 交付门槛；插件签名 UI 资产托管、CSP、缓存及授权继续由通用宿主提供                                                            |
+| Frontend Vite `/sdk`、`/ws/agent` 等代理，固定 `/api/v1/agent`、`/ws/agent-runs` 消费者                                                   | 同步到通用插件网关与订阅入口；删旧代理/路由和固定业务客户端，不用通配转发保留旧业务协议。真正的插件 UI 资产代理继续按新 owner 保留                                                                        |
+| `Dockerfile`、双端 `dist-plugin-sdk`、`.dockerignore`、`.gitignore`、E2E workflow 成品路径                                                | 同步新构建依赖、产物复制/忽略/缓存/上传范围；镜像不保留废弃 SDK 目录，公开 npm 包与应用运行成品分别交付                                                                                                   |
+| `scripts/e2e/{host-test-artifact,balanced-shards}.mjs`、`tests/support/native-plugin-package.mjs`、受控插件仓库 fixture 及测试内 SDK 路径 | 替换硬编码 `backend-v4.mjs` 和旧产物闭包；统一使用本轮真实构建的公共包/插件成品，保留不可变身份和独立插件互操作，不能误测已安装的旧 SDK                                                                   |
+| 旧 Agent 测试、测试发现/耗时估算、runner 构建输入与文档                                                                                   | 逐项登记保留/迁插件/合并/删除及独有断言接收者；真实隔离、安装、信任、授权和资源回收留本体，模型/聊天/工具业务随插件，替换完成才清除过时 fixture、截图和估算项。不因路径重构新增 runner 或重建整套受控服务 |
+
+最终清理同时核对两仓清单、lockfile、npm exports/声明引用、locale、脚本、CI 与文档链接。只删除已无消费者且替代能力已验收的源码/产物；已有迁移及未知效果证据另按各自生命周期处理，不通过全仓替换 `agent` 字符串完成重构。
+
+剥离完成的判据：本体运行时代码不再引用旧 Agent 路径或持有 Run/Thread/模型/工具业务类型；Platform 不再保留模型/CDP/Agent 日志等业务实现和默认 `agent` 派发；Agent 业务改动只涉及插件仓的实现与契约。历史迁移依赖仅迁移入口可达，不形成运行时兼容层。现有 Provider/CDP 客户端能否直接使用受管 HTTP/WebSocket，需要在迁移时验证成熟客户端的 transport 接入和取消语义；目录规划不代表这部分已完成适配。
+
+#### 身份与作用域
+
+区分包、已安装包、逻辑实例、激活代、服务提供者、绑定和调用。包 ID 或显示名不能代替活跃实例身份。同一包可有多个逻辑实例；多个应用可选择同一份不可变包，各自的配置、授权、数据和活跃资源仍独立。
+
+宿主建立用户及已安装实例的作用域；插件可在其拥有的作用域下创建业务子作用域。子作用域沿父链获得可见服务，并可显式选择局部实现；绑定同时遵守真实权限，不能依靠继承扩大授权。作用域父链禁止形成环，不设置任意层数上限。
+
+作用域承担注册、监听、调用和资源的所有权，不预设 `run`、`thread` 或 `settings` 类别。Agent 插件可创建任务作用域，Chat 插件可创建页面或会话作用域；名称和业务含义归插件。浏览器视图作用域与后端长期实例作用域分开。
+
+#### 服务契约与注册
+
+服务契约描述“可做什么”，提供者描述“由哪个实例实现”。契约有稳定的命名空间标识和 SemVer 版本，包版本与契约版本独立。处理器在激活时注册，公开声明、schema 与资源文件来自已验证的包资产。
+
+契约定义声明其命名空间及受信发布者身份；其他包可显式依赖并实现该契约，不取得重定义其命名空间的权力。用户信任第三方包不等于允许它覆盖已有契约定义。动态 MCP 工具目录等可变业务内容通过服务结果表达，不要求每发现一个远端工具就向宿主新增一个方法或执行任意代码 schema。
+
+一个包可以发布多个契约或实现多个已有契约；同一契约可有多个提供者。多模型供应商、多 Agent 实现和可替换 UI 均使用同一机制。声明服务不自动变成模型工具；模型工具目录由普通插件解释和组合。
+
+激活先收集完整注册批次，验证所有契约、schema、导出范围及必需依赖，再原子发布一个目录修订。重复定义、同版本不同 schema、缺失处理器或声明与实现不符时整批拒绝，不发布半份目录。撤销句柄绑定本次发布，旧句柄不能删除新代贡献。
+
+纯契约依赖可独立发布为包内资产或共享契约包；运行时不必启动一个没有行为的“契约服务”。宿主不要求所有业务类型加入 Shared，也不靠读取 TypeScript 类型在运行时猜测契约。
 
 ## 3. 依赖方向
 
-### 3.1 允许的调用与禁止的耦合
+插件间的注册、绑定、调用与订阅经过统一宿主机制。调用方通过基础插件 API 使用上述已有能力。文件操作与进程操作共用既有远程基础设施，不另建一套连接管理或执行引擎。
 
-正常执行链：
+### 依赖解析与能力选择
 
-`App UI → Host 接纳 Run → 准确 App.run → 发现/绑定插件能力 → Host Operation 准入 → 插件 handler → 受管宿主能力 → 原资源 owner`
+区分三种关系：代码/资产依赖决定安装与加载；服务依赖决定何时可激活及绑定哪个提供者；调用关系只表示当前执行链。安装依赖不自动暴露全部工具，也不自动授予权限。
 
-插件 A 调用插件 B 时也经过相同受管入口；可以传参数、结果引用和经授权的资源引用，不传 Service、数据库连接、Cookie 或任意进程内对象。
+必需依赖未就绪时实例保持可解释的等待状态，不进入服务处理；可选依赖可缺失，通过目录事件获知新增或撤销，不轮询。每个依赖声明契约、版本范围、单个或多个提供者，以及当前作用域的选择。单提供者依赖中，用户或组合配置显式选择优先；没有选择且只有一个符合条件的提供者时自动绑定，存在多个候选时报告歧义，不按加载顺序、显示名或“官方”静默挑选。多提供者依赖绑定当前组合允许的候选集合，各项有独立精确绑定；顺序由契约或组合显式定义。
 
-- 核心依赖窄调用/准入/账本/资源契约，不导入具体工具、市场 manifest、Provider/Integration/Browser Service。
-- Registry 不导入 Run/治理实现；`agent/register.ts` 将真实身份、准入和调用能力注入准确绑定。安装/管理流程同样消费窄能力，不形成相互寻找 Service 的环。
-- 插件 SDK 面向实际能力分组；不存在 `getService(anyName)`、任意 SQL、宿主任意 HTTP 路由注册或全局事件对象。
-- 跨模块资源仍走 Access/Targets/Remote 等窄 public 入口。SSH 技术可以复用，普通终端会话的身份、资源和授权不能借给 Agent。
-- 未安装可选功能时，它不出现在可调用目录；不需给核心伪造 Browser、MCP 或默认聊天实现。缺必要准入/存储适配则启动失败，不能默认放行。
+依赖图按服务提供关系计算。第一版不支持互相等待激活的必需依赖环，报告实际环路，由插件改为独立共享服务或可选的后绑定；不把限制写成固定深度。普通调用可双向发生，宿主跟踪父子调用、取消与真实资源，不能沿调用图递归卸载或等待自身退出。需要串行的业务由实际状态 owner 定义，网关不全局串行所有服务。
 
-### 3.2 三种依赖分别处理
+依赖解析产生精确绑定，固定提供者实例、激活代、配置修订、契约版本及摘要。配置替换、提供者或契约变化使旧绑定失效，并发调用各自保留原归属；新绑定只接纳后续新调用，不把在途写入改投另一个实现。只有宿主能分配和改变目录修订，插件通知不能伪造目录更新。
 
-| 依赖         | 来源和解析                                                   | 变化规则                                                                     |
-| ------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| 代码交付依赖 | 包真正必需的发布者、包 ID、版本范围；构建依赖打入产物        | 安装计算完整闭包，不再限制一层；App 实现及启动所需代码在本次 Run 固定        |
-| 接口就绪依赖 | 消费者声明所需 contract/API 版本，组合明确选择 provider 实例 | 受管订阅就绪/失效；必需接口未就绪时对应消费者不可用，可选接口由 App 分支处理 |
-| 实际调用关系 | 当前 Operation 对另一个准确能力发起调用                      | 由父操作和资源 owner 追踪；不以静态服务 DAG 禁止正常双向业务调用             |
+### 调用与授权链
 
-启动必须相互等待的接口依赖环要报告具体路径，不能无限等待；普通调用链不直接套用安装依赖环规则。按实际持有资源避免等待自身排空，不设置无依据的递归深度或并发阈值。
+标准流程为“发现契约 → 选择/解析提供者 → 取得绑定 → 校验输入及当前权限 → 精确派发 → 校验结果 → 交付”。发现、描述、调用和订阅分别授权；目录只返回调用者可见的安全说明，不携带凭据和配置秘密。
 
-依赖就绪按实际贡献/消费 scope 处理，不用“任一可选依赖失败”停掉整个包。包可以注册基础工具，再为一个可选服务建立局部消费 scope；provider 出现、替换或消失时只启停该 scope 的贡献和资源。只有声明为整个实例启动必需的依赖才阻止实例就绪。消费 scope 复用 Registry 的订阅、准确 binding 和 disposer，不另建 DI 容器；不会按 YAML/列表顺序决定生效，也不通过轮询发现 provider。
+宿主从认证会话或已建立的后台实例授权派生调用身份，并记录原始发起者、直接调用插件、父调用及具体作用域。插件传入的用户、App、调用链或授权字段不能作为凭据。A 调用 B 不会取得 B 的全部权限，B 调用基础能力仍需检查真实发起范围及明确的委托政策；B 的私有配置和凭据使用另按该服务声明的访问政策核对，既不返回给 A，也不以 B 的全权限绕过 A 的调用授权。
 
-用户显式选择的 roots 决定对 App 公开的插件贡献；自动带入的依赖只满足内部注入。依赖的全部工具不会自动曝光，除非用户另行选择或有明确重导出，并经过相同授权。删除一个 root 时重算闭包，仍被其它 root 必需引用的包不能一起撤销。
+服务默认仅供所属实例使用，向组合内其他插件或前端导出必须显式声明，并经用户当前选择与授权生效；跨 App 共享是明确授权的独立绑定，不默认开放用户下所有实例。平台身份边界不允许仅凭相同契约名跨用户调用。
 
-多个 provider 实现相同 contract 时，用户组合或明确的 App 选择绑定具体实例；不静默取全局默认或最新同名实现。版本要求冲突直接报告引用者和要求，不做静默降级、任意选版或后台自动安装。
+授权区分两种情形：代调用者操作其选择的 SSH/文件目标时，目标范围按原授权链逐层收窄；Provider 等封装服务使用自身配置端点和凭据时，由其服务调用授权及已批准的受管资源使用声明允许内部访问，不要求 Chat 取得 API 密钥或任意联网权。声明必须绑定实例配置、用途和允许的资源；宿主仍验证真实网络/文件/进程准入，不能用“内部服务”申请无限代理权限。新增底层特权种类仍需宿主支持，普通插件不能通过自定义权限文字得到特权。
 
-不为首版预设插件数、工具数、实例数、依赖层数或调用深度常量。目录用分页与按需描述，通信和资源用背压、取消及实际容量分配；已有用户可调预算仍由用户决定。协议物理上限与经测量需要的资源保护归真实 owner，并按 H-20 记录依据，不能把实现方便写成业务限制。
+权限判断基于当前声明和实际资源，而不是服务名猜测。方法的“只读/有副作用”说明只用于调用约定，不能作为安全证明；真正的文件写入、命令派发和联网仍由基础能力 owner 准入。宿主外的任意原生代码不能因声明契约便被当作无副作用代码，进程隔离保证按实际运行方式验收。
 
-### 3.3 动态目录与固定调用
+### 前后端及插件间通信
 
-Run 只固定 App 的准确实现、代码依赖和启动输入，**不永久冻结全部可选能力目录**。
+| 边界                    | 传输与责任                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------- |
+| 后端插件 → 后端插件     | SDK 通过宿主目录和 IPC 绑定调用；不直接导入对方私有代码或取得对象引用                 |
+| 前端插件 → 后端插件     | iframe MessagePort → 认证 HTTP/复用 WS → 后端宿主 → 目标实例；不为每个插件创建独立 WS |
+| 前端插件 → 前端插件     | 前端宿主内的同类目录与受控代理；各 iframe 保持隔离，不共享 DOM、Vue 实例或 Store      |
+| 后端 → 前端             | 已授权订阅推送；需要用户回答时使用显式交互服务，不假定浏览器永久在线                  |
+| 基础插件 → 本体现有实现 | 模块公开接口及可信适配；保留真实权限和资源 owner，不在内部同进程协作中绕一圈公网 RPC  |
 
-1. App 每次 discover 获取当前所选实例、可见贡献和当前权限下的目录快照。
-2. 每次模型请求或 Agent 决策记录当时实际使用的目录引用、schema 摘要与输入。回复只能调用该次曝光集合中的原绑定。
-3. prepare/申请批准时就固定准确 provider、注册代、配置与 schema 修订。等待期间被替换则返回失效，重新发现/准备；批准后不能换一个实现执行。
-4. 同 Run 后续 discover 可见新选择的能力，但新包 hash/新效果范围不继承旧 grant；选择与授权分别完成。
-5. 撤权或取消选择立即挡住受影响的新派发，并取消/排空确实失去授权的旧调用。沿原 owner 保留结果，不准继续派发新的远端效果。
-6. provider 更新先关闭受影响准入、排空，再原子发布新代；旧 handle 明确失效，不按名字回退。
-7. 若更新的是正在执行的 App 实现或其必需代码依赖，首版等待 Run 完成或用户明确取消后更新，不做运行栈热替换。
+请求/响应、单向流、双向流及事件采用同一套服务契约；物理传输负责关联、分块、背压和控制消息。独立逻辑流分别取消，关闭一个订阅不关闭共享连接。关闭、取消和授权撤销不排在大数据队列末尾；真实 TCP 拥塞仍可能影响共享连接，不宣称复用后绝无干扰。
 
-“固定目录”只用于一次决定和调用的证据；“目录动态”不代表调用中替换处理器或自动扩大权限。
+出站 HTTP/WebSocket 基础 API 与上述宿主通道分别管理。插件注册入站 Webhook 属于额外的路由能力，按实际需求适配已有 Fastify，明确路径、认证和撤销 owner；第一版通用 RPC 不授予任意公开路由或新开监听端口的能力。
+
+### 普通插件
+
+以下已确认归普通功能插件，通过基础插件 API 组合能力：
+
+| 插件          | 职责                                                       | 使用的基础 API                                                |
+| ------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `Settings`    | 配置格式、默认值、校验与设置展示；变更通知复用宿主事件机制 | Database                                                      |
+| `Credentials` | 秘密存储、引用及受管使用                                   | Database、加密                                                |
+| `Content`     | 附件、生成文件及完整日志的内容引用、访问与清理生命周期     | LocalFile／RemoteFile 保存内容，Database 保存元信息与引用关系 |
+
+普通插件定义业务数据及语义，底层文件、数据库与加密能力保持通用。本节确认普通插件的职责与依赖方向，具体包划分及公开契约后续确定。
+
+其余主要功能按以下目标边界消费同一机制，不构成新的宿主特权类别：
+
+| 功能           | 目标归属与协作                                                                               |
+| -------------- | -------------------------------------------------------------------------------------------- |
+| 模型供应商     | Provider 插件提供模型目录、请求、流与用量；消费 HTTP/WebSocket、Credentials 等服务           |
+| Agent Loop     | 插件自行管理执行循环、会话、上下文、工具调度与任务状态；调用 Provider、工具及所选扩展        |
+| 工具与发现     | 普通插件将服务适配为模型工具，提供描述及详细 schema；服务注册不自动开放给模型                |
+| MCP / ACP      | 协议插件组合 LocalProcess/Remote、HTTP/WebSocket 等能力，提供可被 Agent 或其他插件调用的服务 |
+| Chat / 命名    | Chat 提供 UI 与会话展示；独立命名调用 Provider 服务，不伪造主 Agent Run 或借用其循环         |
+| 配置及权限呈现 | 配置 schema 和页面归插件；当前真实授权与可信确认仍由宿主执行，插件页面不能自行放行           |
+
+服务调用不限定由 Agent 发起。Chat 命名、设置中的模型测试、MCP 管理及后台任务都可在各自授权作用域内使用同一契约，不新增三套专用执行内核。
 
 ## 4. 类型与转换
 
-### 4.1 最小对象与身份
+### 契约描述
 
-| 对象              | 含义                                                                               | Owner                    |
-| ----------------- | ---------------------------------------------------------------------------------- | ------------------------ |
-| PackageArtifact   | 发布者、包 ID、版本、内容 hash、签名；不可变代码身份                               | 插件包管理               |
-| AppInstance       | 独立 appId、所属用户、App 实现绑定及所选组合；同包可创建多个应用                   | App scope 与组合         |
-| PluginInstance    | 某用户/App 内的逻辑实例及配置归属；同一 MCP 包可创建多个连接实例                   | 组合与配置               |
-| RuntimeGeneration | 此次进程/iframe 的运行身份，重启后不同                                             | 运行实例 owner           |
-| Registration      | 实例内稳定导出 key、contract/API 版本、schema、摘要/说明引用、handler 引用、注册代 | Registry                 |
-| Binding           | 准确 provider、实例、注册代、schema digest、配置修订的受管引用                     | Host 根据当前 scope 解析 |
-| Run               | 一次有输入、App 实现、生命周期、检查点和输出边界的执行                             | Run owner                |
-| Operation         | 一次真实受管调用/效果、原调用者、父操作、请求和回执                                | Operation owner          |
-| ResourceScope     | 真实任务与连接、流、进程、协议状态的归属及关闭能力                                 | 资源 owner               |
-| SurfaceDescriptor | 准确前端资源、用途、实例与可用 SDK 范围                                            | 后端签发，前端验证并挂载 |
+公开描述与可调用句柄分开。最小契约字段如下；精确字段名、编码和 SDK 版本在实施时同版冻结，不保留旧运行兼容分支。
 
-包版本、接口 API 版本、Host/SDK 协议版本、配置 schema 版本与数据修订彼此独立。进程或注册 generation 不是业务配置版本，工具显示名不是可派发身份。
+| 对象         | 必需语义                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Contract     | 稳定 `contractId`、SemVer 版本、schema 摘要、方法、事件及插件业务错误声明                                     |
+| Method       | 名称、说明、`unary` 或 `stream` 模式、输入/结果 schema；流模式还声明下行及可选上行 schema，标注效果及重试约定 |
+| Event        | 名称、说明、payload schema、作用域与导出范围；区分通知和可等待的扩展钩子，声明是否支持来源续读                |
+| Provider     | 已安装包身份及签名来源、逻辑实例、激活代、契约引用与当前可见状态，不返回秘密配置                              |
+| Binding      | 宿主颁发的不透明引用，绑定调用者可见范围、提供者实例/代、配置修订和契约摘要；不是永久权限令牌                 |
+| Call         | 请求关联 ID、绑定引用、方法、应用输入、取消及可选完整期限；必要的幂等键由实际效果 owner 定义                  |
+| Stream       | 本次调用身份、逻辑流代、方向、帧序号、数据或终结；ACK 与窗口只描述消费和背压                                  |
+| Subscription | 来源与绑定、订阅代、事件选择；可恢复来源另携带该来源定义的游标                                                |
 
-### 4.2 manifest 与注册分别声明什么
+ID、时间和编码均有唯一契约：宿主期限对外采用 Unix 毫秒，内部耗时使用单调时钟；序号只在相应流/激活代内有效。业务游标保持不透明，不将不同来源的游标或版本互相比大小。用户、作用域归属和父调用身份由宿主提供，不接受插件通过上述业务输入改写。
 
-manifest 只持不可变发布事实：身份、完整文件清单、代码/UI/Settings 入口、Host/SDK 兼容、真正必需的代码依赖、允许贡献的类别/命名空间及请求的宿主能力上界。
+业务值使用明确的 JSON schema；二进制采用受管字节流或内容引用，不强制完整 Base64/JSON 缓冲。大数据分页和流式处理不变成文件总量或工具总结果的隐含上限。秘密仅在授权写入或受管使用边界传递，普通描述、事件、结果和日志不泄露凭据；ssh2、SQLite、原生流和 DOM 对象不穿越公开边界。
 
-实际工具、服务和 App handler 在激活时注册；不再维护 `App.toolNames` 固定清单，不要求 App 预列所有未来服务 alias。静态描述也只保留一个源，由包代码/签名描述资产读取注册，不在 manifest、SDK 和 Host 再复制一份业务 schema。
+### Schema、类型和版本
 
-MCP 动态工具在该实例获准的 namespace 注册。Host 验证来源、结构和能力上界，保存真实 schema 摘要；远端目录本身不是包签名内容，不能把远端 readOnly 注解或摘要当成授权证明。
+复用现有 Ajv，第一版使用当前实现支持的 JSON Schema draft-07，严格校验，不强制转换类型、不填默认值、不静默删字段。schema 是签名声明资产，不执行插件提供的自定义校验 JavaScript；引用仅解析明确随包或依赖声明的资产，不在校验时任意联网取 `$ref`。不可信 schema 的编译及验证成本需要在可隔离、中止的技术边界验收，签名不代替此保证。
 
-Settings 的持久配置 schema、详细说明、允许 Agent 编辑的字段规则及静态入口作为签名资产随包安装。运行注册引用同一资产；UI、Agent 与 Host 校验消费同一修订。这样停用、未配置或后端启动失败时仍可打开设置，不形成“先激活才有设置，先设置才可激活”的循环。远端模型/目录等动态候选值通过受管只读服务加载，失败不妨碍编辑静态配置；动态返回不能悄悄改掉已批准字段的含义或权限。
+同一契约版本在同一可见目录内必须对应同一规范摘要；冲突拒绝发布。变更按 SemVer 声明，绑定还核对摘要，不能只相信版本号或以包版本替代接口版本。提供者不能偷偷为既有方法换 schema；新代的候选调用必须重新解析绑定。
 
-插件 Settings UI 是可选贡献。首版可用公开 UI SDK 的 schema 表单覆盖普通配置；需要复杂交互的包提供独立设置页。公共表单/样式工具只负责呈现，写入仍走同一 Host settings 用例，不把每个字段的产品逻辑搬进本体。
+契约作者在自己的包内维护 schema 与类型的同源构建产物；可选契约包供消费者生成或导入类型代理，动态消费者通过描述使用通用代理。宿主只实现通用 envelope 和 schema 校验，不为第三方方法生成本体源码或修改本体事件名单。字段破坏性变化发布新契约版本并同步真实消费者，不保留旧请求回退。
 
-### 4.3 边界表
+| 边界                               | 唯一类型 owner                          | 转换及校验 owner                                                        |
+| ---------------------------------- | --------------------------------------- | ----------------------------------------------------------------------- |
+| HTTP/WS/MessagePort/IPC envelope   | Shared `plugins`                        | 各传输严格解码及接口 mapper，再进入应用类型                             |
+| 插件服务输入、输出、事件与业务错误 | 提供该契约的插件资产/契约包             | 宿主在真实入口/出口按已绑定 schema 校验；插件 mapper 转成自己的应用类型 |
+| 宿主注册、调用和作用域内部对象     | 对应 Backend/Frontend 子功能 model 类型 | Service/Model，不从 wire 或存储类型继承                                 |
+| 真实数据库、文件、SSH 及进程       | 各 storage/Platform owner               | Model 与技术 Adapter；秘密和原生对象不进入公共结果                      |
 
-| 边界                 | 输入/输出与类型唯一 owner                                                           | 转换 owner / 消费者                                            |
-| -------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| 包 → 安装            | Shared plugins 发布协议；内部 packages/model 与 storage 分别定义                    | 包 Adapter 严格解码；Model 白名单转应用事实；市场与安装消费    |
-| 隔离插件 → Registry  | Shared 注册 envelope；contract 描述与 schema 资产归提供包                           | IPC 解码和入口 mapper；Host 注入 package/instance/generation   |
-| App/UI → 调用        | Shared binding、调用/流/取消/安全结果 envelope                                      | 真实通信入口派生 principal，mapper 转应用命令；Operation 准入  |
-| 业务 payload         | 提供插件的版本化 contract、schema 与纯 codec；具体 MCP/ACP 类型不进入 Host 巨型联合 | 调用边界按冻结 schema 解码，提供包显式转换；服务消费者校验结果 |
-| Host 能力 → 实际 I/O | 各真实领域 typed 契约；不透明资源引用不包含秘密                                     | 领域 Model 与技术 Adapter；不能用通用 payload 绕过领域准入     |
-| 人工/Agent → 配置    | Shared 配置 envelope + 包 schema；内部 settings/model                               | 两入口派生不同真实身份，共用配置用例；Model 转存储命令         |
-| 应用 ↔ 存储          | 各功能 model、storage 分别归属                                                      | Model 白名单转换，SQLite Adapter 解码行/执行 SQL               |
-| Host → 浏览器/iframe | Shared 安全目录、Surface、Run/Operation/内容引用与事件                              | HTTP/WS mapper、前端 API mapper、SDK 与实际视图                |
+### SDK 语义
 
-通用 envelope 不意味着任意 JSON 直通；外部一律从 unknown 解码，业务数据按已绑定 schema 校验。具体业务错误由 contract 定义；Host 的未接纳、拒绝、失效、确定结果、提交/执行未知与清理失败使用有限安全类别。技术 cause 不出边界。
+前后端 SDK 暴露对等的服务、目录、事件与作用域语义；只有后端可获准使用后端基础 I/O，浏览器能力经过前端宿主桥。示意名称如下，不提前新增代码或独立包：
 
-沿现有成熟 schema 校验器和官方协议 SDK，不另写 schema 引擎或 MCP/ACP 协议栈。新依赖采用前按 H-14 核实维护与问题修复情况；版本号、签名域和 SDK URL 在契约实施时一次确定，不让中断的 SDK4 字段反向决定本稿。
+| 能力       | 目标 API 语义                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| 提供服务   | `services.provide(contract, handlers)`，返回本次注册的释放能力                                      |
+| 发现与绑定 | `services.discover(query)`、`services.bind(selection)`；均限定在当前授权范围                        |
+| 普通调用   | `binding.call(method, input, options)`，返回经验证结果或明确失败                                    |
+| 流式调用   | `binding.stream(method, input, options)`，返回下行异步迭代、可选上行写入及取消/关闭能力             |
+| 目录跟随   | `services.watch(query)`，先交付当前快照，再交付有序目录修订                                         |
+| 事件订阅   | `binding.subscribe(event, options)`，返回受管订阅；仅提供者能发布其声明事件                         |
+| 扩展处理   | `hooks.handle(binding, event, handler)`、`hooks.invoke(event, input)`；仅在契约显式声明该钩子时可用 |
+| 作用域     | `scope.create()`、`scope.onDispose()`、`scope.dispose()`；当前调用另外取得 `signal` 和授权上下文    |
+| 诊断       | 复用项目诊断组件提供带实例/调用关联的分级日志，不另建独立日志栈                                     |
 
-### 4.4 App 完整运行入口
+SDK 负责代理、校验消费和生命周期，业务逻辑留在插件。不存在任意访问宿主对象的 `ctx` 逃逸；子作用域或服务句柄不能变成跨用户授权凭据。
 
-以下只说明行为契约，不是已发布 SDK 签名：
+普通调用只交付一个经验证的结果或失败。流调用先建立句柄，再提供 `read` 异步迭代、按需 `write/end`、`cancel` 与 `closed`：上行半关闭不代表下行结束，提前退出下行迭代会取消本次流；终结帧分别携带最终结果/失败及已交付位置，不能把最后一个数据 chunk 当作成功。连接意外结束且未收到终结时明确失败，消费者不根据 EOF 猜测操作成功。
 
-```ts
-app.run(context): Promise<
-    | { kind: 'complete'; outputs: ContentRef[] }
-    | { kind: 'suspend'; checkpointRef: CheckpointRef; inputRequest: InputRequest }
->
-```
-
-Context 提供明确分组的能力：输入/恢复事实、取消信号、目录发现与调用、模型、子 Run、配置、私有状态、来源读取、检查点与展示。它不包含全局 Service locator，身份、父操作和能力上界由 Host 绑定，插件不能通过参数选择 userId 或冒充管理会话。
-
-App 可以先执行工具，再调不同模型，或完全不调用模型；可以并行、等待、检查结果、继续或结束。不保留 `open / prepareStep / afterResponse / prepareAuxiliary / projectResult`、`prepareAction`，也不保留 Run 的 `model | service` 硬模式。
-
-App 决定上下文和工具调度；Host 保留真实输入、模型请求/结果、用量及工具回执，不要求每个调用来自模型提案。模型协议 Adapter 仍校验合法消息与工具响应关联；App 可减少曝光或不执行提案，但不得伪造“Host 已执行”的记录。模型返回 stop 不等于 Run 结束。
-
-完成输出允许为空，纯动作 App 不必制造聊天消息或伪文件；App 抛错、主动取消和真实未知效果仍由 Host 按原事实结算。检查点与可恢复挂起按 App 实际能力声明，普通 App 可只实现 run；没有恢复能力时重启后保留中断与真实回执，不强迫所有插件实现恢复 DSL。
-
-首版仅提供已有需求的执行原语，不加入任意持久工作流、无限后台触发器或无消费者的扩展钩子。App 可以通过版本化服务 contract 组合检索、记忆、压缩或策略插件；这些是 App 的可选消费点，不新增内核五阶段或全局生命周期 hook。
+协议握手绑定 SDK 支持范围、准确包/实例/代和宿主颁发的 Surface 或 IPC 身份；不支持的宿主协议在发布贡献前拒绝，不退回旧的固定 Agent RPC。业务契约可在插件间协商版本，不能借此绕过宿主协议检查。浏览器不取得后端 session token 或通用服务端秘密。
 
 ## 5. 入口与安装
 
-### 5.1 注册、发现、调用与释放
+SSH / SFTP 由后端按需建立，沿用已有连接配置、凭据、代理与主机信任。前端不承担 SSH 建连。八项可信基础适配随本体交付，经统一注册机制提供 API；普通插件由独立仓发布，具体依赖组合与启用引导在实施前冻结。
 
-统一流程为：
+### 包声明与启动
 
-`安装可信包 → 用户选择实例 → 解析依赖/配置 → activate → 原子注册 → discover → describe → bind → invoke → dispose`
+签名 manifest 声明契约资产、服务提供/依赖、前后端入口及导出范围；市场展示兼容性和所需授权，但不因声明或安装自动授予权限。基础插件由可信适配绑定原能力，普通插件不能通过自称“基础插件”获得特权。
 
-| 阶段           | Host 行为                                                   | 插件行为                                                   |
-| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
-| 安装           | 验签、校验完整产物及兼容，保存实际安装事实                  | 不在生产环境运行 npm 安装脚本                              |
-| 创建/选择实例  | 绑定 user/App/config，计算 roots 和依赖闭包；选择不授予权限 | 接收自己的实例上下文                                       |
-| 激活           | 按准确包创建隔离实例；收集注册草稿，校验后原子发布          | 初始化并注册 handler；必要网络初始化通过获准的生命周期操作 |
-| 注册           | 注入实例身份，保存 schema/说明快照；返回准确 disposer       | handler 留在插件进程，跨进程只传引用                       |
-| 发现           | 返回 scope 可见目录及 directoryRevision                     | App 按摘要/contract/标签寻找能力                           |
-| 详细描述与绑定 | 返回本项完整说明/schema，绑定 provider、配置/schema 修订    | 选择准确引用，不按显示名猜调用对象                         |
-| 调用           | 复核当前选择、授权、批准和父上界，持久接纳后派发            | 执行 handler；子调用带原 owner 进入同一准入链              |
-| 撤销           | 关闭新准入、撤对应注册、取消并等待真实资源收敛              | 释放自身 scope，不能自行宣布远端效果回滚                   |
+启动顺序为验证包/资产 → 从声明构建候选依赖图 → 按依赖顺序启动已选择提供者 → 建立消费方实例作用域 → 执行激活并收集注册 → 复查必需依赖与契约 → 原子发布 → 通知依赖方及目录订阅者。候选声明只能用于解析，尚未激活时不能被当作可调用服务；同批启动的消费者只取得已发布依赖。失败撤销本次注册和已创建资源，保留准确故障，不持久化可重建的安装过程或下载进度。
 
-App/Settings 静态入口可以由安装目录提供；可执行 handler 只有激活成功才进入 ready 目录。目录必须区分已安装、已选择、配置缺失、依赖缺失、未授权、启动失败和排空中，不能用“未显示”掩盖失败。
+前端与后端有独立的运行实例和激活代，通过契约关联，不能假定同时启动。服务在首次需要时可按需激活，由宿主合并同一实例的并发启动；依赖就绪、失败、配置变化和撤销均事件触发，不增加健康状态轮询。网络心跳只证明传输存活，不证明业务推进。
 
-远端 MCP inventory 等需要 I/O 的初始化/刷新必须使用受管操作。已配置、启用并获准的实例可由 Host 激活/重连事件自动启动生命周期操作，不要求用户再手动点击一次发现；仅安装包不构成这项授权。该操作绑定实例、配置、scope 和当前授权，负责准备/只读目录；不能借激活偷跑 App 任务、付费模型请求或未批准的远端业务效果。失败保留可管理状态，受原重连政策与取消约束。Host 从已保存的实例启用、授权与配置签发生命周期 scope，不保存或冒用当时的登录 Cookie；停用/撤权立即失效，准入范围不包含替用户发起任意 App 任务。
+| 实例状态    | 含义及变化来源                                                                      |
+| ----------- | ----------------------------------------------------------------------------------- |
+| `inactive`  | 未启用/未激活，无可调用贡献；显式启用或授权的按需调用可开始解析                     |
+| `waiting`   | 已启用但缺少必需依赖或明确选择；依赖事件/配置变化后重新解析，不定时尝试             |
+| `starting`  | 当前代激活与注册准备中，同实例的并发启动共享结果                                    |
+| `active`    | 完整贡献已发布，可按当前权限接纳调用                                                |
+| `quiescing` | 已停止新准入，跟踪原代调用与资源排空                                                |
+| `failed`    | 激活或排空失败，保存安全原因；显式恢复或明确配置/依赖修复后重新准备，不无限自动重启 |
 
-这与 dsh MCP client 在 `apply()` 内连接并等待初始目录的使用体验一致，但 Nexus 的实际 I/O 仍经 Host 准入和资源 owner。管理发现资源属于实例管理 scope；Run 专属协议资源仍属于执行，二者不共用授权。连接实例/配置变化撤回旧 inventory；Run 专属协议产生的贡献只对该执行 scope 可见。可复用的库存快照只供发现，不是可派发 handle。新 Run 按本次执行授权准备自己的协议 session，必要时重新发现并核对 inventory/schema，再生成绑定该 session 的调用 handle，之后才申请此次工具效果的批准与派发。准备 session 的网络操作自身也受管，不因处于“准备”就免于授权。若 schema 或 inventory 变化则重新描述/绑定，不继承旧批准；不借管理发现的 session 权限，不给旧 handle 静默更换 session。
+逻辑实例身份跨激活代保留；单个 scope 的 `open → closing → closed` 生命周期不逆转，重新启动创建新 scope/generation。安装、保留数据与清除状态属于包管理，不混入以上运行状态。缺依赖只有 `waiting`，真实启动异常不能被掩盖成普通等待。
 
-```mermaid
-sequenceDiagram
-    actor U as 用户
-    participant H as 宿主与组合
-    participant P as 插件实例
-    participant R as Registry
-    participant A as App.run
-    participant O as Operation/授权
-    U->>H: 选择插件实例、配置与授权
-    H->>P: activate(准确包与实例)
-    P->>R: register(描述、schema、handler引用)
-    R-->>P: 注册代 + disposer
-    A->>R: discover / describe / bind
-    R-->>A: 当前目录与准确 binding
-    A->>O: invoke(binding, payload, operationKey)
-    O->>O: 当前授权 + 批准 + 持久准入
-    O->>P: 派发到原 handler
-    P->>O: 受管 I/O 或其它插件调用
-    O-->>A: 真实回执、内容引用与事件
-    U->>H: 停用、取消选择或更新
-    H->>R: 关闭受影响绑定的新准入
-    H->>O: 取消/等待原调用与资源排空
-    H->>P: dispose 原实例
-    H->>R: 原子发布新目录
-```
+### UI 挂载与可信交互
 
-动态注册替换同一实例的 inventory 时按完整批次校验、原子换代；部分失败不能出现半份目录。旧 generation 的迟到注册、回调与 disposer 只能影响自身，不能删除新代同名项。
+前端宿主保留现有 iframe/MessagePort 隔离、签名资源加载、主题变量、locale、可见性和关闭通知。UI 插件可声明 App 页面、设置 Surface 和插件定义的扩展位置；父插件定义局部 UI 契约，由当前组合选择 provider。宿主无需理解聊天消息或角色数据，也不直接加载插件的私有 Vue/Store。
 
-### 5.2 发现与插件共享能力
+通用前后端服务代理替代固定的 Agent 功能 RPC 联合；现有可信确认、秘密输入、文件选择和资源关闭通过明确宿主接口保留。插件可以提供问题内容和操作意图，授权决定、原意图校验及秘密处理仍在宿主可信边界。没有在线 UI 的交互返回可解释的不可用结果，不伪造用户批准。
 
-目录先返回摘要、contract 版本、实例来源、标签和准确引用；完整说明、参数/结果 schema、示例按需读取。搜索排序、推荐和 token 曝光策略属于 App/发现工具插件，Host 仅校验返回引用仍在当前可见范围。
-
-当前授权可用集合为 A，本次模型曝光为 E，始终 E⊆A。工具加载只影响曝光，不增加权限。每次模型工具名映射到该次保存的绑定；同名不同实例不会冲突到同一 handler。
-
-插件之间通过 `discover(contract) → bind(provider) → invoke` 共享服务。消费者使用版本化 contract，可从独立仓共享纯契约模块，不依赖 provider 私有实现。SDK 可把这条链包装成具名、类型化代理供普通插件调用，绑定和校验仍是同一 owner；不要求每次局部纯函数调用都发现或跨 IPC。UI 用途、管理用途和 Run 用途分别授权；服务不会因为提供给 Settings 就同时得到任务创建权。
-
-调用 scope 的可见能力、可再委托的权限和生命周期由 Host 派生。父 scope 可给子调用缩窄能力，但局部注册/同名覆盖不能恢复被祖先禁止的能力；多实例同名工具用准确引用区分，模型名称映射只影响本次曝光。dsh 的 scoped shadowing 是可信进程机制，不照搬其中“当前 scope 自注册项豁免继承过滤”的权限语义。
-
-第一版不支持普通插件向 Host 顶层注入任意 Vue、路由、审批 UI 或全局 hooks。复杂 App UI 在自己的隔离 Surface 内完成；工具结果优先复用文本/Markdown、图片/GIF、文件和结构化展示，不一张工具卡建立一个 iframe。
-
-### 5.3 前后端 Surface
-
-后端提供一致的已安装/可用贡献目录和准确 SurfaceDescriptor。前端不再从多个独立列表猜测 App、UI 与服务的对应关系。
-
-App UI、Settings 共用 iframe/MessagePort 生命周期与 SDK transport，通过 purpose 和真实 scope 区分能力。App 声明所需 UI contract，用户组合选择兼容的 Surface provider，不把 ChatUI 包名或一对一 App/UI 包关系写死在本体；一个包可以提供多个可选入口，首版按实际 App 与 Settings 入口接入，不预造面板/菜单插件系统。Settings 绑定实际用户会话、包、插件实例和 schema 修订，不制造假 Run，不借 ChatUI 的执行 grant。
-
-UI 请求调用某项服务时，Host 从真实会话与 Surface scope 派生权限，不能让后端服务沿用“打开页面的管理员”的无限权限。插件返回的数据只决定内容，不产生可信审批按钮；可信操作保持 Host 原入口。
-
-Host 提供主题、语言、内容区尺寸/安全区、焦点、文件选择、可信秘密输入和必要导航。插件共享 UI 组件随包交付，不依赖宿主私有 CSS。聊天继续按可用宽度自适应，保持现有视觉风格及主要交互。
-
-停用或故障插件仍可打开静态设置/说明、调整配置、修复和卸载。配置页本身失败时由 Host 给出失败与管理入口，不自动执行后端插件修复代码。可信批准、任务取消与资源关闭始终可从 Host 访问。
-
-### 5.4 配置：人和 Agent 使用同一个 owner
-
-用户在已安装插件列表点击“设置”，选择实际消费的 App/实例后打开插件页面。MCP/ACP 专用集中表单迁出；Provider、全局预算、安全和真实宿主资源配置仍在 Host。每个可编辑字段必须有实际消费者。
-
-插件提交签名配置 schema、说明、默认值和可编辑字段规则。Host settings 用例统一完成读取、创建、更新、删除、版本校验和事件发布：
-
-1. 人工入口取真实登录身份；Agent 入口取原 Run/Operation 和调用链。两者不能互相冒充。
-2. 读取返回非秘密配置、revision、schema 修订及凭据存在状态。
-3. 写入提交明确 patch/替换意图与 expectedRevision。Host 读取原值、计算实际差异、按当前权限决定是否需要批准。
-4. 批准绑定实例、旧 revision、schema 修订及真实差异摘要；等待期间变化则冲突，不自动套用最新版本。
-5. 事务内写配置、推进 revision 并保存必要幂等回执；成功后通知真实消费者。保存成功不等于远端探测成功或旧资源已排空。
-6. 影响连接/秘密/执行的变更撤销旧 grant，由原资源 owner 排空；纯展示配置只更新对应视图。插件声明不能把实际敏感变化降为无风险。
-
-Agent 只能编辑用户允许的业务字段；不能修改权限、发布者信任、宿主硬限制或读取秘密。SecretBox/Vault 保留凭据；替换由 Host 可信输入产生受限引用，模型与插件只见状态和不透明引用。HTTP endpoint、SSH target/argv 是 Host 明确管理的连接绑定，不能藏入任意业务 JSON 绕过目标政策。
-
-普通读取无需持久操作记录；普通 CRUD 使用 CAS 与必要的同事务 mutation receipt，不为每个字段增加 queued/draining/unknown 配置状态机。副作用未知或需要远端测试时由通用 Operation 追踪。
-
-dsh 在本次参考版本**没有通用 model-facing set_config 工具**：[tool-cordis](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/extensions/tool-cordis/src/index.ts#L41) 是只读 inspection；[官方开发 skill](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/preset/agent-preset/skills/cordis-plugin-development/SKILL.md#L8) 引导编写 bundle/config patch 后安装，不直接改 profile 文件。插件代码可用 [ConfigEditor](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/preset/agent-preset/skills/cordis-plugin-development/references/host-plugin.md#L66)，UI SettingsController 也不等于模型工具。Nexus 采用自身受管配置入口，不让模型改本体配置文件。
-
-### 5.5 市场、安装与独立交付
-
-市场发现、包安装、App 选择、实际注册和授权是独立事实，不能合成“安装即全功能可用”。
-
-| 范围        | 目标行为                                                                                                   |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| 推荐安装    | 可编辑预设选择 App/UI/工具/服务实例；用户确认的推荐新装可按明确清单授权，普通安装不自动授权                |
-| 包与 App    | 仅 App 贡献创建应用；工具、服务、UI 不产生伪 App 卡片；多个 App 可共享包字节但隔离实例/数据/权限           |
-| 来源与信任  | 官方和第三方同一验签/安装路径；仓库地址不等于发布者身份，添加源不自动信任发布者                            |
-| 版本        | 按发布者/包 ID 聚合 SemVer，预发布需明确选择；比较全部引用者要求，不能将版本不同一律视为可升级             |
-| 安装过程    | 不持久化安装计划、进度或结果账本；保存实际包、绑定和必要安全围栏。失败后重读事实重新准备，复用准确已成功项 |
-| 更新        | 候选完整校验后才停止原准入；列明受影响 App、权限/数据变化与排空要求，不直接覆盖活跃实现                    |
-| 卸载/清数据 | 先处理引用与排空，再按用户选择清配置、凭据及插件私有数据；历史/已生成产物沿明确保留政策                    |
-| 保留数据    | 卸载后不留可运行 App 卡片；已安装管理/市场保留重装与清数据入口，源下架也不丢失管理能力                     |
-| 发布        | 每包独立版本、不可变 hash 与兼容要求；只重建变化包，catalog 引用准确产物，不能覆写同版本内容               |
-| 模板        | App、工具、服务、UI/Settings 使用同一公开 SDK 和校验流程；不要求第三方修改本体或进入官方仓                 |
-
-不同源独立读取，同源在途读取可合并；慢源不阻塞本地管理。目录缓存绑定源配置修订和快照，部分失败标过期；删源再加、分页换版不能混入旧结果。打开、显式刷新或读取过期缓存时更新，不为仓库增加周期轮询；目录更新只截至上次成功读取。
-
-dsh 的[官方可选 bundles](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/util/official-bundles/README.md)、[第三方 Discover](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/experimental/plugin-market-bundle/README.md) 与安装器分离；参考版本没有默认官方 Discover 索引。Nexus 保留已有官方 catalog/第三方源，不引入 npm 安装脚本、可信进程内插件或市场自动管理工具。
-
-### 5.6 通信与事件
-
-保留三段物理边界，不给每个能力开 socket：
-
-| 边界                 | 传输                          | 用途                                                |
-| -------------------- | ----------------------------- | --------------------------------------------------- |
-| iframe ↔ 浏览器 Host | MessagePort                   | SDK 请求、授权事件、按需内容与 ACK                  |
-| 浏览器 ↔ Backend     | 认证 HTTP + 页面会话复用的 WS | HTTP 命令/快照/分页/文件；WS 多个授权订阅与状态增量 |
-| Backend ↔ 隔离插件   | IPC                           | 注册、受管调用、数据/结果引用、取消与关闭确认       |
-
-每段逻辑上区分请求响应、带背压的数据/事件、优先控制。取消、停止准入与关闭确认不能排在长调用或日志队列末尾；本体内部仍用明确方法和有 owner 的订阅，不把普通函数都改成消息事件。
-
-事件包含 scope、实体 revision、来源 cursor 与连接 generation。先登记监听，再一致性读取快照和游标；之后补读变化。重连允许重复交付，按来源去重；游标失效明确重新取快照。ACK 表示已校验并应用到受控状态，不等待 DOM 绘制；旧连接 ACK 不确认新帧。
-
-插件自己的业务事件也使用同一注册与订阅机制：提供包声明命名空间、版本化 payload schema 和来源读取 contract，Host 注入实例/scope/generation 并复核发布/订阅权限。需要恢复的事实随原数据提交 revision/来源游标，再发布失效通知或增量；纯临时进度可明确不持久化，重连读取当前快照。不得只允许固定 Run/Memory 主题，迫使新插件改 Host 枚举或退回轮询；也不开放跨实例任意广播。用例只要求失效补读时，不强迫包维护可回放的完整事件日志。
-
-变化只更新受影响页，保留虚拟历史与滚动锚点。终态引用已提交输出终点，正文未补齐继续续读；不因先收到 completed 而留下空白。任务提醒依据新状态修订，不在每次重连重播旧完成提醒。
-
-大日志和文件完整保存到原内容 owner，通过分页/范围读取；流上只交付分块、进度和引用，不复制全量正文。不因慢 UI 丢原始输出，也不增加未经测量的总量限制。慢 iframe 暂停自身订阅后补读，不阻塞其它 App；共享 TCP/IPC 仍有物理竞争，验收要测取消/审批延迟，不能宣传绝对无影响。
-
-去轮询先覆盖真实变更生产者：会话/授权/发布者撤销、组合/配置变更、目标/凭据/信任变化、Provider、Run/Operation、Memory/Artifact 和到期。已知到期用一次性定时器，派发及敏感 I/O 仍查权威状态。保活、重连退避、输出合批和本地计时不是业务轮询。
-
-首版前提为单 Backend 权威写入，插件经 IPC 写，迁移/恢复在维护排空后执行。若有合法外部写入者而没有可靠通知，先补通知或保留集中核对，不直接删安全复查。浏览器状态通道暂不增加 broker、通用 outbox、SSE 或另一套 socket 库；MCP 等远端协议本身需要的 HTTP/SSE 由服务插件按官方 SDK 接入，不受这项前端传输选择限制。
+仅新增或替换插件内容不会改变本体挂载壳样式。当前 UI、布局和正常交互继续保持，确需改变时另按 H-13 授权。
 
 ## 6. 数据、事务与并发
 
-### 6.1 单一事实来源
+### 状态所有权
 
-| 数据         | 持久化内容                                                                                    | 不持久化的运行对象                          |
-| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| 包/实例/组合 | 不可变包、实际安装、用户 roots、逻辑实例、引用、配置/数据 schema 修订                         | 安装任务进度、临时下载等待                  |
-| 配置与秘密   | 非秘密文档、CAS revision；独立连接绑定、密文与 generation                                     | 明文秘密、UI 草稿、临时 grant               |
-| Run          | 准确 App 实现/代码依赖、输入引用、父子关系、预算/期限、取消/结束决定、检查点、输出引用        | JS 调用栈、Promise、运行时调度队列          |
-| Operation    | 稳定键、规范化请求与 hash、真实 principal/父操作、准确绑定、批准消费/派发事实、结果和效果证据 | callback、AbortController、IPC request 对象 |
-| 内容与展示   | 原始模型/工具/日志事实、已确认文件来源；App 展示流及其格式版本                                | 每个 token 的整页快照、所有客户端 ACK       |
-| 资源         | 确需跨崩溃核对的出生身份、归属、远端效果/关闭证据                                             | 旧 SSH 句柄、旧端口、失效 continuation 对象 |
+复用原连接配置、资源池与可信 owner。运行目录、绑定、监听器、调用队列和激活代为可重建内存状态，不持久化一份“当前服务在线”或安装流程。包安装事实、用户选择、授权与真实效果恢复依据按所属 owner 持久化。
 
-Run 是一次执行，Operation 记录需要持久核对的受管执行；没有模型 step 的服务执行也是正常 Run。首版按新职责设计存储，不机械给旧 `agent_run_tools` 扩字段，也不建立真假并存的两套账本。领域专用明细通过 operationId 关联；通用账本不复制全部 Provider 或协议字段。
+插件业务记录由其通过 Database API 管理，文件由 LocalFile/RemoteFile 管理，Content 和 Credentials 组合这些服务。Database 的用户/实例命名空间隔离由基础 API 实施，不能让插件传入任意表名或用户前缀取得他人数据；记录、查询、索引、事务及插件数据迁移的细节在基础 API 实施前冻结。
 
-不把 discover、describe、目录订阅、普通只读配置和包内计算逐条写成持久 Operation；跨边界读取仍有调用身份、取消和资源 scope，存在实际资源时仍须受管关闭。模型请求、对用户可见的工具执行、真实外部效果和需要恢复/幂等的调用才持有对应操作事实。记录类别由 Host 按实际入口/子效果决定，插件不能把突变标成纯读逃过账本。纯算法服务不需要额外派发状态机；父服务有真实子效果时汇总其事实，不重复计量同一模型/SSH效果。临时调用 scope 不伪装成数据库 Operation；子效果关联最近的持久 Run/Operation owner 并保留调用因果，派发前完整持久接纳，不引入半写入的父账本或事后补批准。
+任务、会话、工具历史和插件检查点归业务插件，宿主不再为所有插件建立 Agent Run。真正派发的基础 I/O 保留必要的授权、稳定操作身份、回执及未确认效果依据，沿用实际 owner 的恢复与去重逻辑。读取、纯计算、目录查找和服务包装不统一写入一层持久操作账本，也不重复计量同一真实效果。
 
-准入与审批分开：每层受管调用都复查范围，但纯编排包装不凭空增加一轮弹窗。已知的批次可让用户确认准确效果计划，批准绑定原实现、参数和版本；真实效果仅消费一次相应批准，后续新效果或改参仍按原政策处理。不能把对包装服务的宽泛同意当作未知子调用的通行证。
+### 订阅、一致性与续读
 
-需要区分调用结果与效果事实：服务 handler 报错不一定发生远端未知；返回成功也不能清除子 HTTP/SSH 写入的未知事实。App 可交付已知输出，Host 仍独立核对真实操作与资源是否收敛。展示流不能伪造可信工具卡、产物或 Run 终态。
+目录、事件和业务内容流分开：目录由宿主提供原子快照及连续修订；普通通知为实时事件，不默认永久保存；需要刷新后恢复的业务流由提供者声明游标、快照和补读接口，其数据归该插件或实际资源 owner。
 
-资源归属树决定取消/排空；消息因果图只表达内容来源，可以多源汇合，不授予权限。多个角色并行不需要伪装成单条模型步骤链。
+订阅先登记增量，再取得与来源水位对应的快照；来源 owner 提供快照/增量边界，宿主不能对任意业务查询承诺数据库原子快照。客户端先应用快照，再接纳连续增量；检测到缺口时向来源续读，来源无法恢复则明确要求重新取快照，不把中断期间的数据假装全部收到。
 
-### 6.2 事务与恢复
+业务写入与可靠事件需要同事务时，由该插件使用 Database 事务保存变更及待发布事实；普通失效提示可在恢复时用权威快照重新核对，不强制每个插件实现 outbox。事件总线本身不是持久队列，不承诺任意副作用“恰好一次”。
 
-- 实际派发前，在同一存储事务复核当前权限/版本、消费批准并登记唯一派发意图。提交未知不派发。不能分成 `authorize()` 成功后另一次无条件 `dispatch()`。
-- 原调用者具有当前历史读取权限时，先按原 operation key 和规范化请求查询已接纳操作，返回原回执或原未确认状态；不同请求冲突。此只读核对不要求旧 binding 仍可执行，不重新激活旧实例，也不转派新 provider。只有尚未接纳的新派发才检查当前 handle/配置与授权；避免更新后旧 handle 失效导致成功回执无法取回。调用者仍有责任不为同一未知意图换新键。
-- 配置 CAS、内容写入与对应回执在可覆盖的真实事务内提交；网络/文件系统不是 SQLite 原子事务的一部分，分开保存确认事实。
-- 父 Run 成功前核对所有关联操作的实际效果与资源；有未确认效果/关闭事实则不能报完整成功。仅 handler 结果不可得、但实际效果已证明未派发或已确定且资源已收敛时，由 App 判断业务是否仍可完成，不把它重新混成效果未知。确定未派发的取消不制造未知效果；实际未确认效果不能因父取消或进程退出被改成已回滚。
-- App 显式保存检查点：绑定 Run、准确 App 实现、App 状态引用、已消费回执的来源边界和仍待处理的稳定操作意图。请求及稳定 key 在效果派发前随原 Operation 持久化；并行完成不靠一个时间戳猜“都已消费”。恢复核对检查点边界之后的全部原操作/回执，关联尚未消费的结果再推进状态；同一未确认意图不得生成新 key 重派。无法对应意图或存在未确认效果时停止自动续跑；不恢复任意 async JS 栈，不盲目重跑整个 loop。
-- 每个 Run 用持久执行代及原子 CAS 保证唯一执行者，恢复前核对旧代资源已收敛。所有新准入绑定当前执行代；complete/suspend 先关闭该代新准入，收拢已接纳操作/资源，再同事务复核围栏并提交结束或挂起。并发 resume 只能一个取得执行权；旧代迟到结果只补记其原 Operation，不得新派发或覆盖新代状态。单 Backend 不能替代这项异步竞争保护。
-- 需要用户输入时 App 可显式 suspend，保存等待及检查点并排空该执行的活跃 I/O 后释放执行实例；不能安全释放的协议状态仍归原执行，不能假称已持久挂起。
-- 没有安全检查点、原实现不可用或效果未确认时保留现场并给出恢复动作，不自动切新版实现接管。
+每条逻辑流/订阅使用独立 generation 和序号，业务游标与传输 ACK 分开。ACK 只在校验及消费者实际应用完成后推进；回调失败不 ACK，也不把 UI 消费失败当作远端业务执行失败。多个流之间没有全局顺序或事务承诺；跨流关联由业务契约表达。
 
-所有 SQL 和迁移正文归对应 Adapter，`schema.ts/migrations.ts` 只安装编排。每条实际变更按 H-21 独立追加迁移；本轮不预占版本、不改已执行记录。本轮按用户确认删除SDK1–3的App、旧运行家族、来源记忆、集中集成和包档案，不转换旧执行历史；当前SDK4运行、签名、请求hash与未知效果围栏保留。迁移61–63追加执行，已发布1–60不改写；旧附件通过持久删除队列清理，未收敛拒绝快照。不在业务读取时猜字段、补旧默认或降级运行。
+### 大数据与并发
 
-App 私有数据按 user/App/publisher/package/instance/namespace 隔离，包升级不以 hash 改变逻辑数据归属。插件通过带 CAS、分页和内容引用的受管存储访问自己的数据；逻辑 schema 由包持有，不暴露任意 SQL。首版不为假想检索建立通用数据库 DSL，实际需要的新索引/查询能力再按 owner 增加。数据 schema 变化由显式迁移候选、校验及提交处理，不能 activate 时偷偷迁移。迁移只作用于自己的 namespace，版本与本体 schema_version 分开；不兼容时不承诺只换回旧包即可回滚。
+采用异步迭代、分块和消费确认，慢消费者沿所属流传播背压；控制消息独立调度。不为每层再叠加工具总大小、调用次数、路径深度或等待上限。技术单帧/窗口容量只控制在途内存，须注明实际依据，并保留全量续读或流式消费；源不支持暂停时由实际 owner 明确落盘或失败，不能静默丢弃原始输出。
 
-### 6.3 事件与提交
+不同实例与无冲突调用可并发，数据库事务、进程输入和文件冲突由真实 owner 序列化。不能通过同一网关大锁把长流和短控制操作排成一条队列。资源不足按实测和真实约束准入或等待，等待可取消，已派发任务的结算与清理不被新请求队列堵住。
 
-持久变更和其恢复所需游标/版本在原事务推进。确定提交后发布事实；提交不明只发布“需要核对”的失效通知，不伪造成功。通知失败不能改报已经提交的写入为回滚；订阅需重同步或明确断开，不能保持永久陈旧的健康状态。
+本轮仅设计，无 SQL 变化。后续每条数据库变更按 H-21 单独迁移，插件业务数据迁移与宿主基础 schema 分别归属；SQL/脚本转换旧结构，业务运行不保留旧字段读取、旧 Run scope 或双 SDK 分支。涉及未确认效果的旧事实只能按证据保留或明确处理，不能直接当作废弃字段删除。
 
-不做全量事件溯源，不复制所有内容为第二份事件日志。内存通知用于唤醒，持久来源用于补读。崩溃后 WS/IPC 断开并从源恢复；只有出现独立可靠后台业务消费者时，才为该消费者评估事务 outbox。
+### 完整调用示例
+
+Chat 自动命名：前端 Chat 在自己的视图作用域请求 Chat 后端命名服务 → 后端命名服务建立其拥有的调用作用域，解析已选 Provider 契约 → Provider 使用自己配置的受管凭据和 HTTP 能力完成模型请求 → Chat 按会话版本保存标题并发布变化。只有 Chat 定义标题格式和冲突策略；宿主不创建 Agent Run，Provider 不直接写 Chat 数据。页面离开不证明已提交标题撤销，晚结果按原会话/版本结算。
+
+Agent 调用 MCP：Agent 插件绑定所选 MCP 服务实例 → MCP 服务在自己的协议 session 内通过 HTTP 或 LocalProcess/Remote 发起请求 → 结果按服务契约流式返回 Agent。MCP session 可跨多次调用复用，但每次调用均保留独立取消和授权；关闭一个调用不自动结束共享 session，实例释放才排空其所有会话。模型工具名称及描述由 Agent/工具插件组织，不作为宿主精确派发身份。
 
 ## 7. 生命周期与失败
 
-### 7.1 作用域与复用
+权限、复用、取消与真实关闭由原资源 owner 执行；插件调用绑定真实调用者及资源作用域。通用基础接口不强制依赖 Agent Run。断连或本地取消不作为远端停止、写入回滚的证明。
 
-插件进程按需要激活并复用，不一工具一进程。代码共享不等于授权共享；每个逻辑实例、Run、Operation 和前端 Surface 都有真实 owner。
+### 事件与扩展钩子
 
-SSH transport、exec channel、SFTP 与协议 session 是不同资源。继续沿已确认的 Run 资源复用和十分钟滑动空闲政策：工具活动续期，任务最终完成/取消、用户手动关闭或明确关闭应用时进入清理，不在 App 的中间步骤完成时提前关闭。手动关闭存在前台/后台任务时保留可信确认。实际技术对象由原资源 owner 持有，插件只取得当前范围的引用。
+通知、聚合及拦截采用明确语义，借鉴 Cordis，不把所有事件都做成等待返回值的 RPC：
 
-并发传输的命令 channel 可独立，但共享 SSH transport 仍可能有窗口和带宽竞争。大文件/大日志与交互/ACP 的隔离选择由现有实测与资源 owner 决定，不把“两个 channel”当成无影响证明，不为每个工具重复建立连接池。
+| 语义              | 行为及失败归属                                                                                |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| `emit`            | 实时通知，不等待业务应答；宿主隔离、记录各消费者交付失败，不中断无关订阅                      |
+| `parallel`        | 启动全部已选处理者并等待所有结果，失败聚合；不用首个失败掩盖其他处理者仍在执行                |
+| `serial` / `bail` | 按声明顺序寻找处理者；跨进程为异步串行，明确区分“委托下一位”和实际结果                        |
+| `waterfall`       | 具名中间件链，可继续、返回或拒绝；`next()` 对同一次处理最多调用一次，处理异常不会静默视为委托 |
 
-跨调用协议会话是 execution-owned resource。每次调用重新核验当前权限，复用会话不能复用过期调用的 control。MCP continuation、ACP 回调绑定真实 session/config/generation；新请求不能接管旧回调。连接复用不意味着每个 operation 结束就 DELETE 远端 session。
+通知通过 schema 校验后发出。扩展钩子显式声明输入、结果、处理顺序与作用域；优先级来自当前组合配置或契约，不用加载顺序当策略。异步钩子在开始时固定当前处理链和配置修订，后续撤权/卸载可取消相关调用，新加入者不插入正在运行的链。
 
-### 7.2 更新、取消和失败
+`serial/bail` 使用显式 `handled/delegate/rejected` 结果，不靠空值或异常猜测。真正的 `waterfall` 允许处理者在 `await next()` 后继续处理结果：SDK 将 `next()` 转成宿主颁发的一次性 continuation 请求，宿主驱动剩余链并把结果回给原处理者，外层处理者仍由同次调用跟踪。continuation 绑定原调用、处理位置与 scope，取消/结束后失效；重复或越权使用明确拒绝。跨进程不传递可执行函数，网关调度 continuation 时不得持有等待整个外层 handler 的串行锁。
 
-| 场景             | 行为与最终责任                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| 激活失败         | 撤回注册草稿、清理原实例；管理目录保留失败与配置/卸载入口                           |
-| 缺依赖/冲突      | 明确列出缺失 provider、版本或启动环；不注入假能力，不将不可用当空目录成功           |
-| UI 隐藏/最小化   | 保留任务与必要状态；按可见性暂停展示，Host 继续观察新任务提醒                       |
-| iframe 崩溃/刷新 | 只撤销对应 Surface、端口与订阅；不冒充用户取消 Run                                  |
-| 用户明确关闭 App | 检查前台/后台任务，按确认取消并排空；关闭视图与实际任务停止分别交付                 |
-| UI-only 更新     | 替换对应 Surface；本页允许的草稿/线程/锚点可交接，不自动发送，不取消 Run            |
-| provider 更新    | 先校验候选、关闭受影响准入、等待/明确取消在途操作并排空，再发布新代；原 handle 失效 |
-| App 实现更新     | 等待该实现的 Run 完成或确认取消；不迁移活跃 JS 栈、不偷偷替换 driver                |
-| 撤权/信任撤销    | 立即阻止相关新 I/O 并取消原资源；真实结果和清理仍由旧 owner 记录                    |
-| 取消 root        | 只撤实际失去可见性/权限的绑定；其它 roots 仍需要的 provider 保留，不误取消无关 Run  |
-| 超时/取消        | 等待截止、执行截止、远端停止分别确认；控制先停准入，真实 close 后释放占用           |
-| 断线/回执丢失    | 用原 key 查询原结果；订阅重连不重放写入，不换 key 猜测重试                          |
-| unknown/清理失败 | 保留准确边界、原操作与资源证据；阻止不安全重派/升级，不虚报完成                     |
-| 卸载/清数据      | 引用与排空确认后处理；清正文与保留防重放/未知证据分开，不误删其它实例               |
-| 历史展示         | 缺旧 UI renderer 时仍可看安全通用内容/文件；不为看历史运行旧可执行插件              |
+事件 namespace 由已验证包/契约占有，只能发布本次注册的事件；跨前后端导出名单由插件声明、宿主校验并投影，不在本体维护业务事件枚举。发布、订阅和用户应答逐项检查可见性与权限；普通插件注册一个审批事件不等于它取得宿主的授权权力。
 
-provider 失效先计算受影响集合并关闭新准入，再按真实 Operation/资源归属排空依赖调用，最后释放 provider。缓存 binding 和“可能调用该接口”的关系不持有执行租约，不能沿可能有环的实例依赖图递归等待对方 close；必要启动依赖与本次在途资源分开处理。可选 provider 更新只失效其 binding、排空真实关联调用/会话，不必终止仍能处理失效的整个 App Run。App 的必需代码依赖更新仍按 App 实现更新处理。共享关闭 Promise 幂等，独立清理失败不阻止其余资源收尾；晚成功资源与晚拒绝仍归原 owner。不能把管理更新排在需要同一管理锁完成的清理之前形成等待环。
+订阅返回可等待的关闭能力，显式退订和作用域释放都撤销监听，阻止后续回调并等待已进入的回调收敛。监听器从自身回调发起关闭时，先同步撤销后续派发，最终等待由外层 owner 追踪，不能等待自身结束形成死锁。回调的晚成功、失败及关闭失败均归原订阅代。
 
-### 7.3 协议与安全保证
+### 调用失败、取消与重试
 
-MCP/ACP 的官方 SDK、帧解释与会话算法在服务插件；Host 负责固定目标、凭据注入、实际字节 I/O、权限和关闭事实。
+宿主协议区分：未派发拒绝、已确认业务结果、取消等待、派发后执行结果未确认，以及资源清理未确认。`invalid_input`、`dependency_unavailable`、`binding_stale`、`permission_denied` 等宿主原因使用有限错误码；插件业务错误按其契约的 namespace/code/schema 投影，不因新增业务错误改本体枚举。异常正文、堆栈与 cause 只留脱敏诊断。
 
-原始 HTTP/stdio 是授予准确协议 provider 的强会话能力。Host 不解析协议时，不能保证恶意 provider 的每帧“只读”；插件自报 catalog/readOnly 或工具 schema 不降低该能力风险。官方 ACP provider 仍逐次请求内层批准并确认真实交付，这与宿主能够约束任意第三方协议语义是两项保证。
+返回值/schema 非法会拒绝交付，但不能反推副作用没有发生；已取得真实效果回执时保留它，没有回执则保留未确认状态。通用网关不凭插件自报“取消成功”清除基础 I/O 的实际占用或效果围栏。
 
-签名证明来源，不证明代码安全；独立进程、Node permission 与 iframe 也不能直接宣称完整恶意代码隔离。首版须验证实际文件/网络/进程访问边界，SDK 受管保证只覆盖经过它的调用。不能既允许绕过 SDK 直接联网，又声称所有副作用都经过审批。
+调用支持 `AbortSignal` 和调用者按需求设置的完整期限，不给所有插件套一个固定任务超时；认证授权到期或作用域撤销是真实准入条件。等待结束先停止该调用继续派发，再按实际 owner 取消并收尾；已经发生的效果不能被记成未执行。结果与清理分别确认，handler 返回不证明派生资源已关闭。
 
-日志沿现有诊断组件，关联 app/instance/run/operation/generation，区分 info/debug/trace 与错误；不输出秘密、Cookie 或完整私密正文。没有事件不判定卡死，心跳也不证明任务推进；等待批准、外部任务、资源故障由真实状态表达。
+网关恢复传输和只读订阅，不自动重放普通方法。只读重试由调用者按契约决定；有副作用的重试必须先使用原稳定意图查询实际 owner 的回执，缺少可核对结果时不换键重试。请求关联 ID 只关联一次传输，不等同于业务幂等键。具体基础写入必须在派发前建立必要的恢复依据；普通插件无需为了执行一段纯计算创建持久任务。
 
-## 8. 当前能力与验收
+A 调用 B 再调用 C 时，宿主传播原作用域、父调用和取消。取消一个调用只影响它拥有的资源，不撤销健康共享连接或其他订阅；独立后台任务必须显式移交到具备自身授权的长期作用域，由新 owner 跟踪，不能靠异步函数未被 await 而逃逸原生命周期。
 
-### 8.1 当前状态
+### 断线、卸载与更新
 
-SDK4宿主、前后端SDK及八个官方包已完成实现、正式验收与发布；后续复审、测试矩阵及发布状态随当前验收基线维护。D24–D26旧SDK切片仍仅作历史证据，不替代本版结果；源码、发布版本、摘要及首次失败统一见[当前验收基线](../testing/E2E.md#当前验收基线)。
+浏览器断线关闭该连接的传输和视图订阅；已归后端长期作用域的任务继续由其 owner 管理。前端重连按当前身份重新发现、绑定和订阅，再按来源游标恢复；不复用旧会话 grant，也不重发未确认写入。刷新 iframe 或隐藏页面不自动结束后端任务；明确关闭应用的既有交互按当前产品行为适配，活动任务仍需要可信确认。
 
-下列场景保留为设计与持续回归判据，不表示已穷尽全部故障组合。旧夹具已由新测试体系迁移并验收；真实模型、移动真机、介质故障和性能实测继续见[PLAN](../PLAN.md#agent-动态插件架构重新设计)，不将编译或受控fixture等同于这些实测。
+依赖提供者撤销时先停止相关新准入并撤销目录可见性，通知依赖方取消并排空原代调用；在依赖方必要收尾完成前，保留所需的受限清理能力，不让已卸载实例继续开展新业务。可选依赖失效只撤销对应绑定；必需依赖失效使受影响消费方进入等待/停止状态。闭包按依赖图计算，不波及无关实例。
 
-### 8.2 功能设计验收
+更新流程为校验候选包/契约及显式数据迁移计划 → 确定受影响实例与 UI → 停止新准入 → 排空旧代 → 应用归属明确的迁移 → 激活并原子发布新代。不能边迁移边让旧代码继续写同一数据，也不自动恢复已经失败的任务。候选失败时保留真实安装、停用或失败状态；数据已经迁移时不自动启动不兼容旧代码。UI-only 更新只替换相关 Surface，不取消无关后端任务。
 
-| 场景           | 必须证明                                                                                                    |
-| -------------- | ----------------------------------------------------------------------------------------------------------- |
-| 默认 Agent     | 原主要聊天/图片/推理等级/上下文/标题/压缩功能在独立 App 中实际执行；Host 没有五阶段或默认算法 fallback      |
-| 无模型 ACP App | 未配置 Provider 仍可调用选定 ACP 服务、输出内容、批准/取消/恢复；没有伪模型 step                            |
-| 多角色架构检查 | 一个测试 App 调用两个模型并组织发言，复用同一本账本；角色数据和上下文属于 App，不新增 Host 酒馆字段         |
-| 子 Agent       | 父子权限收窄、并行结果/用量、取消与真实资源排空；未派发取消不误判 unknown                                   |
-| 动态能力       | 安装本体未知的新工具/服务，用户选择授权后同一 App 可发现；取消选择/更新后旧 handle 明确失效                 |
-| 多实例         | 同包两个 MCP 连接、两个 App 使用同包互不串配置、session、目录、权限或清理                                   |
-| 设置           | 未启用插件能打开设置；人工与 Agent 写同一配置 owner，冲突/撤权/秘密/响应丢失一致处理                        |
-| 模型工具发现   | 摘要搜索后按需读取详细 schema；本次曝光准确绑定，远端 inventory 变化不重解释旧调用                          |
-| 前端独立交付   | 固定本体只更新 ChatUI，保持 Run、历史、文件、草稿与提醒；新 App Surface 不需 Host 包名分支                  |
-| 完整工具迁移   | 逐项覆盖现有工具实际功能，不以旧 65 个名称作为新 API 限制；批次完整预检、审批、日志、结果续读与产物来源保留 |
-| 管理与市场     | 安装≠选择≠授权；源失败仍可管理，依赖冲突可定位，升级/卸载/保留数据/清理及第三方交付通过                     |
+`dispose()` 在启动清理前保存共享 Promise，重复关闭共享同一完成及失败。独立资源均开始清理，再聚合结果；未确认清理阻止原资源退役或同归属替代实例接管。宿主关停先停止准入、发取消，再等待所属任务和资源，不因等待顺序形成环，不以强制退出冒充清理成功。
 
-多角色只用于确定性契约夹具验证，不表示新增酒馆产品或额外 UI 范围。所有正式功能都需真实入口和消费者，不能靠 schema、空 hook 或模板包代替。
+### 诊断与时间
 
-除了逐功能验收，还必须通过以下扩展判据，防止“目录拆了、运行仍写死”：
+复用项目诊断组件，日志关联用户的安全引用、包、实例、激活代、作用域、绑定、调用及传输 ID，支持既有等级，不记录 token、Cookie、凭据、完整私密输入或原始供应商错误。调用延迟、排队/背压和未确认收尾可观测，但不引入一个额外的业务状态缓存。
 
-- 第三方包新增一个检索/记忆策略 service、一个模型工具和一个实例内事件；固定 Host 构建即可发现、调用、订阅及卸载，不增加 Host 枚举或轮询。
-- 一个包提供基础工具与依赖 ACP 的可选工具；未安装/移除 ACP 时只有相关贡献失效，基础工具和设置继续可用。
-- 已获准 MCP 实例激活后自动完成受管连接准备；仅安装未授权时不能联网，管理发现会话不能变成 Run 执行授权。
-- 不配置模型的纯动作 App 可完成且输出为空；无恢复功能的 App 也可运行，中断后明确保留事实，不自动重跑。
-- 同一 App 切换兼容 UI provider，或更新插件私有配置/数据 schema，不修改 Host 包名分支或业务表。
-- 目录查询/纯计算不产生多余持久派发记录；多个包装服务围绕同一真实效果时不重复计量/批准，祖先拒绝不能被局部注册绕过。
+运行时定时器和监听注册到真实作用域并随其释放；时间解析复用标准库或成熟库，不另建调度内核。定时提醒等业务由普通插件实现。可替代的时间测试按 H-22.1 使用对应进程的虚拟时钟，不能用前端快进冒充后端期限或远端资源结束。
 
-### 8.3 可靠性与性能验收
+## 8. 当前状态与下一步
 
-| 类别       | 场景与判据                                                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 准入原子性 | 批准期间更新 schema/provider/config，撤权与派发竞争，提交未知不派发；准确 binding 不回退                                       |
-| 真实效果   | 配置提交成功但响应丢失；SSH 写入未知；一个并行子效果未知；已确认产物与失败父操作并存                                           |
-| 恢复       | 并行写成功但 checkpoint 未推进、并发 resume、complete/suspend 与迟到调用竞争；原意图不换 key，旧代不能新派发；无安全依据不重放 |
-| 协议会话   | MCP 真实 session-bound continuation、ACP 内层批准/取消及晚回调；sessionless fixture 不能替代有状态场景                         |
-| 生命周期   | 更新/卸载中有前台任务、后台 Job、待批准、共享 provider；停止准入、依赖者排空、真实关闭均被证明                                 |
-| 通信       | 首份快照竞争、重复/旧代 ACK、断档/重连、终态先于正文、慢 iframe、长日志下控制响应                                              |
-| 无业务轮询 | 列出全部写入/撤权生产者，空闲页面不周期读业务表；保活/期限/重连分别统计                                                        |
-| UI         | 320/390px 和宽窗口、虚拟历史/GIF/附件、思考等级、快速批准、会话切换、任务提醒与资源关闭；保持现有风格                          |
-| 数据       | 空库/升级/连续 dev/重复启动/签名拒绝/备份恢复；旧SDK1–3数据删除，当前SDK4历史与未知证据保留                                    |
-| 独立发布   | 固定兼容本体，分别升级 App/工具/服务/UI；独立仓只依赖公开 SDK，第三方模板走同一路径                                            |
-| 性能       | 相同任务/数据/并发下记录首字、取消/审批延迟、RPC 排队、SQL 读写、内存和连接数，不预称优化比例                                  |
+### 当前与目标的差异
 
-后续变更继续按[E2E入口](../testing/E2E.md)执行适用的静态、真实生命周期、指定浏览器与正式远程验收，逐项记录实际代码基线。设计审查、编译通过、旧 SDK 局部测试和正式产品验收分别报告。
+当前 SDK4 已有签名包、原子目录、精确绑定、隔离 IPC、iframe 及部分事件/流能力，但调用 scope、前端公开请求和模型能力仍耦合 Run 等宿主业务对象；不能据此把本页通用宿主标为已经实现。
 
-测试归属见[测试架构](TESTING.md)：Host通用安全与生命周期在本体；官方App、工具、MCP/ACP和ChatUI业务在插件仓各包`tests/`；完整Agent真实Host链路归插件`tests/interoperability/`，业务浏览器归`tests/e2e/specs/<packageId>/`。本体通过准确源码/签包产物调用外仓用例，不维护第二套官方业务测试或Playwright→Node包装。历史发布通过与本轮测试框架重构验收分别见[测试入口](../testing/E2E.md)。
+本页完整设计了注册、发现、依赖绑定、调用、订阅、前后端桥接与生命周期；八项基础能力及 Settings、Credentials、Content 的归属已确认。目录方案覆盖本体 `plugins` 域、独立插件仓、双 SDK，并已补齐 Backend 旧 plugins 业务残留、Frontend 各功能、Shared、模块外消费者、Platform 及测试/迁移/构建的逐项去向。清单是后续新宿主实现的职责要求；两仓旧代码已在清理阶段移除并保留归档标签，不表示新宿主、SDK或插件已实现。USAGE仅描述清理后本体仍提供的功能。目标精确 wire 字段、SDK 协议版本、基础 API 细节与迁移编号在实施前冻结；这些是落地契约工作，不再重开通用宿主的职责边界。
+
+### 验收矩阵
+
+| 层级                    | 必须覆盖的行为                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 逻辑 / 契约             | schema/版本冲突、原子发布、单/多提供者及歧义、必需环、可选依赖变化、权限投影与命名空间、全部事件语义              |
+| Backend 模块 / 真实 IPC | 非 Run 调用、父子授权及撤销、并发激活、输入/输出校验、双向流、精确绑定失效、取消/晚结果、跨插件清理与排空         |
+| 存储 / 故障             | 每条迁移、持久回执及提交未确认、写后失去事件、来源补读、插件数据隔离、迁移后候选启动失败                          |
+| 前端模块                | 通用代理与目录跟随、不同 iframe 隔离、实际消费后 ACK、旧代帧/回调、退订、自身回调关闭、环境及主题/locale 生命周期 |
+| 浏览器正常流程          | 安装并选择插件 → 调用服务/流 → 接收事件 → 刷新恢复 → 替换/卸载；保持原桌面及手机 UI                               |
+| 独立插件仓              | 每个插件的契约及业务测试、Chat 独立命名、Agent 与 MCP/ACP 服务组合、同契约替换实现                                |
+| 真实边界                | 大数据与短控制并发、代理与断网、作用域释放后真实 SSH/SFTP/进程收尾；不以 mock 或传输心跳代替                      |
+
+关键扩展判据：无需改本体业务枚举，第三方可增加一个新契约和事件，前后端插件能发现并使用；同一服务既可由 Chat/设置调用，也可由 Agent 调用；两个 App 或同包两个实例不共享秘密、授权与资源。旧绑定、旧事件及旧关闭句柄不能操作新代。
+
+测试复用现有 Vitest、Node 原生测试与 Playwright，异常矩阵下沉到实际 owner，浏览器保留正常产品流程及独有安全边界，不创建平行测试框架。模块完成后测真实耗时，时间等待能替换的都用虚拟时钟；验证与实施顺序只在 [PLAN](../PLAN.md#agent-动态插件架构重新设计) 维护。本轮仅文档格式、链接及 diff 检查，不执行或声称上述运行时验收。
+
+### dsh 对照与选型边界
+
+核查快照为 `deepseek-ai/deepseek-harness@fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159`，不是对其后续版本的承诺：
+
+- [Cordis Service](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/service.ts) 和 [Context](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/context.ts)：命名服务、依赖注入及生命周期归属。
+- [Events](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/vendor/cordis/src/events.ts) 和 [Scope](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/core/scope/README.zh.md)：事件分派、作用域可见性及释放。其进程内作用域不是安全隔离。
+- [Gateway](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/gateway/README.zh.md) 和 [转发事件声明](https://github.com/deepseek-ai/deepseek-harness/blob/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159/packages/api/remotes/src/remote-events.ts)：前后端调用、逻辑流与事件。该快照依赖生成契约和应用层集中事件名单；本方案将第三方业务契约和导出声明随插件交付。
+
+本方案参考这些机制，复用已有 Ajv、semver、Fastify、ws、SSH/SFTP 和诊断组件；不将采用 dsh 的 vendored Cordis/Typert 视为已完成选型。新增依赖仍须按 H-14 核查维护、缺陷处理及采用成本，不在本轮引入第二套容器、RPC 框架或连接池。

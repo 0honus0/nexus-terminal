@@ -24,7 +24,7 @@ test('Mutation admission checks all resource keys atomically and preserves block
 		id: randomUUID(),
 		keys: keys.map(resourceKey),
 		ownerId: randomUUID(),
-		origin: 'agent',
+		origin: 'tools',
 		targets: keys.map((_, i) => ({ targetId: i + 1, fingerprint: 'a'.repeat(64) })),
 		now: Date.now(),
 	});

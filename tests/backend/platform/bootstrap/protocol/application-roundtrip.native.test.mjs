@@ -1,20 +1,11 @@
-import { createTestAgentApp } from '../../../agent/runs/support/native-agent-fixture.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { once } from 'node:events';
 import { mkdtemp, writeFile } from 'node:fs/promises';
-import { createServer, request } from 'node:http';
+import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { createApp } from '../../../../../packages/backend/dist/bootstrap/create-app.js';
-import {
-	readAgentCreateRunResponse,
-	readAgentCancelRunResponse,
-	readAgentRunResponse,
-	readAgentRunEventsResponse,
-} from '../../../../../packages/shared/dist/agent/runs/http-codec.js';
 
 import { SealedBytes } from '../../../../../packages/backend/dist/platform/security/sealed-bytes.js';
 import { BACKUP_MAX_SNAPSHOT_BYTES } from '../../../../../packages/shared/dist/system/backups/values.js';
@@ -69,21 +60,8 @@ function expectStatus(response, status) {
 	return response.body;
 }
 
-async function until(read, accept) {
-	const deadline = performance.now() + 5000;
-	let latest;
-	do {
-		latest = await read();
-		if (accept(latest)) {
-			return latest;
-		}
-		await delay(20);
-	} while (performance.now() < deadline);
-	assert.fail('B10 state deadline exceeded: ' + JSON.stringify(latest));
-}
-
 await test(
-	'Installed application preserves HTTP, durable state and model effects across restore/restart',
+	'Installed application preserves HTTP, durable state across restore/restart',
 	{ timeout: 60000 },
 	async (t) => {
 		const directory = await mkdtemp(
@@ -95,39 +73,7 @@ await test(
 		const key = randomBytes(32);
 		let app;
 		let cookie = '';
-		let provider;
-		let agentApp;
-		let thread;
 		let command;
-		let hold = false;
-		const calls = [];
-		const modelServer = createServer(async (req, response) => {
-			const chunks = [];
-			for await (const chunk of req) {
-				chunks.push(chunk);
-			}
-			const call = { body: JSON.parse(Buffer.concat(chunks).toString('utf8')), closed: false };
-			calls.push(call);
-			response.on('close', () => {
-				call.closed = true;
-			});
-			response.writeHead(200, { 'Content-Type': 'text/event-stream' });
-			response.flushHeaders();
-			if (!hold) {
-				response.end(
-					'data: ' +
-						JSON.stringify({
-							choices: [{ index: 0, delta: { content: 'B10 complete' }, finish_reason: null }],
-						}) +
-						'\n\ndata: ' +
-						JSON.stringify({
-							choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-							usage: { prompt_tokens: 12, completion_tokens: 3 },
-						}) +
-						'\n\ndata: [DONE]\n\n',
-				);
-			}
-		});
 		let address;
 
 		const api = (method, path, body, headers) => send(address, method, path, body, cookie, headers);
@@ -135,20 +81,14 @@ await test(
 		t.after(async () => {
 			timing.executeMs = executing === undefined ? null : performance.now() - executing;
 			const draining = performance.now();
-			modelServer.closeAllConnections();
-			const results = await Promise.allSettled([
-				new Promise((resolve, reject) => modelServer.close((error) => (error ? reject(error) : resolve()))),
-				Promise.resolve().then(() => app?.close()),
-			]);
+			const results = await Promise.allSettled([Promise.resolve().then(() => app?.close())]);
 			timing.drainMs = performance.now() - draining;
 			await writeFile(join(directory, 'timings.json'), JSON.stringify(timing, null, 2));
 			t.diagnostic(JSON.stringify(timing));
 			const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
-			if (failures.length) throw new AggregateError(failures, 'Application and Provider cleanup failed');
+			if (failures.length) throw new AggregateError(failures, 'Application cleanup failed');
 		});
 		{
-			modelServer.listen(0, '127.0.0.1');
-			await once(modelServer, 'listening');
 			const dbPath = join(directory, 'backend-next.db');
 			app = await createApp(dbPath, { encryptionKey: key });
 			address = await app.listenHttp({ publicOrigin, bindHost: '127.0.0.1', port: 0, trustedProxies: [] });
@@ -222,195 +162,6 @@ await test(
 				assert.deepEqual(listed.entries, [incremented]);
 				command = incremented;
 			});
-
-			await t.test(
-				'Agent default execution is denied; explicit settings and Provider CAS are authoritative',
-				async () => {
-					provider = expectStatus(
-						await api('POST', '/api/v1/agent/ai/providers', {
-							kind: 'openai-compatible',
-							displayName: 'B10 provider',
-							baseUrl: 'http://127.0.0.1:' + modelServer.address().port + '/v1',
-							protocol: 'chat-completions',
-							models: [
-								{ id: 'fixture', contextWindow: 8192, maxOutputTokens: 256, supportsTools: false },
-							],
-							enabled: true,
-							credential: 'b10-private-provider-key',
-						}),
-						201,
-					);
-					assert.equal(JSON.stringify(provider).includes('b10-private-provider-key'), false);
-					assert.equal(
-						expectStatus(
-							await api('PATCH', '/api/v1/agent/ai/providers/' + provider.id, {
-								expectedVersion: 999,
-								enabled: false,
-							}),
-							409,
-						).code,
-						'version_conflict',
-					);
-					agentApp = await createTestAgentApp(api, directory, 'B10 app');
-					const policy = expectStatus(await api('GET', `/api/v1/agent/apps/${agentApp.id}/grants`), 200);
-					expectStatus(
-						await api('PUT', `/api/v1/agent/apps/${agentApp.id}/grants`, {
-							expectedPolicyRevision: policy.policyRevision,
-							grants: ['plugin.invoke', 'context.read'].map((capability) => ({
-								capability,
-								scope: { kind: 'global' },
-							})),
-						}),
-						200,
-					);
-					thread = expectStatus(
-						await api('POST', `/api/v1/agent/apps/${agentApp.id}/threads`, { title: 'B10 thread' }),
-						201,
-					);
-					const runPath = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
-					const input = {
-						prompt: 'hello',
-						approvalMode: 'ask',
-						connectionIds: [],
-						inputJson: JSON.stringify({
-							model: {
-								providerId: provider.id,
-								modelId: 'fixture',
-								configurationVersion: provider.version,
-								reasoningEffort: null,
-							},
-							artifacts: [],
-						}),
-					};
-					assert.equal(
-						expectStatus(await api('POST', runPath, input, { 'Idempotency-Key': randomUUID() }), 403).code,
-						'execution_disabled',
-					);
-					assert.equal(calls.length, 0);
-					const settings = expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings;
-					expectStatus(
-						await api('PUT', '/api/v1/agent/execution-settings', {
-							expectedVersion: settings.version,
-							enabled: true,
-							limits: settings.limits,
-						}),
-						200,
-					);
-				},
-			);
-
-			await t.test(
-				'real streamed model output settles; replay preserves original result and does not redispatch',
-				async () => {
-					const path = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
-					const input = {
-						prompt: 'complete once',
-						approvalMode: 'ask',
-						connectionIds: [],
-						inputJson: JSON.stringify({
-							model: {
-								providerId: provider.id,
-								modelId: 'fixture',
-								configurationVersion: provider.version,
-								reasoningEffort: null,
-							},
-							artifacts: [],
-						}),
-					};
-					const headers = { 'Idempotency-Key': randomUUID() };
-					const created = readAgentCreateRunResponse(
-						expectStatus(await api('POST', path, input, headers), 201),
-					);
-					const runPath = `/api/v1/agent/apps/${agentApp.id}/runs/${created.run.id}`;
-					const completed = await until(
-						async () => readAgentRunResponse(expectStatus(await api('GET', runPath), 200)),
-						(run) => run.status === 'completed',
-					);
-					assert.ok(completed.version > created.run.version);
-					assert.equal(calls.length, 1);
-					assert.equal(calls[0].body.messages.at(-1).content, input.prompt);
-					const replay = readAgentCreateRunResponse(
-						expectStatus(await api('POST', path, input, headers), 200),
-					);
-					assert.equal(replay.status, 'replayed');
-					assert.deepEqual(replay.run, created.run);
-					assert.equal(
-						expectStatus(await api('POST', path, { ...input, prompt: 'changed' }, headers), 409).code,
-						'idempotency_conflict',
-					);
-					assert.equal(calls.length, 1);
-					const first = readAgentRunEventsResponse(
-						expectStatus(await api('GET', runPath + '/events?after=0&limit=1'), 200),
-					);
-					const next = readAgentRunEventsResponse(
-						expectStatus(await api('GET', runPath + `/events?after=${first.nextCursor}&limit=100`), 200),
-					);
-					assert.equal(first.items.length, 1);
-					assert.ok(next.items.length > 0);
-					assert.ok(next.items.every((event) => event.sequence > first.nextCursor));
-				},
-			);
-
-			await t.test(
-				'cancel rejects stale version, replays one intent and closes the real Provider stream',
-				async () => {
-					hold = true;
-					const path = `/api/v1/agent/apps/${agentApp.id}/threads/${thread.id}/runs`;
-					const input = {
-						prompt: 'hold until cancellation',
-						approvalMode: 'ask',
-						connectionIds: [],
-						inputJson: JSON.stringify({
-							model: {
-								providerId: provider.id,
-								modelId: 'fixture',
-								configurationVersion: provider.version,
-								reasoningEffort: null,
-							},
-							artifacts: [],
-						}),
-					};
-					const created = readAgentCreateRunResponse(
-						expectStatus(await api('POST', path, input, { 'Idempotency-Key': randomUUID() }), 201),
-					);
-					await until(
-						async () => calls.length,
-						(count) => count === 2,
-					);
-					const runPath = `/api/v1/agent/apps/${agentApp.id}/runs/${created.run.id}`;
-					const current = readAgentRunResponse(expectStatus(await api('GET', runPath), 200));
-					assert.equal(
-						expectStatus(
-							await api(
-								'POST',
-								runPath + '/cancel',
-								{ expectedVersion: 999 },
-								{ 'Idempotency-Key': randomUUID() },
-							),
-							409,
-						).code,
-						'version_conflict',
-					);
-					const headers = { 'Idempotency-Key': randomUUID() };
-					const cancelled = readAgentCancelRunResponse(
-						expectStatus(
-							await api('POST', runPath + '/cancel', { expectedVersion: current.version }, headers),
-							200,
-						),
-					);
-					assert.equal(cancelled.run.status, 'cancelled');
-					const replay = readAgentCancelRunResponse(
-						expectStatus(
-							await api('POST', runPath + '/cancel', { expectedVersion: current.version }, headers),
-							200,
-						),
-					);
-					assert.equal(replay.status, 'replayed');
-					assert.deepEqual(replay.run, cancelled.run);
-					await until(async () => calls[1].closed, Boolean);
-					assert.equal(calls.length, 2);
-				},
-			);
 
 			await t.test(
 				'encrypted backup imports through real maintenance and rebinds the existing HTTP listener',
@@ -487,33 +238,23 @@ await test(
 					assert.equal(typeof restored.cleanupPending, 'boolean');
 					assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);
 					assert.equal(expectStatus(await api('GET', '/api/v1/auth/status'), 200).isAuthenticated, true);
-					assert.equal(calls.length, 2);
 				},
 			);
 
-			await t.test(
-				'restart preserves personal state/settings and does not replay historical paid requests',
-				async () => {
-					await app.close();
-					app = await createApp(dbPath, { encryptionKey: key });
-					address = await app.listenHttp({
-						publicOrigin,
-						bindHost: '127.0.0.1',
-						port: 0,
-						trustedProxies: [],
-					});
-					assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);
-					assert.equal(
-						expectStatus(await api('GET', '/api/v1/agent/execution-settings'), 200).settings.enabled,
-						true,
-					);
-					expectStatus(await api('POST', '/api/v1/auth/logout'), 200);
-					expectStatus(await api('GET', '/api/v1/auth/status'), 401);
-					expectStatus(await api('GET', '/api/v1/quick-commands'), 401);
-					expectStatus(await api('GET', '/api/v1/agent/ai/providers'), 401);
-					assert.equal(calls.length, 2);
-				},
-			);
+			await t.test('restart preserves personal state and revokes the logged-out session', async () => {
+				await app.close();
+				app = await createApp(dbPath, { encryptionKey: key });
+				address = await app.listenHttp({
+					publicOrigin,
+					bindHost: '127.0.0.1',
+					port: 0,
+					trustedProxies: [],
+				});
+				assert.deepEqual(expectStatus(await api('GET', '/api/v1/quick-commands'), 200).entries, [command]);
+				expectStatus(await api('POST', '/api/v1/auth/logout'), 200);
+				expectStatus(await api('GET', '/api/v1/auth/status'), 401);
+				expectStatus(await api('GET', '/api/v1/quick-commands'), 401);
+			});
 		}
 	},
 );

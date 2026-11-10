@@ -224,40 +224,12 @@ jobs:
           restore-keys: |
             quality-checks-${{ runner.os }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml', 'package.json', 'eslint.config.mjs', '.prettierrc', '.prettierignore', 'packages/frontend/package.json', 'packages/frontend/tsconfig.json') }}-
 
-      - name: Checkout plugin test owners
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: 0honus0/nexus-agent-plugins
-          path: tests/.artifacts/plugin-source
-          persist-credentials: false
-
-      - name: Build application and sign plugin candidates once
+      - name: Build application once
         run: |
           echo "::group::Build host application"
           bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/build.json" pnpm --filter @nexus-terminal/tests build
           node scripts/e2e/host-test-artifact.mjs write "$GITHUB_SHA"
           echo "::endgroup::"
-          echo "::group::Build and sign plugin candidates"
-          (
-            cd tests/.artifacts/plugin-source
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-install.json" pnpm install --frozen-lockfile
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-build.json" pnpm build
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-sign.json" pnpm prepare:interop ../plugin-candidates
-            git rev-parse HEAD > ../plugin-candidates/source.sha
-            tar --exclude=node_modules --exclude=.git -czf ../plugin-test-source.tar.gz .
-          )
-          echo "::endgroup::"
-
-      - name: Upload exact plugin source and candidates
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: e2e-plugin-candidates-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            tests/.artifacts/plugin-test-source.tar.gz
-            tests/.artifacts/plugin-candidates/staging-1/
-            tests/.artifacts/plugin-candidates/source.sha
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Upload tested application build
         uses: actions/upload-artifact@v7.0.2
@@ -267,17 +239,12 @@ jobs:
           path: |
             packages/shared/dist/
             packages/backend/dist/
-            packages/backend/dist-plugin-sdk/
             packages/frontend/dist/
             packages/host-test-artifact.json
           if-no-files-found: error
           retention-days: 14
 
-      - name: Check host and plugin source, formatting and independent behavior
-        env:
-          NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/.artifacts/plugin-source
-          NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-          NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/.artifacts/plugin-candidates/staging-1
+      - name: Check source, formatting and independent behavior
         run: |
           echo "::group::Host checks and fast tests"
           bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/check.json" pnpm run check
@@ -287,20 +254,6 @@ jobs:
           echo "::group::Full repository formatting"
           bash scripts/e2e/measure-command.sh "$NEXUS_TEST_METRICS/format.json" pnpm run format:all:check
           echo "::endgroup::"
-          echo "::group::Plugin checks and independent tests"
-          (
-            cd tests/.artifacts/plugin-source
-            export NEXUS_TEST_ARTIFACT_DIR="$GITHUB_WORKSPACE/tests/.artifacts/plugin-quality"
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-check.json" pnpm check
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-fast.json" pnpm test:fast
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-test.json" \
-              node --test --test-reporter=spec --test-reporter=junit \
-              --test-reporter-destination=stdout \
-              --test-reporter-destination="$NEXUS_TEST_ARTIFACT_DIR/packages.xml" \
-              'plugins/*/tests/**/*.native.test.mjs' 'tests/{repository,templates}/**/*.native.test.mjs'
-            bash "$GITHUB_WORKSPACE/scripts/e2e/measure-command.sh" "$NEXUS_TEST_METRICS/plugin-browser-check.json" pnpm check:browser
-          )
-          echo "::endgroup::"
 
       - name: Upload quality reports and resource measurements
         if: always()
@@ -308,7 +261,6 @@ jobs:
         with:
           name: quality-reports-${{ github.run_attempt }}
           path: |
-            tests/.artifacts/plugin-quality/
             tests/.artifacts/quality-metrics/
           if-no-files-found: error
           retention-days: 14
@@ -348,9 +300,7 @@ jobs:
       NEXUS_TEST_ARTIFACT_DIR: ${{ github.workspace }}/tests/.artifacts/layers
       NEXUS_TEST_DOCKER_NATIVE: backend/remote/docker/protocol/docker.native.test.mjs
       NEXUS_TEST_FINITE_FS_NATIVE: backend/remote/sessions/suspend/storage/suspended-log-enospc.native.test.mjs
-      NEXUS_TEST_HOST_ROOT: ${{ github.workspace }}
-      NEXUS_TEST_PLUGIN_SOURCE_ROOT: ${{ github.workspace }}/tests/.artifacts/plugin-source
-      NEXUS_TEST_PLUGIN_SET: ${{ github.workspace }}/tests/.artifacts/plugin-validation-artifact/plugin-candidates/staging-1
+
       NEXUS_E2E_PREBUILT: '1'
       E2E_CAPTURE_SCREENSHOTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_screenshots && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: ${{ github.workspace }}/tests/.artifacts/functional-screenshots
@@ -362,7 +312,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
 
-      - name: Resolve this run's application and plugin builds
+      - name: Resolve this run's application build
         id: builds
         uses: actions/github-script@v9.0.0
         with:
@@ -370,12 +320,8 @@ jobs:
           script: |
             const { resolveBuildArtifact } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/e2e/resolve-build-artifact.mjs`);
             const source = { github, owner: context.repo.owner, repo: context.repo.repo, runId: context.runId, sha: context.sha };
-            const [application, plugins] = await Promise.all([
-              resolveBuildArtifact({ ...source, kind: 'application' }),
-              resolveBuildArtifact({ ...source, kind: 'plugin-candidates' }),
-            ]);
+            const application = await resolveBuildArtifact({ ...source, kind: 'application' });
             core.setOutput('application', application);
-            core.setOutput('plugins', plugins);
 
       - name: Download tested application build
         id: application-download
@@ -386,41 +332,12 @@ jobs:
           path: packages
           merge-multiple: true
 
-      - name: Download exact plugin candidates
-        uses: actions/download-artifact@v8.0.2
-        with:
-          github-token: ${{ github.token }}
-          artifact-ids: ${{ steps.builds.outputs.plugins }}
-          path: tests/.artifacts/plugin-validation-artifact
-          merge-multiple: true
-
-      - name: Link cached workspace and read pinned plugin revision
-        id: plugin-source
+      - name: Link cached workspace and verify application build
         shell: bash
         run: |
           test "${E2E_RUNNER_FINGERPRINT:-}" = "$EXPECTED_RUNNER_FINGERPRINT"
           pnpm install --frozen-lockfile --offline
-          revision="$(cat tests/.artifacts/plugin-validation-artifact/plugin-candidates/source.sha)"
-          [[ "$revision" =~ ^[a-f0-9]{40}$ ]]
-          echo "sha=$revision" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout pinned plugin test owners
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: 0honus0/nexus-agent-plugins
-          ref: ${{ steps.plugin-source.outputs.sha }}
-          path: tests/.artifacts/plugin-source
-          persist-credentials: false
-
-      - name: Restore plugin builds without rebuilding
-        working-directory: tests/.artifacts/plugin-source
-        run: |
-          # Container mounts can resolve the checkout alias to /__w. Git checks the canonical owner path.
-          git config --global --add safe.directory "$(realpath "$GITHUB_WORKSPACE")"
-          git config --global --add safe.directory "$(pwd -P)"
-          tar -xzf ../plugin-validation-artifact/plugin-test-source.tar.gz
-          pnpm install --frozen-lockfile --prefer-offline
-          node "$GITHUB_WORKSPACE/scripts/e2e/host-test-artifact.mjs" verify "$GITHUB_SHA"
+          node scripts/e2e/host-test-artifact.mjs verify "$GITHUB_SHA"
 
       - name: Run independent protocol and module-browser lanes
         if: ${{ !cancelled() && steps.application-download.outcome == 'success' }}

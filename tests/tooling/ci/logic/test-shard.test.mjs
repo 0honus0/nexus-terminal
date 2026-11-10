@@ -8,7 +8,7 @@ import { expect, test } from 'vitest';
 
 async function fixture(mode) {
 	const root = await mkdtemp(join(tmpdir(), 'test-shard-'));
-	for (const directory of ['scripts/e2e', 'tests/backend', 'tests/tooling', 'plugins', 'bin', 'artifacts']) {
+	for (const directory of ['scripts/e2e', 'tests/backend', 'tests/tooling', 'bin', 'artifacts']) {
 		await mkdir(join(root, directory), { recursive: true });
 	}
 	for (const file of ['run-test-shard.sh', 'measure-command.sh']) {
@@ -26,14 +26,11 @@ const root = process.env.TEST_SHARD_ROOT;
 const args = process.argv.slice(2);
 const phase = args.includes('--test-concurrency=2') ? 'native'
   : args.includes('test:modules') ? 'modules'
-  : args.includes('test:browser') ? 'plugin-browser'
-  : args.includes('--test') ? 'interop' : 'host-browser';
+  : 'host-browser';
 const record = (event) => fs.appendFileSync(root + '/events', phase + ':' + event + '\\n');
 record('start');
 console.log(phase + ' diagnostic stdout');
 console.error(phase + ' diagnostic stderr');
-if (phase === 'host-browser' && process.env.NEXUS_TEST_PLUGIN_SET !== undefined) throw Error('Candidate environment leaked into generic Host tests');
-if (['interop', 'plugin-browser'].includes(phase) && process.env.NEXUS_TEST_PLUGIN_SET !== 'exact-candidate') throw Error('Plugin tests lost their pinned candidate');
 if (phase === 'native' || phase === 'modules') {
   process.on('SIGTERM', () => { record('terminated'); process.exit(143); });
   fs.writeFileSync(root + '/' + phase + '-ready', String(process.pid));
@@ -71,8 +68,6 @@ if (phase === 'native' && process.env.TEST_SHARD_MODE === 'failure') process.exi
 			TEST_SHARD_WORKER: worker,
 			TEST_SHARD_MODE: mode,
 			NEXUS_TEST_ARTIFACT_DIR: join(root, 'artifacts'),
-			NEXUS_TEST_PLUGIN_SOURCE_ROOT: join(root, 'plugins'),
-			NEXUS_TEST_PLUGIN_SET: 'exact-candidate',
 			NEXUS_TEST_DOCKER_NATIVE: 'excluded-docker',
 			NEXUS_TEST_FINITE_FS_NATIVE: 'excluded-filesystem',
 		},
@@ -93,11 +88,11 @@ test.each(['success', 'failure'])('independent test lanes retain every layer and
 	const result = await f.done;
 	assert.equal(result.code, mode === 'failure' ? 1 : 0, result.output);
 	const events = (await readFile(join(f.root, 'events'), 'utf8')).trim().split('\n');
-	for (const phase of ['native', 'modules', 'host-browser', 'interop', 'plugin-browser']) {
+	for (const phase of ['native', 'modules', 'host-browser']) {
 		assert.ok(events.includes(phase + ':end'), phase);
 		assert.ok(!result.output.includes(phase + ' diagnostic stdout'));
 		assert.ok(!result.output.includes(phase + ' diagnostic stderr'));
-		const logName = phase === 'interop' ? 'plugin-interop' : phase;
+		const logName = phase;
 		const log = await readFile(join(f.root, 'artifacts/logs', logName + '.log'), 'utf8');
 		assert.ok(log.includes(phase + ' diagnostic stdout'));
 		assert.ok(log.includes(phase + ' diagnostic stderr'));
@@ -105,7 +100,6 @@ test.each(['success', 'failure'])('independent test lanes retain every layer and
 	}
 	assert.ok(events.indexOf('native:start') < events.indexOf('modules:end'));
 	assert.ok(events.indexOf('modules:start') < events.indexOf('native:end'));
-	assert.ok(events.indexOf('host-browser:end') < events.indexOf('plugin-browser:start'));
 	const native = JSON.parse(await readFile(join(f.root, 'artifacts/metrics/native.json'), 'utf8'));
 	assert.equal(native.exit_code, mode === 'failure' ? 7 : 0);
 	assert.ok(native.max_process_rss_kib > 0);

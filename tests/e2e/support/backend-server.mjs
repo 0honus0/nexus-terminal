@@ -8,8 +8,6 @@ import { prepareDatabase as prepareMutationDatabase } from '../../support/http/s
 // Load the built entry; static API types come from its source, not generated JavaScript.
 const applicationEntry = '../../../packages/backend/dist/bootstrap/create-app.js';
 const { createApp } = await import(applicationEntry);
-const { ToolExecutionUnknown, ToolCleanupFailure } =
-	await import('../../../packages/backend/dist/modules/agent/agent-failure.js');
 
 /** @param {string} name */
 function required(name) {
@@ -83,23 +81,11 @@ function failureEvidence(cause, depth = 0) {
 	};
 }
 
-/** @param {'execution_unknown' | undefined} expectedShutdown */
-async function closeApplication(expectedShutdown) {
+async function closeApplication() {
 	let retainEvidence = preserveDirectory;
-	let executionUnknown = false;
 	if (application) {
 		// Failed cleanup keeps the owner and its files; a new baseline must not hide it.
-		try {
-			await application.close();
-		} catch (error) {
-			if (expectedShutdown !== 'execution_unknown' || !onlyExecutionUnknown(error)) throw error;
-			retainEvidence = true;
-			executionUnknown = true;
-			process.stderr.write(
-				'E2E expected execution uncertainty: ' + JSON.stringify(failureEvidence(error)) + '\n',
-			);
-		}
-		if (expectedShutdown && !executionUnknown) throw new Error('Expected execution uncertainty was not reported');
+		await application.close();
 		application = null;
 	}
 	// Restore only after the original application has successfully released its resources.
@@ -119,16 +105,9 @@ async function closeApplication(expectedShutdown) {
 	}
 }
 
-/** @param {unknown} error @returns {boolean} */
-function onlyExecutionUnknown(error) {
-	if (error instanceof ToolCleanupFailure) return false;
-	if (error instanceof ToolExecutionUnknown) return true;
-	return error instanceof AggregateError && error.errors.length > 0 && error.errors.every(onlyExecutionUnknown);
-}
-
-/** @param {'seed' | 'empty' | 'mutation-recovery'} mode @param {'execution_unknown' | undefined} expectedShutdown */
-async function resetApplication(mode, expectedShutdown) {
-	await closeApplication(expectedShutdown);
+/** @param {'seed' | 'empty' | 'mutation-recovery'} mode */
+async function resetApplication(mode) {
+	await closeApplication();
 	if (shutdown) return;
 	await mkdir(dataRoot, { recursive: true });
 	directory = await mkdtemp(join(dataRoot, 'backend-'));
@@ -197,9 +176,9 @@ async function restartApplication() {
 	if (!shutdown) await openApplication();
 }
 
-/** @param {'seed' | 'empty' | 'mutation-recovery' | 'restart'} mode @param {'execution_unknown' | undefined} expectedShutdown */
-function startReset(mode, expectedShutdown) {
-	const task = mode === 'restart' ? restartApplication() : resetApplication(mode, expectedShutdown);
+/** @param {'seed' | 'empty' | 'mutation-recovery' | 'restart'} mode */
+function startReset(mode) {
+	const task = mode === 'restart' ? restartApplication() : resetApplication(mode);
 	resetting = task;
 	void task.then(
 		() => {
@@ -236,9 +215,8 @@ function resetMode(value) {
 		value === null ||
 		typeof value !== 'object' ||
 		Array.isArray(value) ||
-		Object.keys(value).some((key) => key !== 'mode' && key !== 'expectedShutdown') ||
+		Object.keys(value).some((key) => key !== 'mode') ||
 		!('mode' in value) ||
-		('expectedShutdown' in value && (value.expectedShutdown !== 'execution_unknown' || value.mode === 'restart')) ||
 		(value.mode !== 'empty' &&
 			value.mode !== 'seed' &&
 			value.mode !== 'mutation-recovery' &&
@@ -338,14 +316,7 @@ async function handleControl(request, response) {
 		response.writeHead(503).end();
 		return;
 	}
-	const expectedShutdown =
-		value !== null &&
-		typeof value === 'object' &&
-		'expectedShutdown' in value &&
-		value.expectedShutdown === 'execution_unknown'
-			? 'execution_unknown'
-			: undefined;
-	await startReset(mode, expectedShutdown);
+	await startReset(mode);
 	response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ reset: true, mode }));
 }
 

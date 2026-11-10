@@ -1,5 +1,3 @@
-import { listAgentApprovalHistory } from '../../../agent/runs/support/agent-approval-fixture.mjs';
-import { fixtureToolName, findFixtureTool, rawToolName } from '../../../../support/package-tool-catalog.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -7,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openAgentExecution, discoverTools } from '../../../agent/runs/support/agent-execution-fixture.mjs';
-import { openSshd, expectStatus } from '../../../../support/protocols/openssh-fixture.mjs';
+import { openSshManagement } from '../../../../support/http/management-fixture.mjs';
+import { openSshd } from '../../../../support/protocols/openssh-fixture.mjs';
 import {
 	readWorkspaceDockerStatusResponse,
 	readWorkspaceDockerStatsResponse,
@@ -21,7 +19,7 @@ function success(response) {
 	return response.data;
 }
 
-await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', { timeout: 180000 }, async (t) => {
+await test('B10 actual Docker over ordinary Workspace', { timeout: 180000 }, async (t) => {
 	const root = await mkdtemp(join(process.env.NEXUS_TEST_ARTIFACT_DIR ?? tmpdir(), 'nexus-b10-docker-'));
 	const containers = new Set();
 	let sshd;
@@ -52,25 +50,11 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 		await t.test(name, async (scenario) => {
 			const directory = join(root, String(++sequence));
 			await mkdir(directory);
-			const f = await openAgentExecution(directory, sshd);
+			const f = await openSshManagement(directory, sshd);
 			scenario.after(() => f.close());
-			await f.grants(['machine.docker.manage']);
 			await work(f, create(), scenario);
 		});
 	}
-
-	const inspect = (f, id) => ({
-		name: 'machine_docker_inspect',
-		input: { connectionId: f.connectionId, containerIds: [id] },
-	});
-
-	const control = (f, id, action, fingerprint) => ({
-		name: 'machine_docker_control',
-		input: {
-			connectionId: f.connectionId,
-			items: [{ containerId: id, action, expectedFingerprint: fingerprint }],
-		},
-	});
 
 	try {
 		docker('info', '--format', '{{.ServerVersion}}');
@@ -144,161 +128,6 @@ await test('B10 actual Docker over ordinary Workspace and governed Agent SSH', {
 				}
 			},
 		);
-		await scenario(
-			'Agent inspect and four independently approved mutations survive restart without replay',
-			async (f, id) => {
-				const actions = ['start', 'restart', 'stop', 'remove'];
-				const run = await f.start(
-					'Docker full lifecycle',
-					discoverTools('machine_docker_inspect machine_docker_control', (results) => {
-						if (results.length === actions.length * 2) return {};
-						if (results.length % 2 === 0) return inspect(f, id);
-						const snapshot = results.at(-1).items[0];
-						assert.equal(snapshot.containerId, id);
-						assert.match(snapshot.fingerprint, /^[a-f0-9]{64}$/u);
-						return control(f, id, actions[Math.floor(results.length / 2)], snapshot.fingerprint);
-					}),
-				);
-				for (const [index, action] of actions.entries()) {
-					const approval = await f.approval(run, 'machine_docker_control');
-					assert.equal(state(id), ['created', 'running', 'running', 'exited'][index]);
-					assert.equal(approval.risk, action === 'remove' ? 'destructive' : 'mutate');
-					await f.approve(approval);
-				}
-				await f.wait(run, 'completed');
-				const rows = f
-					.operations(run)
-					.filter((row) =>
-						[
-							'nexus.tools.remote.machine_docker_inspect',
-							'nexus.tools.remote.machine_docker_control',
-							'docker.inspect',
-							'docker.control',
-						].includes(row.label),
-					);
-				assert.deepEqual(
-					rows.map((row) => row.state),
-					Array(16).fill('completed'),
-				);
-				assert.equal(rows.filter((row) => row.kind === 'tool').length, 8);
-				assert.deepEqual(
-					rows.filter((row) => row.kind === 'effect').map((row) => row.label),
-					Array.from({ length: 4 }, () => ['docker.inspect', 'docker.control']).flat(),
-				);
-				assert.equal(docker('ps', '-aq', '--no-trunc', '--filter', 'id=' + id), '');
-				containers.delete(id);
-				const count = f.calls.length;
-				await f.restart();
-				await f.wait(run, 'completed');
-				assert.equal(f.calls.length, count);
-			},
-		);
-		await scenario('batch inspection returns only requested identities from one targeted scan', async (f, id) => {
-			const second = create(),
-				missing = 'f'.repeat(64);
-			const run = await f.start(
-				'multi Docker inspect',
-				discoverTools('machine_docker_inspect', (results) => {
-					if (!results.length)
-						return {
-							name: 'machine_docker_inspect',
-							input: { connectionId: f.connectionId, containerIds: [id, second, missing] },
-						};
-					assert.deepEqual(
-						results[0].items.map((item) => item.failureCode ?? 'completed'),
-						['completed', 'completed', 'not_found'],
-					);
-					assert.deepEqual(
-						results[0].items.slice(0, 2).map((item) => item.containerId),
-						[id, second],
-					);
-					assert.equal(results[0].items[2].failureCode, 'not_found');
-					return {};
-				}),
-			);
-			await f.wait(run, 'completed');
-		});
-		await scenario('external state drift after inspection prevents approved stale mutation', async (f, id) => {
-			const run = await f.start(
-				'Docker changed state',
-				discoverTools('machine_docker_inspect machine_docker_control', (results) =>
-					results.length > 1
-						? {}
-						: results.length
-							? control(f, id, 'remove', results[0].items[0].fingerprint)
-							: inspect(f, id),
-				),
-			);
-			const approval = await f.approval(run, 'machine_docker_control');
-			docker('start', id);
-			await f.approve(approval);
-			await f.wait(run, 'completed');
-			assert.equal(state(id), 'running');
-			const operation = f
-				.operations(run)
-				.filter((row) => row.kind === 'tool')
-				.at(-1);
-			assert.equal(operation.state, 'completed');
-			assert.equal(
-				JSON.parse(f.content(JSON.parse(operation.result_json).content)).items[0].failureCode,
-				'conflict',
-			);
-		});
-		await scenario(
-			'cancellation while awaiting approval leaves container unchanged and rejects old approval',
-			async (f, id) => {
-				const run = await f.start(
-					'Docker cancelled',
-					discoverTools('machine_docker_inspect machine_docker_control', (results) =>
-						results.length ? control(f, id, 'start', results[0].items[0].fingerprint) : inspect(f, id),
-					),
-				);
-				const approval = await f.approval(run, 'machine_docker_control');
-				await f.cancel(run);
-				await f.wait(run, 'cancelled');
-				assert.equal(state(id), 'created');
-				expectStatus(
-					await f.api(
-						'POST',
-						'/api/v1/apps/' + f.appId + '/approvals/' + approval.id + '/resolve',
-						{
-							decision: 'approved',
-							operationHash: approval.operationHash,
-							expectedVersion: approval.version,
-						},
-						{ 'Idempotency-Key': randomUUID() },
-					),
-					409,
-				);
-				assert.equal(state(id), 'created');
-			},
-		);
-		await scenario('missing capability never reaches Docker mutation or approval', async (f, id) => {
-			let previousWireName;
-			const prior = await f.start(
-				'Docker capture granted declaration',
-				discoverTools('machine_docker_control', (_results, body) => {
-					previousWireName = fixtureToolName(body, 'machine_docker_control');
-					return {};
-				}),
-			);
-			await f.wait(prior, 'completed');
-			await f.grants(['plugin.invoke']);
-			const run = await f.start('Docker denied', (_results, body) => {
-				assert.equal(findFixtureTool(body, 'machine_docker_control'), undefined);
-				return { ...control(f, id, 'remove', '0'.repeat(64)), name: rawToolName(previousWireName) };
-			});
-			await f.wait(run, 'unknown');
-			assert.equal(state(id), 'created');
-			assert.deepEqual(
-				f
-					.operations(run)
-					.filter((row) => row.kind === 'tool' || row.kind === 'effect')
-					.map((row) => row.state),
-				[],
-			);
-			assert.deepEqual(await listAgentApprovalHistory(f.api, f.appId, run.id), []);
-		});
 	} finally {
 		const failures = [];
 		for (const id of containers) {

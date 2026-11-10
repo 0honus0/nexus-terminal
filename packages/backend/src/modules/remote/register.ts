@@ -1,5 +1,3 @@
-import { RemoteMachineScopeModel } from './machines/model/machine-scope-model.js';
-import { RemoteMachineOperationFactoryService } from './machines/service/operation-factory-service.js';
 import type { RemoteMachineProvider } from './machines/model/machine-types.js';
 import type { Logger } from '../../platform/logging/logger.js';
 import { registerRemoteSnapshot } from './snapshots/adapters/sqlite/snapshot-registration.js';
@@ -13,11 +11,6 @@ import { MutationRecoveryService } from './machines/service/mutation-recovery-se
 import { createMutationHttpRoutes } from './interfaces/http/mutation-http.js';
 import { SecureSessionTokens } from '../../platform/security/adapters/secure-session-tokens.js';
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
-import { MachineCommandModel } from './machines/model/command-model.js';
-import { PosixCommandAdapter } from '../../platform/commands/adapters/posix-command.js';
-import { RemoteMachineOperationService } from './machines/service/operation-service.js';
-import { remoteOperationFactory } from './operation-mapper.js';
-import type { RemoteMachineOperationFactory } from './public.js';
 import { RemoteResourceCleanupFailure } from './resource-errors.js';
 import { PosixServerStatusCollector } from '../../platform/system/adapters/posix-status.js';
 import { NativeDockerAdapter } from '../../platform/docker/adapters/native-docker.js';
@@ -103,7 +96,6 @@ interface RemoteRegistration {
 	resourceCollector: ResourceCollector;
 	prepareMonitoringConfiguration(statusIntervalSeconds: number, resourceRefreshSeconds: number): () => void;
 	publicApi: RemoteSessions;
-	operations: RemoteMachineOperationFactory;
 	httpRoutes(): HttpRoute[];
 	webSocketRoutes(): HttpWebSocketRoute[];
 	quiesce(): void;
@@ -179,7 +171,7 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	);
 	const connectionTests = new ConnectionTestService(new ConnectionTestModel(machines), options.access);
 	const service = new RemoteSessionService(new RemoteSessionModel(machines), options.targets);
-	// Independent technical PTY leases: public Remote/Agent sessions never enumerate
+	// Independent technical PTY leases: public Remote sessions never enumerate
 	// or claim ordinary Workspace shell resources.
 	const workspaceShells = new RemoteSessionService(new RemoteSessionModel(machines), options.targets, {
 		columns: WORKSPACE_TERMINAL_MAX_COLUMNS,
@@ -214,17 +206,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 		);
 
 	const observationModel = createObservationModel(machines);
-	const operations = new RemoteMachineOperationFactoryService((changed) => {
-		const scoped = new RemoteMachineScopeModel(machines, changed);
-		return new RemoteMachineOperationService(
-			createFileModel(scoped),
-			createObservationModel(scoped),
-			new MachineCommandModel(scoped, new PosixCommandAdapter()),
-			mutations,
-			scoped,
-			changed,
-		);
-	});
 	const observations = new RemoteObservationService(
 		options.access,
 		options.resolver,
@@ -285,7 +266,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 	const closeFailures: unknown[] = [];
 	return {
 		publicApi,
-		operations: remoteOperationFactory(operations),
 		resourceCollector: {
 			id: 'remote',
 
@@ -351,7 +331,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 			serverTransfers.quiesce();
 			connectionTests.quiesce();
 			recovery.quiesce();
-			operations.quiesce();
 			desktops.quiesce();
 			resources.quiesce();
 			observations.quiesce();
@@ -372,7 +351,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 				serverTransfers.quiesce();
 				connectionTests.quiesce();
 				recovery.quiesce();
-				operations.quiesce();
 				desktops.quiesce();
 				resources.quiesce();
 				observations.quiesce();
@@ -388,7 +366,6 @@ export function registerRemote(options: RemoteRegistrationOptions): RemoteRegist
 					Promise.resolve().then(() => serverTransfers.close()),
 					Promise.resolve().then(() => connectionTests.close()),
 					Promise.resolve().then(() => recovery.close()),
-					Promise.resolve().then(() => operations.close()),
 					Promise.resolve().then(() => desktops.close()),
 					Promise.resolve().then(() => desktopModel.close()),
 					Promise.resolve().then(() => resources.close()),

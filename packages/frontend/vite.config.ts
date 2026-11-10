@@ -68,14 +68,6 @@ export default defineConfig({
 
 				rewrite: (path: string) => path.replace(/^\/__next/, ''),
 			},
-			'/plugins': {
-				target: devBackendOrigin,
-				changeOrigin: false,
-			},
-			'/sdk': {
-				target: devBackendOrigin,
-				changeOrigin: false,
-			},
 			// 将所有 /api 开头的请求代理到后端服务器
 			'/api': {
 				target: devBackendOrigin, // 后端服务器地址
@@ -111,11 +103,6 @@ export default defineConfig({
 				changeOrigin: false,
 			},
 			'/ws/remote-desktop': {
-				target: devBackendWebSocketOrigin,
-				ws: true,
-				changeOrigin: false,
-			},
-			'/ws/agent': {
 				target: devBackendWebSocketOrigin,
 				ws: true,
 				changeOrigin: false,

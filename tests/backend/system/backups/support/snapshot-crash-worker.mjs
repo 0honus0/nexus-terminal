@@ -10,7 +10,7 @@ import { SqliteTransactionAdapter } from '../../../../../packages/backend/dist/p
 
 const [directory, phase] = process.argv.slice(2);
 const path = join(directory, 'state.db');
-const roots = new Map(Object.entries(resolveDataPaths(path)).filter(([name]) => name !== 'toolLogs'));
+const roots = new Map(Object.entries(resolveDataPaths(path)));
 const db = SqliteRuntime.open(path);
 const files = new NativeSnapshotRestoreFiles(path, roots);
 const sql = new SqliteSnapshotRestore(db);
@@ -45,7 +45,7 @@ try {
 		const rename = fs.rename;
 		const remove = fs.rm;
 		fs.rename = async (source, destination) => {
-			const reverting = source.endsWith('.previous/plugins');
+			const reverting = source.endsWith('.previous/appearance');
 			await rename(source, destination);
 			if (reverting && phase === 'recover-rollback-renamed') {
 				await checkpoint();
@@ -54,7 +54,7 @@ try {
 		fs.rm = async (path, options) => {
 			await remove(path, options);
 			if (
-				(phase === 'recover-rollback-removed' && path === roots.get('plugins')) ||
+				(phase === 'recover-rollback-removed' && path === roots.get('appearance')) ||
 				(phase === 'recover-committed-cleaned' && path.endsWith('.previous'))
 			) {
 				await checkpoint();

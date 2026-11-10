@@ -1,1 +1,0 @@
-export const HOST_HARNESS_API_VERSION = 1;

@@ -41,16 +41,7 @@ export interface DockerStatus {
 	containers: DockerContainer[];
 }
 
-export interface DockerInspection {
-	id: string;
-	state: string;
-	image: string;
-	created: string;
-}
-
 export interface DockerPort {
-	inspectMany(execute: MachineCommandExecutor, ids: string[], signal: AbortSignal): Promise<DockerInspection[]>;
-	inspect(execute: MachineCommandExecutor, id: string, signal: AbortSignal): Promise<DockerInspection | null>;
 	status(execute: MachineCommandExecutor, signal: AbortSignal): Promise<DockerStatus>;
 	stats(execute: MachineCommandExecutor, id: string, signal: AbortSignal): Promise<DockerStats | null>;
 	command(execute: MachineCommandExecutor, id: string, action: DockerAction, signal: AbortSignal): Promise<void>;

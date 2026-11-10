@@ -7,8 +7,6 @@ catalog:
   axios: ^1.21.0
   dompurify: ^3.4.17
   pino: ^10.4.0
-  puppeteer-core: 25.16.0
-
 catalogs:
   node-build:
     typescript: ^7.0.2
@@ -38,5 +36,3 @@ patchedDependencies:
   monaco-editor@0.57.0: scripts/patches/monaco-editor@0.57.0.patch
   splitpanes@4.1.2: scripts/patches/splitpanes@4.1.2.patch
   vue-chartjs@5.3.4: scripts/patches/vue-chartjs@5.3.4.patch
-minimumReleaseAgeExclude:
-  - openai@7.51.0

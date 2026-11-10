@@ -35,7 +35,6 @@
     "sectionsAriaLabel": "設定セクション",
     "groups": {
       "general": "基本設定",
-      "intelligence": "インテリジェンス",
       "securityAndData": "セキュリティとデータ",
       "systemInfo": "システム情報"
     },
@@ -43,7 +42,6 @@
       "workspace": "ターミナル、エディタ動作、クイックコマンド設定",
       "system": "言語、タイムゾーン、ログレベル",
       "appearance": "テーマカラー、ウィンドウ配色、外観スタイル",
-      "agent": "AI モデルプロバイダー、実行環境、スキルとセキュリティポリシー",
       "security": "アカウント認証情報と 2 要素認証 (2FA)",
       "ipControl": "ネットワークアクセス制御と IP フィルタリング",
       "data": "永続データストレージとバックアップ管理",
@@ -54,6 +52,6 @@
       "settingsOverview": "設定センター"
     },
     "advancedMaintenance": "診断と復旧（詳細）",
-    "advancedMaintenanceDescription": "システム状態、実行制限、Agent データの保守"
+    "advancedMaintenanceDescription": "システム状態と保守"
   }
 }

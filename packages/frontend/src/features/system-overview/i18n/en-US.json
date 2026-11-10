@@ -45,7 +45,6 @@
       "countsOnlyShort": "Counts only",
       "modules": {
         "access": "Identity and access",
-        "agent": "Agent",
         "operations": "Logging, audit and notifications",
         "preferences": "Preferences and appearance",
         "remote": "Terminals and remote operations",
@@ -75,8 +74,6 @@
         "worker_heap_total_bytes": "Database Worker heap capacity",
         "worker_external_bytes": "Database Worker external memory",
         "worker_array_buffer_bytes": "Database Worker ArrayBuffers",
-        "active_runs": "Running and draining Agent tasks",
-        "pending_run_writes": "In-flight Agent writes",
         "status_subscriptions": "Server status subscriptions",
         "database_operations": "Database operations started",
         "database_queue_wait_ms": "Cumulative database queue wait",

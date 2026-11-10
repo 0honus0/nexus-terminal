@@ -13,7 +13,6 @@ import type { TargetsPublicApi, TrustedSshTargetResolver } from '../modules/targ
 import type { RemoteSessions } from '../modules/remote/public.js';
 import type { AccessPublicApi } from '../modules/access/public.js';
 import type { AccessRegistrationOptions } from '../modules/access/register.js';
-import type { AgentStateApi } from '../modules/agent/public.js';
 import type { PreferencesRegistrationOptions } from '../modules/preferences/register.js';
 import type { BackupMaintenance } from '../modules/system/register.js';
 import { NativeSnapshotRestoreFiles } from '../platform/storage/sqlite/adapters/snapshot-restore-files.js';
@@ -21,7 +20,6 @@ import { SqliteSnapshotRestore } from '../platform/storage/sqlite/adapters/snaps
 import { CallAdmission } from '../platform/lifecycle/call-admission.js';
 import { TargetOperationError } from '../modules/targets/public-errors.js';
 import { AccessOperationError } from '../modules/access/public-errors.js';
-import { AgentOperationError } from '../modules/agent/public-errors.js';
 import { RemoteOperationError } from '../modules/remote/public-errors.js';
 import { resolveDataPaths } from './data-paths.js';
 
@@ -49,7 +47,7 @@ export interface BackendApplication {
 	trustedSshTargets: TrustedSshTargetResolver;
 	remote: RemoteSessions;
 	access: AccessPublicApi;
-	agent: AgentStateApi;
+
 	/** Access, Targets management and one-owner SSH Shell HTTP/WS. */
 	listenHttp(options: AccessHttpOptions): Promise<string>;
 	close(): Promise<void>;
@@ -330,19 +328,13 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 	}
 	let modules: RegisteredModules | null = null;
 	try {
+		const paths = resolveDataPaths(db.path);
+		const files = new NativeSnapshotRestoreFiles(db.path, new Map([['appearance', paths.appearance]]));
+		await files.validateRecovery();
 		logDiagnostic(logger, 'info', 'DATABASE_SCHEMA_STARTED');
 		await initializeSchema(db, applicationMigrations);
 		logDiagnostic(logger, 'info', 'DATABASE_SCHEMA_READY');
-		const paths = resolveDataPaths(db.path);
 		// Recover files from durable SQL evidence before any module creates resources or reads state.
-		const files = new NativeSnapshotRestoreFiles(
-			db.path,
-			new Map([
-				['appearance', paths.appearance],
-				['artifacts', paths.artifacts],
-				['plugins', paths.plugins],
-			]),
-		);
 		logDiagnostic(logger, 'info', 'STARTUP_RECOVERY_STARTED');
 		await files.recover((id) => new SqliteSnapshotRestore(db).committed(id));
 		logDiagnostic(logger, 'info', 'STARTUP_RECOVERY_COMPLETED');
@@ -413,10 +405,6 @@ export async function createApp(dbPath: string, options: AppOptions = {}): Promi
 			access: admission.bind(
 				() => getModules().access,
 				() => new AccessOperationError('storage_unavailable'),
-			),
-			agent: admission.bind(
-				() => getModules().agent,
-				() => new AgentOperationError('provider_unavailable'),
 			),
 			listenHttp: lifecycle.listenHttp,
 			close: lifecycle.close,

@@ -1,3 +1,5 @@
+export { removeRetiredEvents } from './notifications/adapters/sqlite/retired-events-migration.js';
+
 import type { SqlExecutor } from '../../platform/storage/sqlite/sql-types.js';
 import { initializeAudit } from './audit/adapters/sqlite/audit-sql.js';
 import { initializeLogging } from './logging/adapters/sqlite/logging-sql.js';
