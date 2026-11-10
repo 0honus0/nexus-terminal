@@ -3249,3 +3249,7 @@ AppManagement右侧设置紫色、安全蓝色、启用绿色、禁用暖色及�
 用户后续授权将前一轮移除相关剩余变更提交推送并发布新版本，沿用main、amd64、dev镜像通道，不更新远程实例。提交前复核全部94项工作区文件，确认旧Agent移除提交及插件仓空树已在远程；插件仓main为`ffbe4d277c4302917cbe6f402ab8c31a43265f4f`，删除前两仓实现仍有归档标签及完整历史。本轮不实施前端目录调整、插件API代理或新宿主，不增加数据库迁移。
 
 当前源码再次通过`pnpm run check`、`pnpm run format:all:check`及`git diff --check`，沿用本节已记录的实际构建和本地功能回归，不重复无变更的长测试。新增门禁日志及提交前补丁保存在原任务目录`publication/`。推送后跟进当前提交完整远程E2E，成功后才启动镜像发布；实际运行及发布结果在本节继续记录。
+
+本体清理提交`26dd1a88f75a8ca71520e9e5597ee9746d35848e`已推送main，[完整E2E42768086064](https://github.com/0honus0/nexus-terminal/actions/runs/42768086064)成功，质量、共享runner更新、8个测试分片、Docker部署冒烟及报告汇总全部通过。下载quality及8个分片报告逐项核对：快速层227项、Vitest模块235项、原生协议389项、Playwright397项，均无失败、取消或跳过；原始报告及机器汇总归`publication/quality`、`publication/shards`和`publication/verified-test-summary.json`。自动耗时回写`390ab732607f7efa4362b95158b5333260c19638`已快进同步，差异仅为`duration-estimates.json`。随后从该main提交启动amd64 dev镜像[发布42769169285](https://github.com/0honus0/nexus-terminal/actions/runs/42769169285)，未部署远程实例。
+
+发布成功，生产依赖安全审计、amd64构建及GHCR推送全部通过。只读读取仓库镜像元数据，确认`ghcr.io/0honus0/nexus-terminal:dev`与`:sha-390ab732607f`指向同一index digest `sha256:132e5c234d281e8a13620e8a10ee816f3c5cadd9070530d37144da47d04d9da1`，实际平台`linux/amd64`，OCI revision准确为`390ab732607f7efa4362b95158b5333260c19638`。发布结果、完整日志及两标签manifest/config归`publication/`；仅远程构建并发布，未拉取镜像层到本机、未部署或修改远程数据。最终验收文档单独提交，不改变已发布源码。
