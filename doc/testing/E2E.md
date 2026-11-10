@@ -4,7 +4,7 @@
 
 ## 当前验收基线
 
-2026-11-10 旧Agent整体移除阶段已提交推送本体`6b7ee3f0`，独立插件仓已清空且保留归档历史；未发布或部署。按用户要求不新增移除功能测试，保留并适配普通功能的现有用例。数据库、前后端构建与实际应用启动结果见[本轮证据](HISTORY.md#旧-agent-整体移除2026-11-10)。[首轮完整E2E42759626441](https://github.com/0honus0/nexus-terminal/actions/runs/42759626441)失败：Docker前端缺少Shared构建、OIDC断言固定最后迁移签名、备份页诊断数量仍包含旧Agent。修复及开发调试入口移除正在本地验收，待新完整远程矩阵通过；当前不继承移除前版本的通过结果。
+2026-11-10 旧Agent整体移除、远端手动调试入口清理及E2E修复已提交推送。本体`de0b9493`的[完整E2E42761637087](https://github.com/0honus0/nexus-terminal/actions/runs/42761637087)全部通过：质量/快速层、8个分片、Docker部署冒烟及报告汇总成功，逐例报告无失败或跳过；自动耗时回写`ff3c8c52`已同步。功能迁移测试不耦合具体生产版本编号，保留升级、数据和重启验证。独立插件仓已清空且保留归档历史，本轮不新增移除功能用例，未发布或部署。[修复与验收证据](HISTORY.md#移除版-e2e-与开发调试入口清理2026-11-10)保留首轮三处失败、最终本地回归及完整远程结果；数据库与启动验证继续见[移除记录](HISTORY.md#旧-agent-整体移除2026-11-10)。
 
 此前[本体E2E42619641078](https://github.com/0honus0/nexus-terminal/actions/runs/42619641078)、[插件Validate42621361043](https://github.com/0honus0/nexus-agent-plugins/actions/runs/42621361043)及[amd64 dev发布42622640691](https://github.com/0honus0/nexus-terminal/actions/runs/42622640691)属于移除前版本，不证明本次源码全部通过。其成品、签包、耗时、CDP及发布身份继续按[历史记录](HISTORY.md#必需插件启用引导与权限折叠验收2026-11-09)追溯。原每片2分钟/整轮3–5分钟目标未达到，按用户决定暂停进一步耗时优化。
 
@@ -44,7 +44,7 @@ Runner使用latest并校验依赖指纹，准备时digest仅作观测。应用/�
 
 原测试架构迁移及耗时优化的逐模块实测、首次失败、四表与远程结果见[历史记录](HISTORY.md#测试重构分模块实测2026-11-08)。当前cases/migration.json已随功能移除清理无接收owner的Agent项；映射只证明当前归属，不能继承旧数量或旧执行结论。
 
-原维护证据根为`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，本轮移除证据归`/home/honus/nexus-task-artifacts/agent-removal-20261110`。旧现场与未知结果不随源码移除清理，独立插件仓未修改。
+原维护证据根为`/home/honus/nexus-task-artifacts/workflow-consolidation-20261109/maintenance-audit-20261109`，本轮移除证据归`/home/honus/nexus-task-artifacts/agent-removal-20261110`。旧现场与未知结果不随源码移除清理；独立插件仓已按授权清空，历史归档仍可追溯。
 
 ## 数据库迁移验收
 

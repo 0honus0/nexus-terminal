@@ -13,11 +13,13 @@
 | 职责 | Dockerfile显式编排Shared→Frontend；删除仅供手动调试的remote-next、targets-next及其路由/守卫、代理、三语与认证basePath参数，保留正式Workspace和后端HTTP能力。       |
 | 类型 | 沿现有Shared及正式同源认证，无新协议、SQL或迁移；系统页按Shared模块集合核对，未改UI。                                                                              |
 | 功能 | 两项OIDC及通知迁移现有用例按功能函数定位前置链，保留数据/会话/绑定/通知、完整性、旧迁移记录及重启不重放断言，不耦合生产迁移编号/签名。历史来源摘要仍保留原始标题。 |
-| 验证 | 本地check、全仓格式、应用/客户端构建及定向现有回归通过；推送后新完整远程矩阵待执行。不新增移除用例，不发布或部署。                                                 |
+| 验证 | 本地check、全仓格式、应用/客户端构建、定向现有回归及完整远程矩阵均通过。不新增移除用例，不发布或部署。                                                             |
 
 产物归`/home/honus/nexus-task-artifacts/agent-removal-20261110/e2e-fix/`，原Docker日志在同级`delivery/e2e-docker-first.log`。首次失败与后续结果分开保留；现有用户测试环境及归档证据不删除。
 
 本地20项定向回归通过：OIDC存储、生产迁移链及正式认证4文件14项，CLI4.57秒；通知/事务/诊断原生6项，CLI2.42秒。真实Chromium完成整库备份下载、恢复、旧消费者围栏及显式重载，1项通过，Playwright5.7秒，含隔离构建的整条命令18.46秒。check31.86秒；最终格式/diff及相关日志分别保留。原生首次命令未建立指定产物根导致ENOENT，建立目录后按原断言通过，未修改生产代码或放宽测试。
+
+修复提交`de0b9493919914bde3439754263ea6b3b08e6761`的[完整E2E42761637087](https://github.com/0honus0/nexus-terminal/actions/runs/42761637087)全部成功：快速层97文件227项，模块层含真实Docker共236项，原生XML共377个结果节点（含父子结果，不视为独立功能数），浏览器397项；无失败、跳过或浏览器重试失败。8个分片的来源SHA、阶段exit_code、Vitest JSON、Node XML和Playwright原始日志逐一核对，汇总写入`e2e-fix/remote-report-summary.json`。Docker真实前后端健康检查及统一镜像构建通过；报告汇总自动回写6项耗时，提交`ff3c8c52`仅修改duration-estimates，已快进同步，无截图或产品源码变化。最终格式33.67秒、diff通过，普通UI样式保持不变。
 
 ## 旧实现归档与插件仓清空（2026-11-10）
 
