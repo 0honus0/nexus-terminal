@@ -61,6 +61,11 @@ on:
         required: true
         default: false
         type: boolean
+      update_reports:
+        description: Commit updated timings and requested screenshots to the source branch
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -481,7 +486,7 @@ jobs:
           echo "Staged ${#screenshots[@]} E2E screenshots under doc/imgs/e2e."
 
       - name: Push updated timings and requested screenshots
-        if: github.ref_type == 'branch' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.ref_type == 'branch' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.update_reports))
         env:
           TESTED_SHA: ${{ github.sha }}
           TARGET_BRANCH: ${{ github.ref_name }}
