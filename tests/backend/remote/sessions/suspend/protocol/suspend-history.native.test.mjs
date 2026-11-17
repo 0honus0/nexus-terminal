@@ -34,8 +34,12 @@ async function resumedHistory(t) {
 	await until(() => fs.stat(done).catch(() => null), Boolean, 'real history producer completed');
 	const logPath = join(f.directory, 'temp_backend_next_suspended_ssh_logs', marked.suspendedSessionId + '.log');
 	await until(
-		() => fs.stat(logPath),
-		(value) => value.size >= 786432,
+		() =>
+			fs.stat(logPath).catch((error) => {
+				if (error.code !== 'ENOENT') throw error;
+				return null;
+			}),
+		(value) => value !== null && value.size >= 786432,
 		'real history is persisted',
 	);
 	await original.workspace.close();
