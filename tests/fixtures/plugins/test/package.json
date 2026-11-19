@@ -1,0 +1,16 @@
+{
+  "name": "@nexus-terminal/test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "nexus-terminal": "^1.0.0"
+  },
+  "nexus": {
+    "kind": "extension",
+    "entry": {
+      "backend": "src/index.ts",
+      "frontend": "src/browser/index.ts"
+    }
+  }
+}

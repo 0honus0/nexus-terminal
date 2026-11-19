@@ -1,0 +1,22 @@
+export default {
+	semi: true,
+	singleQuote: true,
+	printWidth: 120,
+	tabWidth: 4,
+	useTabs: true,
+	trailingComma: 'all',
+	arrowParens: 'always',
+	bracketSpacing: true,
+	endOfLine: 'lf',
+	proseWrap: 'preserve',
+	vueIndentScriptAndStyle: true,
+	overrides: [
+		{
+			files: ['**/*.json', '**/*.yml', '**/*.yaml'],
+			options: {
+				tabWidth: 2,
+				useTabs: false,
+			},
+		},
+	],
+};

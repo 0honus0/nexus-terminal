@@ -1,0 +1,33 @@
+/* Shared control metrics. Component overrides remain optional, inherited design tokens. */
+:root {
+	--ui-control-height-compact: 28px;
+	--ui-control-height-default: 36px;
+	--ui-control-height-comfortable: 40px;
+	--ui-control-height-touch: 44px;
+	--ui-layout-gap: 16px;
+	--ui-section-padding: 22px;
+	--ui-form-control-width: 180px;
+}
+
+:where([data-ui='button'], [data-ui='input'], [data-ui='select']) {
+	--_ui-control-height: var(--ui-control-height-default, 36px);
+	--_ui-control-font-size: 13px;
+	--_ui-control-padding-inline: 11px;
+	--_ui-control-gap: 8px;
+}
+:where([data-density='compact']) {
+	--_ui-control-height: var(--ui-control-height-compact, 28px);
+	--_ui-control-font-size: 11px;
+	--_ui-control-padding-inline: 9px;
+	--_ui-control-gap: 6px;
+}
+:where([data-density='comfortable']) {
+	--_ui-control-height: var(--ui-control-height-comfortable, 40px);
+	--_ui-control-padding-inline: 13px;
+}
+:where([data-density='touch']) {
+	--_ui-control-height: var(--ui-control-height-touch, 44px);
+	--_ui-control-font-size: 14px;
+	--_ui-control-padding-inline: 13px;
+	--_ui-control-gap: 9px;
+}

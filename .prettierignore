@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/dist-components/
+**/coverage/
+**/playwright-report/
+**/test-results/
+**/.vite/
+**/.data/
+**/.dev/
+**/.artifacts/
+**/pnpm-lock.yaml
+**/package-lock.json

@@ -1,0 +1,47 @@
+/* Reka 的传送弹层不继承父 scope 属性，使用组件自己的唯一类名定位。 */
+.ui-menu {
+	z-index: var(--ui-menu-z-index, 110);
+	min-width: var(--ui-menu-min-width, 160px);
+	max-width: calc(100vw - 24px);
+	max-height: var(--reka-popper-available-height, calc(100dvh - 24px));
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 5px;
+	border: 1px solid var(--ui-menu-border, var(--ui-border));
+	border-radius: var(--ui-menu-radius, 14px);
+	background: var(--ui-menu-background, var(--ui-surface));
+	color: var(--ui-menu-text, var(--ui-text));
+	box-shadow: var(--ui-menu-shadow, 0 10px 36px #21152d24);
+	outline: none;
+}
+.ui-menu__item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 40px;
+	padding: 8px 12px;
+	border-radius: 9px;
+	font-size: 12px;
+	cursor: default;
+	outline: none;
+	user-select: none;
+}
+.ui-menu__item[data-highlighted] {
+	background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+}
+.ui-menu__item[data-tone='danger'] {
+	color: var(--ui-danger);
+}
+.ui-menu__item[data-disabled] {
+	opacity: 0.4;
+	pointer-events: none;
+}
+.ui-menu__item span {
+	overflow-wrap: anywhere;
+}
+.ui-menu__separator {
+	height: 1px;
+	margin: 4px 3px;
+	background: var(--ui-border);
+	opacity: 0.6;
+}

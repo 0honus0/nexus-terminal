@@ -1,0 +1,113 @@
+.nexus-backup {
+	container-type: inline-size;
+	padding: clamp(16px, 4vw, 32px);
+	width: min(100%, 820px);
+	margin-inline: auto;
+	box-sizing: border-box;
+	color: var(--ui-text);
+	display: grid;
+	gap: 24px;
+	min-width: 0;
+}
+.nexus-backup__intro {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+.nexus-backup__symbol {
+	display: grid;
+	place-items: center;
+	width: 56px;
+	height: 56px;
+	border-radius: 18px;
+	color: var(--ui-primary);
+	background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+	flex: none;
+}
+.nexus-backup h1 {
+	font-size: 22px;
+	margin: 0 0 6px;
+	font-weight: 600;
+}
+.nexus-backup p {
+	margin: 0;
+	color: var(--ui-muted);
+	font-size: 12px;
+	line-height: 1.7;
+}
+.nexus-backup__sections {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--ui-layout-gap, 16px);
+}
+.nexus-backup__form-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 12px;
+}
+.backup-action {
+	min-inline-size: 140px;
+}
+.nexus-backup__file {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	padding: 18px;
+	min-width: 0;
+	border: 1px dashed var(--ui-border);
+	border-radius: 14px;
+	cursor: pointer;
+	color: var(--ui-muted);
+	background: color-mix(in srgb, var(--ui-primary) 3%, transparent);
+	font-size: 13px;
+	overflow-wrap: anywhere;
+}
+.nexus-backup__file:focus-within {
+	outline: 2px solid var(--ui-primary);
+}
+.nexus-backup__file input {
+	width: 1px;
+	height: 1px;
+	opacity: 0;
+	position: absolute;
+}
+.nexus-backup__file:hover {
+	color: var(--ui-primary);
+	border-color: var(--ui-primary);
+}
+
+.nexus-backup__file > svg {
+	flex: none;
+	color: var(--ui-primary);
+}
+.nexus-backup__file > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.nexus-backup__file[data-disabled] {
+	cursor: default;
+	opacity: 0.6;
+}
+@container (max-width: 460px) {
+	.nexus-backup__form-row {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.backup-action {
+		width: 100%;
+	}
+}
+
+/* Initial geometry is shared by confirmation, HTTP acceptance and WS progress; user resizing takes precedence. */
+.backup-dialog {
+	--ui-dialog-width: 680px;
+	height: min(600px, calc(100dvh - 48px));
+}
+
+.backup-dialog .ui-dialog__body {
+	flex: 1 1 auto;
+}
+.backup-dialog .ui-dialog__footer {
+	padding-block-start: 12px;
+}

@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ endsWith(github.ref_name, '-dev') && 'dev' || 'stable' }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+      channel: ${{ steps.release.outputs.channel }}
+      version: ${{ steps.release.outputs.version }}
+      platforms: ${{ steps.release.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve release channel
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=${RELEASE_TAG#v}
+          if [[ "$RELEASE_TAG" == v*-dev ]]; then
+            channel=dev
+            branch=dev
+            version=${version%-dev}
+            platforms=linux/amd64
+          else
+            channel=latest
+            branch=main
+            platforms=linux/amd64,linux/arm64
+          fi
+
+          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Expected vMAJOR.MINOR.PATCH-dev or vMAJOR.MINOR.PATCH." >&2
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "refs/remotes/origin/$branch")" ]]; then
+            echo "Release $RELEASE_TAG must point to the current $branch commit." >&2
+            exit 1
+          fi
+
+          {
+            echo "image=ghcr.io/${GITHUB_REPOSITORY,,}"
+            echo "channel=$channel"
+            echo "version=$version"
+            echo "platforms=$platforms"
+          } >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: [prepare, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        if: needs.prepare.outputs.channel == 'latest'
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve container image tags
+        id: tags
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          version_tag=$VERSION
+          if [[ "$CHANNEL" == dev ]]; then version_tag=$RELEASE_TAG; fi
+          {
+            echo 'values<<TAGS'
+            echo "$IMAGE:$version_tag"
+            echo "$IMAGE:$CHANNEL"
+            echo "$IMAGE:sha-$GITHUB_SHA"
+            echo TAGS
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ needs.prepare.outputs.platforms }}
+          push: true
+          tags: ${{ steps.tags.outputs.values }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          cache-from: |
+            type=gha,scope=nexus-terminal-X64
+            type=gha,scope=nexus-terminal-ARM64
+          provenance: mode=max
+
+  sdk:
+    if: needs.prepare.outputs.channel == 'latest'
+    needs: [prepare, verify, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nexus-terminal-sdk
+          path: artifacts
+      - name: Attach SDK to the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact=(artifacts/nexus-terminal-*.tgz)
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            assets="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+            if ! grep -Fxq "${artifact[0]##*/}" <<< "$assets"; then
+              gh release upload "$RELEASE_TAG" "${artifact[0]}"
+            fi
+          else
+            gh release create "$RELEASE_TAG" "${artifact[0]}" --verify-tag --generate-notes
+          fi

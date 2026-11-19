@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "schedule:weekly", "helpers:pinGitHubActionDigests"],
+  "baseBranchPatterns": ["dev"],
+  "labels": ["dependencies"],
+  "automerge": false,
+  "rangeStrategy": "bump",
+  "prConcurrentLimit": 6,
+  "postUpdateOptions": ["pnpmDedupe"],
+  "packageRules": [
+    {
+      "matchDatasources": ["npm"],
+      "minimumReleaseAge": "1 day"
+    },
+    {
+      "matchDepTypes": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": ["node", "@types/node", "typescript", "vue-tsc"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "groupName": "Vue runtime",
+      "matchPackageNames": ["vue", "vue-i18n", "@vueuse/core"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "Build tooling",
+      "matchPackageNames": ["vite", "@vitejs/plugin-vue", "rollup", "rollup-plugin-dts"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "Test tooling",
+      "matchPackageNames": ["vitest", "@vue/test-utils", "jsdom"],
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "groupName": "SQLite query tooling",
+      "matchPackageNames": ["kysely", "kysely-generic-sqlite"],
+      "matchUpdateTypes": ["minor", "patch"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+.app-language {
+	position: fixed;
+	inset-inline-end: 1rem;
+	inset-block-end: 1rem;
+	z-index: 1;
+}
+
+:root {
+	--ui-tile-shadow: 0 3px 10px light-dark(#3730500b, #00000012), 0 1px 2px #37305008;
+	--ui-desktop-background:
+		radial-gradient(ellipse at 86% 12%, light-dark(#bcaacf66, #66429155), transparent 56%),
+		radial-gradient(ellipse at 9% 88%, light-dark(#a4c1c94d, #28596855), transparent 58%),
+		radial-gradient(ellipse at 50% 58%, light-dark(#d2bfce4d, #5d354433), transparent 64%), var(--ui-background);
+}

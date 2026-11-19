@@ -1,0 +1,11 @@
+services:
+  nexus-terminal:
+    image: ${NEXUS_IMAGE_REPOSITORY:-ghcr.io/0honus0/nexus-terminal}:${NEXUS_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - '${NEXUS_HTTP_PORT:-18111}:8080'
+    volumes:
+      - nexus-data:/app/data
+
+volumes:
+  nexus-data:

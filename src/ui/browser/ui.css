@@ -1,0 +1,138 @@
+@import '@1adybug/mi-sans';
+@import './ui-scrollbar.css';
+@import './ui-controls.css';
+
+:root {
+	--ui-font-family: 'MiSans VF', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+	font-family: var(--ui-font-family);
+	/* MiSans VF 的原生 Regular 为 330，避免默认 400 显得偏粗。 */
+	font-weight: 330;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	color-scheme: light;
+	--ui-primary: #7752b4;
+	--ui-primary-hover: #65419f;
+	--ui-primary-text: #fff;
+	--ui-text: #292537;
+	--ui-muted: #625e70;
+	--ui-background: #e9e6ee;
+	--ui-surface: #f7f5f9;
+	--ui-border: #ccc5d6;
+	--ui-danger: #b03e54;
+	--ui-success: #326b58;
+	--ui-warning: #875b21;
+	/* 应用身份配色与按钮主色分开；主题可覆盖，深浅模式保持相同色相。 */
+	--ui-app-blue: light-dark(#356cba, #91baf1);
+	--ui-app-steel: light-dark(#4b718e, #9bbbd2);
+	--ui-app-amber: light-dark(#946519, #e4bc78);
+	--ui-app-violet: light-dark(#8053af, #c4a1ec);
+	--ui-app-rose: light-dark(#a14e75, #e4a0be);
+	--ui-app-cyan: light-dark(#167b92, #78cbdc);
+	--ui-app-indigo: light-dark(#5966b4, #abb5f2);
+	--ui-app-slate: light-dark(#586e83, #a2b9ce);
+	--ui-control-radius: 9px;
+	--ui-scrollbar-size: 6px;
+	--ui-scrollbar-thumb: color-mix(in srgb, var(--ui-muted) 28%, transparent);
+	--ui-scrollbar-thumb-hover: color-mix(in srgb, var(--ui-muted) 46%, transparent);
+	--ui-scrollbar-thumb-active: color-mix(in srgb, var(--ui-muted) 64%, transparent);
+	--ui-motion-factor: 1;
+	--ui-motion-duration: calc(140ms * var(--ui-motion-factor, 1) / var(--ui-motion-speed, 1));
+}
+
+:root[data-ui-mode='dark']:not([data-ui-theme-mode='light']),
+:root[data-ui-theme-mode='dark'] {
+	color-scheme: dark;
+	--ui-primary: #b99bea;
+	--ui-primary-hover: #a883df;
+	--ui-primary-text: #241b35;
+	--ui-text: #e8e4f1;
+	--ui-muted: #9d96ad;
+	--ui-background: #18161f;
+	--ui-surface: #23202d;
+	--ui-border: #363141;
+	--ui-danger: #f193a1;
+	--ui-success: #83c7ac;
+	--ui-warning: #e0b374;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	color: var(--ui-text);
+	background: var(--ui-background);
+	cursor: default;
+	/* 可聚焦的窗口/弹窗不是编辑区，不显示浏览器的文字插入光标。 */
+	caret-color: transparent;
+}
+button,
+input,
+select {
+	font: inherit;
+}
+button {
+	-webkit-tap-highlight-color: transparent;
+}
+button:focus-visible,
+select:focus-visible,
+a:focus-visible {
+	outline: 2px solid var(--ui-primary);
+	outline-offset: 3px;
+}
+button svg {
+	flex-shrink: 0;
+}
+
+/* 只禁选操作控件与拖动区域，不用禁选来隐藏文字鼠标或插入光标。 */
+:where(
+	button,
+	[role='button'],
+	[role='tab'],
+	[role='menuitem'],
+	[role='menuitemcheckbox'],
+	[role='menuitemradio'],
+	[role='option'],
+	[role='switch'],
+	[role='checkbox'],
+	[role='radio'],
+	[role='slider'],
+	[role='combobox'],
+	[data-ui-selection='none']
+) {
+	-webkit-user-select: none;
+	user-select: none;
+	cursor: default;
+}
+
+/* 卡片、列表可在操作容器内声明可复制正文，保持普通箭头鼠标。 */
+:where([data-ui-selection='text']) {
+	-webkit-user-select: text;
+	user-select: text;
+	cursor: default;
+}
+
+/* 编辑区始终恢复文本选择、文字鼠标与插入光标，包括嵌在禁选容器内的搜索框。 */
+:where(input, textarea, [role='textbox'], [contenteditable]:not([contenteditable='false'])) {
+	-webkit-user-select: text;
+	user-select: text;
+	cursor: text;
+	caret-color: auto;
+}
+
+/* 装饰过渡统一读取变量；加载等状态动画保留自身语义，不按组件类名维护白名单。 */
+:root[data-ui-motion='reduced'] {
+	--ui-motion-factor: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--ui-motion-factor: 0;
+	}
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+	}
+}
