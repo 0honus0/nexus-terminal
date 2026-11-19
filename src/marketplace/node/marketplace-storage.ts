@@ -21,8 +21,7 @@ const retained = 'retained_data';
 
 const attempts = 'install_attempts';
 
-export const officialRepositoryUrl =
-	'https://raw.githubusercontent.com/0honus0/nexus-agent-plugins/catalog/catalog.json';
+export const officialRepositoryUrl = 'https://raw.githubusercontent.com/0honus0/nexus-plugin/catalog/catalog.json';
 
 type RepositoryRecord = Pick<MarketplaceRepository, 'id' | 'url' | 'label'>;
 

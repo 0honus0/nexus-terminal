@@ -570,7 +570,7 @@ test('市场在激活完成前返回 202，客户端关闭请求后宿主继续�
 });
 
 test('官方仓库只在本地登记一次，目录离线时保留缓存', { timeout: 10000 }, async (t) => {
-	const url = 'https://raw.githubusercontent.com/0honus0/nexus-agent-plugins/catalog/catalog.json';
+	const url = 'https://raw.githubusercontent.com/0honus0/nexus-plugin/catalog/catalog.json';
 	const manifest = catalogEntry('@test/official', 'https://example.test');
 	const originalFetch = globalThis.fetch;
 	let online = true;
