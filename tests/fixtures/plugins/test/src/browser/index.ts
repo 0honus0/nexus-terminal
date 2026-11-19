@@ -9,6 +9,10 @@ declare module 'nexus-terminal/browser' {
 
 export function activate(context: PluginContextApi): void {
 	context.provide('sample', { name: () => 'sample' });
+	context.app.log.registerMessages({
+		en: { TEST_COUNTER_INCREMENTED: 'Saved {count} item(s).' },
+		zh: { TEST_COUNTER_INCREMENTED: '已保存 {count} 项。' },
+	});
 	context.contribute({
 		applications: [{ id: 'counter', label: 'Counter', component: CounterView }],
 		widgets: [{ id: 'counter', label: 'Counter Widget', component: CounterView }],

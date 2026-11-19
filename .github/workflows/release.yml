@@ -119,7 +119,6 @@ jobs:
           provenance: mode=max
 
   sdk:
-    if: needs.prepare.outputs.channel == 'latest'
     needs: [prepare, verify, image]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -145,5 +144,7 @@ jobs:
               gh release upload "$RELEASE_TAG" "${artifact[0]}"
             fi
           else
-            gh release create "$RELEASE_TAG" "${artifact[0]}" --verify-tag --generate-notes
+            flags=()
+            if [[ "$RELEASE_TAG" == *-dev ]]; then flags+=(--prerelease --latest=false); fi
+            gh release create "$RELEASE_TAG" "${artifact[0]}" --verify-tag --generate-notes "${flags[@]}"
           fi

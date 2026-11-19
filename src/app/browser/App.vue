@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 	import { usePreferredDark, usePreferredReducedMotion } from '@vueuse/core';
 	import { computed, defineAsyncComponent, onScopeDispose, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -17,6 +18,7 @@
 		auth: AuthApi;
 		getState: () => Pick<StateClient, 'subscribe'> | undefined;
 		preparePlugins: () => void;
+		windowLauncher: Pick<WindowLauncher, 'attach'>;
 	}>();
 	const { locale, t } = useI18n({ useScope: 'global' });
 	const preferences = new SettingsPreferencesApi({
@@ -146,6 +148,7 @@
 		:log="log"
 		:state="getState()"
 		:signing-out="signingOut"
+		:window-launcher="windowLauncher"
 		@logout="logout"
 	/>
 </template>

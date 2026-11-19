@@ -5,14 +5,18 @@
 	import type { UiToastItem } from '../../ui/browser/ui-component-types.js';
 	import type { LogApi } from './log-api.js';
 
-	const { log } = defineProps<{ log: Pick<LogApi, 'notices' | 'dismissNotice'> }>();
-	const { t, te } = useI18n({ useScope: 'global' });
+	const { log } = defineProps<{ log: Pick<LogApi, 'notices' | 'dismissNotice' | 'noticeMessage'> }>();
+	const { locale, rt, t, te } = useI18n({ useScope: 'global' });
 	const items = computed<UiToastItem[]>(() =>
 		log.notices.value.map((notice) => {
 			const key = `notices.${notice.code}`;
+			const message = log.noticeMessage(notice, locale.value);
+			const params = { ...notice.params };
 			return {
 				id: notice.id,
-				message: t(te(key) ? key : 'notices.operationFailed', { ...notice.params }),
+				message: message
+					? rt(message, params)
+					: t(!notice.owner && te(key) ? key : 'notices.operationFailed', params),
 				tone:
 					notice.level === 'error' || notice.level === 'fatal'
 						? 'error'

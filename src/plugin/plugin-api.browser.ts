@@ -1,8 +1,9 @@
+import type { PluginWindowLauncherApi } from '../window/browser/window-plugin-api.js';
 import type { PluginHttpClientApi } from '../http/browser/http-plugin-client-api.js';
 import type { PluginStateClientApi } from '../state/browser/state-plugin-client-api.js';
 import type { PluginTasksApi } from '../task/browser/task-plugin-api.js';
 import type { PluginWsClientApi } from '../ws/browser/ws-plugin-client-api.js';
-import type { PluginLogApi } from '../log/log-plugin-api.js';
+import type { PluginBrowserLogApi } from '../log/browser/log-api.js';
 import type { PluginContributions } from './browser/plugin-contribution-api.js';
 import type { PluginScopeApi } from './plugin-api.js';
 import type { PluginCapabilities as CapabilityMap } from './plugin-app.js';
@@ -27,10 +28,11 @@ export type PluginCapabilities = CapabilityMap<PluginAppApi>;
 /** 浏览器宿主为插件实例装配的能力。 */
 export interface PluginAppApi {
 	readonly http: PluginHttpClientApi;
-	readonly log: PluginLogApi;
+	readonly log: PluginBrowserLogApi;
 	readonly state: PluginStateClientApi;
 	readonly tasks: PluginTasksApi;
 	readonly ws: PluginWsClientApi;
+	readonly windows: PluginWindowLauncherApi;
 }
 
 /** 插件通过 Browser SDK 按包名和服务名扩充此接口。 */

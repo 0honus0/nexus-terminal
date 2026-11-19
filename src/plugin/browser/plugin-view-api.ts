@@ -128,7 +128,7 @@ export const PluginView = defineComponent({
 		api: { type: Object as PropType<PluginViewApi> },
 	},
 
-	setup({ entry, log, scope, api }) {
+	setup({ entry, log, scope, api }, { slots }) {
 		const { t } = useI18n({ useScope: 'global' });
 		const failed = ref(false);
 		const closed = ref(false);
@@ -160,8 +160,10 @@ export const PluginView = defineComponent({
 		});
 		return () => {
 			if (failed.value) return h('p', { role: 'status' }, t('componentUnavailable'));
-			if (available && !closed.value)
-				return h(entry.component, { context: entry.context, view: api ?? view.api });
+			if (available && !closed.value) {
+				const props = { context: entry.context, view: api ?? view.api };
+				return slots.default ? slots.default(props) : h(entry.component, props);
+			}
 			return null;
 		};
 	},

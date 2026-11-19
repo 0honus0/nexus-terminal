@@ -56,4 +56,28 @@ describe('浏览器日志', () => {
 		});
 		expect(log.notices.value).toEqual([]);
 	});
+
+	it('同一个提示码按插件实例隔离，释放旧实例保留新实例通知', async () => {
+		const log = new LogApi({ write: vi.fn() });
+		const old = new PluginScope(() => {});
+		const current = new PluginScope(() => {});
+		const first = log.bind('@test/log', old);
+		const second = log.bind('@test/log', current);
+
+		first.registerMessages({ en: { SAVED: 'Old {count}' } });
+		const unregister = second.registerMessages({ en: { SAVED: 'Initial' } });
+		second.registerMessages({ en: { SAVED: 'New {count}' }, zh: { SAVED: '保存了 {count} 项' } });
+		unregister();
+		first.report({ level: 'info', code: 'SAVED', userVisible: true, params: { count: 1 } });
+		second.report({ level: 'info', code: 'SAVED', userVisible: true, params: { count: 2 } });
+		const [previous, latest] = log.notices.value;
+		expect(log.noticeMessage(previous!, 'en')).toBe('Old {count}');
+		expect(log.noticeMessage(latest!, 'zh')).toBe('保存了 {count} 项');
+		expect(log.noticeMessage(latest!, 'en')).toBe('New {count}');
+		await old.close();
+		expect(log.notices.value).toEqual([latest]);
+		expect(log.history.entries.value.map(({ code }) => code)).toEqual(['SAVED', 'SAVED']);
+		await current.close();
+		expect(log.notices.value).toEqual([]);
+	});
 });

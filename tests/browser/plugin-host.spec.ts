@@ -58,6 +58,24 @@ test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ p
 	expect(errors).toEqual([]);
 });
 
+test('插件 Toast 使用当前语言，停用后撤销该实例的提示', async ({ page, host }) => {
+	await page.goto('/?plugin-notices');
+	const widget = page.getByRole('region', { name: 'Counter Widget' });
+	await expect(widget.getByText('Count: 0')).toBeVisible();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const language = page.getByRole('combobox', { name: 'Language' });
+	await expect(language).toBeVisible();
+	await widget.getByRole('button', { name: 'Increment' }).evaluate((button: HTMLButtonElement) => button.click());
+	const toast = page.locator('[data-ui="toast"]');
+	await expect(toast.getByText('Saved 1 item(s).')).toBeVisible();
+	await language.click();
+	await page.getByRole('option', { name: '简体中文' }).click();
+	await expect(toast.getByText('已保存 1 项。')).toBeVisible();
+
+	host.setPluginVersion(null);
+	await expect(toast.getByText('已保存 1 项。')).toHaveCount(0);
+});
+
 test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({ page, host: _host }) => {
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');

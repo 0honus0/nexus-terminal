@@ -2,6 +2,8 @@ import type { Component, ComputedRef, MaybeRefOrGetter } from 'vue';
 import type { PluginComponentProps } from '../../plugin/browser/plugin-contribution-api.js';
 import type { PluginViewApi } from '../../plugin/browser/plugin-view-api.js';
 import type { UiMenuItem } from '../../ui/browser/ui-component-types.js';
+import type { PluginScopeApi } from '../../plugin/plugin-api.js';
+import { CodedError } from '../../utils/error.js';
 
 export interface WindowTab {
 	readonly id: string;
@@ -52,4 +54,31 @@ export interface PluginWindowApi extends PluginViewApi {
 
 export interface PluginWindowProps extends PluginComponentProps {
 	readonly view: PluginWindowApi;
+}
+
+export interface PluginWindowLauncherApi {
+	/** 打开本插件的应用。单窗口应用已有实例时恢复并聚焦。 */
+	open(applicationId: string): void;
+}
+
+/** 浏览器插件先取得作用域绑定，桌面挂载后交付真正的窗口入口。 */
+export class WindowLauncher {
+	#open: ((key: string) => boolean) | undefined;
+
+	attach(open: (key: string) => boolean): () => void {
+		this.#open = open;
+		return () => {
+			if (this.#open === open) this.#open = undefined;
+		};
+	}
+
+	bind(pluginId: string, { signal }: PluginScopeApi): PluginWindowLauncherApi {
+		return Object.freeze<PluginWindowLauncherApi>({
+			open: (applicationId) => {
+				signal.throwIfAborted();
+				if (!this.#open?.(`${pluginId}:applications:${applicationId}`))
+					throw new CodedError('PLUGIN_APPLICATION_UNAVAILABLE');
+			},
+		});
+	}
 }

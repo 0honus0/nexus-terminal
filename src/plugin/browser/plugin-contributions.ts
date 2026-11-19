@@ -5,14 +5,18 @@ import type { UiTheme } from '../../ui/browser/ui-theme-types.js';
 import { CodedError } from '../../utils/error.js';
 import type { PluginContextApi } from '../plugin-api.browser.js';
 import type { PluginScopeApi } from '../plugin-api.js';
-import type { PluginComponentContribution, PluginContributions } from './plugin-contribution-api.js';
+import type {
+	PluginApplicationTileContribution,
+	PluginComponentContribution,
+	PluginContributions,
+} from './plugin-contribution-api.js';
 
 type ContributionKind = keyof PluginContributions;
 
 type ComponentContribution = PluginComponentContribution &
 	Pick<
 		z.infer<typeof ApplicationSchema>,
-		'multipleWindows' | 'defaultWindowSize' | 'scrollMode' | 'scrollbarGutter'
+		'multipleWindows' | 'defaultWindowSize' | 'scrollMode' | 'scrollbarGutter' | 'tile'
 	> & { readonly kind: 'applications' | 'widgets' };
 
 type LoginContribution = AuthLoginContribution & { readonly kind: 'login' };
@@ -39,6 +43,14 @@ const ComponentSchema = z.strictObject({
 });
 
 const ApplicationSchema = ComponentSchema.extend({
+	tile: z
+		.strictObject({
+			component: z.custom<PluginApplicationTileContribution['component']>(
+				(value) => typeof value === 'function' || (value !== null && typeof value === 'object'),
+			),
+			showAtIconSize: z.boolean().optional(),
+		})
+		.optional(),
 	multipleWindows: z.boolean().optional(),
 	defaultWindowSize: z.strictObject({ width: z.number().positive(), height: z.number().positive() }).optional(),
 	scrollMode: z.enum(['content', 'window']).optional(),

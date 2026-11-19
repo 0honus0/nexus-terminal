@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 	import { ChevronLeft, ChevronRight, MoveDiagonal2, Package, Plus, X } from '@lucide/vue';
 	import { useWindowSize } from '@vueuse/core';
 	import { PaginationList, PaginationListItem, PaginationRoot } from 'reka-ui';
@@ -29,12 +30,13 @@
 	import DesktopDock from './DesktopDock.vue';
 	import { useDesktopNavigation } from './desktop-navigation.js';
 
-	const { contributions, log, builtins, desktop, escapeAction } = defineProps<{
+	const { contributions, log, builtins, desktop, escapeAction, windowLauncher } = defineProps<{
 		contributions: PluginContributionList;
 		log: Pick<LogApi, 'report'>;
 		builtins: readonly DesktopApplication[];
 		desktop: DesktopApi;
 		escapeAction: 'minimize' | 'close';
+		windowLauncher: Pick<WindowLauncher, 'attach'>;
 	}>();
 	const { t, n } = useI18n({ useScope: 'global' });
 	const { width } = useWindowSize({ includeScrollbar: false });
@@ -117,7 +119,11 @@
 		},
 		{ immediate: true },
 	);
-	onScopeDispose(() => windows.close());
+	const detachLauncher = windowLauncher.attach(openApplication);
+	onScopeDispose(() => {
+		detachLauncher();
+		windows.close();
+	});
 
 	function open(key: string, event?: MouseEvent): void {
 		const application = applications.value.get(key);
@@ -126,9 +132,17 @@
 		windows.toggle(application, launcher instanceof HTMLElement ? launcher : undefined);
 	}
 
-	function openApplication(key: string): void {
+	function openApplication(key: string): boolean {
 		const application = applications.value.get(key);
-		if (application) windows.open(application);
+		if (!application || application.plugin?.lifetime.signal.aborted) return false;
+		windows.open(application);
+		return true;
+	}
+
+	function tileEntry(tile: DesktopTile): PluginComponentEntry | undefined {
+		const entry = applications.value.get(tile.key)?.plugin;
+		if (!entry?.tile) return;
+		if (tile.w > 1 || tile.h > 1 || entry.tile.showAtIconSize) return entry;
 	}
 
 	function contextItems(tile: DesktopTile) {
@@ -198,6 +212,26 @@
 										:size="{ columns: tile.w, rows: tile.h }"
 										:open="() => open(tile.key)"
 									/>
+									<PluginView
+										v-else-if="tileEntry(tile)"
+										:key="tileEntry(tile)!.instance"
+										:entry="tileEntry(tile)!"
+										:log="log"
+									>
+										<template #default="{ context, view }">
+											<component
+												:is="tileEntry(tile)!.tile!.component"
+												:context="context"
+												:view="view"
+												:size="{ columns: tile.w, rows: tile.h }"
+												:open="
+													() => {
+														if (!view.signal.aborted) open(tile.key);
+													}
+												"
+											/>
+										</template>
+									</PluginView>
 									<UiActionCard
 										v-else
 										class="application-tile"

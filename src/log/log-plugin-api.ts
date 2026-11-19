@@ -50,21 +50,26 @@ export class PluginLog implements PluginLogApi {
 	}
 
 	report(event: PluginLogInput): void {
-		const scoped = this.#toHostEvent(event);
+		const scoped = scopePluginLogInput(event, PluginLogInputSchema, this.#pluginId, this.#signal);
 		if (scoped) this.#log.report(scoped);
 	}
+}
 
-	#toHostEvent(event: PluginLogInput): LogFields | undefined {
-		// 先检查作用域，避免读取已卸载插件提供的 getter。
-		if (this.#signal.aborted) return;
-		try {
-			const parsed = PluginLogInputSchema.safeParse(event);
-			// 校验可能执行外部 getter，结束后复核作用域再绑定身份。
-			if (!parsed.success || this.#signal.aborted) return;
-			return { ...parsed.data, source: this.#pluginId, pluginId: this.#pluginId };
-		} catch {
-			// safeParse 可以遇到抛异常的 getter。直接丢弃这条插件输入。
-			return undefined;
-		}
+/** 前后端共用日志校验和来源绑定，浏览器可以声明额外的展示字段。 */
+export function scopePluginLogInput<Input extends PluginLogInput>(
+	event: unknown,
+	schema: z.ZodType<Input>,
+	pluginId: string,
+	signal: AbortSignal,
+): (Input & Pick<LogFields, 'source' | 'pluginId'>) | undefined {
+	// 先检查作用域，避免读取已卸载插件提供的 getter。
+	if (signal.aborted) return undefined;
+	try {
+		const parsed = schema.safeParse(event);
+		if (!parsed.success || signal.aborted) return undefined;
+		return { ...parsed.data, source: pluginId, pluginId };
+	} catch {
+		// 校验可能执行外部 getter。异常输入直接丢弃。
+		return undefined;
 	}
 }

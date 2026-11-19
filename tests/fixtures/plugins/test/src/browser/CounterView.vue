@@ -95,6 +95,7 @@
 			level: 'info',
 			code: 'TEST_COUNTER_INCREMENTED',
 			params: { count: count.value },
+			userVisible: new URLSearchParams(location.search).has('plugin-notices'),
 		});
 	}
 </script>

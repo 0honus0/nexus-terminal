@@ -8,6 +8,8 @@ export {
 	type PluginLogInput,
 } from '../../log/log-plugin-api.js';
 
+export type { PluginBrowserLogApi, PluginBrowserLogInput, PluginLogMessages } from '../../log/browser/log-api.js';
+
 export type { PluginScopeApi } from '../../plugin/plugin-api.js';
 
 export type { PluginViewApi, PluginViewCloseEvent } from '../../plugin/browser/plugin-view-api.js';
@@ -24,6 +26,8 @@ export type {
 
 export type {
 	PluginApplicationContribution,
+	PluginApplicationTileContribution,
+	PluginApplicationTileProps,
 	PluginComponentContribution,
 	PluginComponentProps,
 	PluginContributions,
@@ -44,6 +48,7 @@ export {
 
 export type {
 	PluginWindowApi,
+	PluginWindowLauncherApi,
 	PluginWindowProps,
 	PluginWindowState,
 	WindowAction,

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 	import { Archive, ScrollText, Settings, Store } from '@lucide/vue';
 	import { computed, onMounted, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -18,13 +19,14 @@
 	import type { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
 	import type { AuthApi } from '../../auth/browser/auth-api.js';
 
-	const { contributions, log, signingOut, state, preferences, auth } = defineProps<{
+	const { contributions, log, signingOut, state, preferences, auth, windowLauncher } = defineProps<{
 		contributions: PluginContributionList;
 		log: LogApi;
 		signingOut: boolean;
 		state?: Pick<StateClient, 'subscribe'>;
 		preferences: SettingsPreferencesApi;
 		auth: AuthApi;
+		windowLauncher: Pick<WindowLauncher, 'attach'>;
 	}>();
 	const emit = defineEmits<{ logout: [] }>();
 	const previewSpeed = defineModel<number>('previewSpeed');
@@ -155,6 +157,7 @@
 		:contributions="contributions"
 		:log="log"
 		:escape-action="settings.escapeAction"
+		:window-launcher="windowLauncher"
 	>
 		<template #tile="{ application, size, open }">
 			<MarketplaceTile

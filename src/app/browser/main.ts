@@ -32,6 +32,7 @@ const vue = createApp(AppView, {
 	contributions: app.contributions,
 	log: app.log,
 	auth: app.auth,
+	windowLauncher: app.windows,
 
 	getState: () => app.state,
 

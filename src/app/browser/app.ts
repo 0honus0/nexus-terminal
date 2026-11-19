@@ -1,3 +1,4 @@
+import { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 import { shallowRef, watch, type WatchHandle } from 'vue';
 import { AuthApi } from '../../auth/browser/auth-api.js';
 import { LogApi, LogWriter } from '../../log/browser/log-api.js';
@@ -14,6 +15,7 @@ export class App {
 	readonly log = new LogApi(new LogWriter());
 	readonly #controller = new AbortController();
 	readonly auth = new AuthApi(this.#controller.signal, this.log);
+	readonly windows = new WindowLauncher();
 	readonly #plugins = new PluginRuntime({
 		app: new PluginAppService({
 			http: new HttpClientService(),
@@ -21,6 +23,7 @@ export class App {
 			state: new StateClientService(() => this.#state.value, this.log),
 			tasks: new TaskService(this.log),
 			ws: new WsClientService(),
+			windows: this.windows,
 		}),
 		services: { log: this.log },
 	});

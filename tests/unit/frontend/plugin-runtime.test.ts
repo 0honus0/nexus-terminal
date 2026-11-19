@@ -1,3 +1,4 @@
+import { WindowLauncher } from '../../../src/window/browser/window-plugin-api.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { nextTick, ref, shallowRef, watch } from 'vue';
@@ -39,12 +40,17 @@ function fixture(id: string, module: PluginModuleApi, dependsOn: Record<string, 
 function setup() {
 	const events: LogInput[] = [];
 	const log = {
-		bind: () => ({ report() {} }),
+		bind: () => ({
+			report() {},
+
+			registerMessages: () => () => {},
+		}),
 
 		report: (event: LogInput) => {
 			events.push(event);
 		},
 	};
+	const windows = new WindowLauncher();
 	const runtime = new PluginRuntime({
 		app: new PluginAppService({
 			http: new HttpClientService(),
@@ -52,10 +58,11 @@ function setup() {
 			state: new StateClientService(() => undefined, log),
 			tasks: new TaskService(log),
 			ws: new WsClientService(),
+			windows,
 		}),
 		services: { log },
 	});
-	return { runtime, events };
+	return { runtime, events, windows };
 }
 
 function gate<Value = void>() {
@@ -352,4 +359,30 @@ test('与视图关联的重要任务等待完成，失败保留窗口，强制�
 	await view.close();
 	await rejected;
 	await runtime.close();
+});
+
+test('SDK 窗口入口绑定当前插件，桌面拆除和插件停用后拒绝打开', async (t) => {
+	const { runtime, windows } = setup();
+	t.after(() => runtime.close());
+	let open!: (id: string) => void;
+	await runtime.sync([
+		fixture('@test/owner', {
+			activate(context) {
+				open = context.app.windows.open;
+				context.contribute({ applications: [{ id: 'main', label: 'Owner', component }] });
+			},
+		}),
+	]);
+	let target: string | undefined;
+	const detach = windows.attach((key) => {
+		target = key;
+		return key === '@test/owner:applications:main';
+	});
+	open('main');
+	assert.equal(target, '@test/owner:applications:main');
+	assert.throws(() => open('@test/another:applications:main'), { code: 'PLUGIN_APPLICATION_UNAVAILABLE' });
+	detach();
+	assert.throws(() => open('main'), { code: 'PLUGIN_APPLICATION_UNAVAILABLE' });
+	await runtime.sync([]);
+	assert.throws(() => open('main'));
 });

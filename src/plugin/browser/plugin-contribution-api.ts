@@ -19,9 +19,21 @@ export interface PluginComponentContribution {
 	readonly component: Component<PluginComponentProps>;
 }
 
+export interface PluginApplicationTileProps extends PluginComponentProps {
+	readonly size: { readonly columns: number; readonly rows: number };
+	open(): void;
+}
+
+export interface PluginApplicationTileContribution {
+	readonly component: Component<PluginApplicationTileProps>;
+	/** 默认在 1×1 显示宿主启动图标。 */
+	readonly showAtIconSize?: boolean;
+}
+
 export interface PluginApplicationContribution extends Omit<PluginComponentContribution, 'component'> {
 	readonly component: Component<PluginWindowProps> | Component<PluginComponentProps>;
 	readonly multipleWindows?: boolean;
+	readonly tile?: PluginApplicationTileContribution;
 	readonly defaultWindowSize?: { readonly width: number; readonly height: number };
 	readonly scrollMode?: 'content' | 'window';
 	readonly scrollbarGutter?: 'auto' | 'stable';
