@@ -62,8 +62,8 @@ async function buildPlugin(directory: string): Promise<{ archive: Buffer; manife
 		devDependencies: {
 			'nexus-terminal': 'file:./sdk.tgz',
 			typescript: pkg.devDependencies.typescript,
-			vue: pkg.dependencies.vue,
-			'vue-i18n': pkg.dependencies['vue-i18n'],
+			vue: pkg.devDependencies.vue,
+			'vue-i18n': pkg.devDependencies['vue-i18n'],
 			kysely: pkg.dependencies.kysely,
 			zod: pkg.dependencies.zod,
 		},

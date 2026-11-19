@@ -12,6 +12,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const directory = join(root, 'dist/sdk');
 const declarations = join(root, 'dist/sdk-declarations');
 const host = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+// Browser dependencies are needed by the SDK build even though Node does not install them in production.
+const versions = { ...host.devDependencies, ...host.dependencies };
 const entries = Object.entries(host.exports).map(([key, value]) => [key.slice(2), value]);
 const exports = Object.fromEntries(
 	entries.map(([name]) => ['./' + name, { types: './' + name + '.d.ts', import: './' + name + '.js' }]),
@@ -91,7 +93,7 @@ for (const file of files) {
 			.split('/')
 			.slice(0, fileName.startsWith('@') ? 2 : 1)
 			.join('/');
-		if (!host.dependencies[name]) throw new Error('SDK dependency is missing from the host package: ' + name);
+		if (!versions[name]) throw new Error('SDK dependency is missing from the host package: ' + name);
 		const types = '@types/' + name.replace(/^@/u, '').replace('/', '__');
 		if (file.endsWith('.d.ts') && host.devDependencies[types]) definitions.add(types);
 		// DefinitelyTyped provides declarations for modules referred to only as types.
@@ -105,7 +107,7 @@ const manifest = {
 	type: 'module',
 	engines: host.engines,
 	exports,
-	peerDependencies: Object.fromEntries([...peers].sort().map((name) => [name, host.dependencies[name]])),
+	peerDependencies: Object.fromEntries([...peers].sort().map((name) => [name, versions[name]])),
 	dependencies: Object.fromEntries([...definitions].sort().map((name) => [name, host.devDependencies[name]])),
 };
 await writeFile(join(directory, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
