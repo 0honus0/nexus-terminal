@@ -284,18 +284,18 @@
 							required
 						/>
 					</UiField>
+					<UiButton
+						class="account-save"
+						type="submit"
+						tone="primary"
+						:loading="changing"
+						:disabled="signingOut || !current || !next"
+						loading-animation="spinner"
+					>
+						<template #leading><KeyRound :size="16" /></template>
+						{{ t('desktop.changePassword') }}
+					</UiButton>
 				</div>
-				<UiButton
-					class="account-save"
-					type="submit"
-					tone="primary"
-					:loading="changing"
-					:disabled="signingOut || !current || !next"
-					loading-animation="spinner"
-				>
-					<template #leading><KeyRound :size="16" /></template>
-					{{ t('desktop.changePassword') }}
-				</UiButton>
 			</form>
 		</UiSection>
 	</div>
@@ -462,7 +462,8 @@
 	}
 	.account-fields {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+		align-items: end;
 		gap: 14px;
 	}
 	.account-save {
@@ -476,6 +477,12 @@
 		clip-path: inset(50%);
 	}
 	@container (max-width: 420px) {
+		.account-fields {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		}
+		.account-save {
+			grid-column: 1 / -1;
+		}
 		.theme-options {
 			gap: 8px;
 		}

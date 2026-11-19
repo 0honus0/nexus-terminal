@@ -385,6 +385,18 @@
 								builtinOpen = true;
 							"
 						>
+							<template #badge>
+								<UiBadge tone="success" role="status" dot>{{ t('marketplace.available') }}</UiBadge>
+							</template>
+							<template #actions>
+								<UiButton
+									density="compact"
+									:aria-label="t('marketplace.openNamedApplication', { name: item.label })"
+									@click="emit('openApplication', item.key)"
+								>
+									{{ t('marketplace.open') }}
+								</UiButton>
+							</template>
 						</UiCard>
 						<UiCard
 							v-for="item in results"

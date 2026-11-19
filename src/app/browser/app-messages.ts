@@ -53,6 +53,9 @@ export const appMessages = {
 			removeRepositoryConfirm: 'Remove {name} from the catalog? Installed plugins will remain.',
 			showOnHome: 'Show on desktop',
 			builtin: 'Built in',
+			available: 'Available',
+			open: 'Open',
+			openNamedApplication: 'Open {name}',
 			manageBuiltin: 'Manage {name}',
 			openApplication: 'Open application',
 			operation: {
@@ -300,6 +303,9 @@ export const appMessages = {
 			removeRepositoryConfirm: '从目录中移除 {name}？已经安装的插件会保留。',
 			showOnHome: '在桌面显示',
 			builtin: '本体内置',
+			available: '可用',
+			open: '打开',
+			openNamedApplication: '打开{name}',
 			manageBuiltin: '管理{name}',
 			openApplication: '打开应用',
 			operation: {

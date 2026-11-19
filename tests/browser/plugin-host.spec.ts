@@ -361,7 +361,13 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
 	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
 	for (const name of ['Plugin Marketplace', 'Settings', 'Logs', 'Backup and Restore']) {
-		await expect(market.getByRole('button', { name: 'Manage ' + name, exact: true })).toBeVisible();
+		const main = market.getByRole('button', { name: 'Manage ' + name, exact: true });
+		const card = market
+			.getByRole('article')
+			.filter({ has: page.getByRole('button', { name: 'Manage ' + name, exact: true }) });
+		await expect(main).toBeVisible();
+		await expect(card.getByRole('status')).toHaveText('Available');
+		await expect(card.getByRole('button', { name: 'Open ' + name, exact: true })).toBeVisible();
 	}
 
 	await market.getByRole('searchbox').fill('Logs');
@@ -371,7 +377,9 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await expect(details.getByRole('button', { name: 'Uninstall' })).toHaveCount(0);
 	await details.getByRole('switch', { name: 'Show on desktop' }).click();
 	await expect(tile).toHaveCount(0);
-	await details.getByRole('button', { name: 'Open application' }).click();
+	await details.getByRole('button', { name: 'Close application' }).click();
+	await expect(details).toHaveCount(0);
+	await market.getByRole('button', { name: 'Open Logs', exact: true }).click();
 	const logs = page.getByRole('region', { name: 'Logs', exact: true });
 	await expect(logs).toBeVisible();
 	await logs.getByRole('button', { name: 'Close application' }).click();
@@ -381,4 +389,34 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await details.getByRole('switch', { name: 'Show on desktop' }).click();
 	await expect(tile).toHaveCount(1);
 	await expect.poll(() => tile.evaluate((element) => Number(element.getAttribute('gs-w') ?? 1))).toBe(1);
+});
+
+test('账户密码字段和保存按钮同行，保存按钮与退出登录右侧对齐', async ({ page, host: _host }) => {
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const settings = page.getByRole('region', { name: 'Settings', exact: true });
+	const current = settings.getByLabel('Current password', { exact: true });
+	const next = settings.getByLabel('New password', { exact: true });
+	const update = settings.getByRole('button', { name: 'Change password', exact: true });
+	const logout = settings.getByRole('button', { name: 'Sign out', exact: true });
+	await expect(update).toBeVisible();
+	await expect(logout).toBeVisible();
+	await expect
+		.poll(async () => {
+			const [first, second, save, signOut] = await Promise.all([
+				current.boundingBox(),
+				next.boundingBox(),
+				update.boundingBox(),
+				logout.boundingBox(),
+			]);
+			if (!first || !second || !save || !signOut) return false;
+			return (
+				first.x < second.x &&
+				second.x < save.x &&
+				Math.abs(first.y + first.height - (save.y + save.height)) <= 2 &&
+				Math.abs(second.y + second.height - (save.y + save.height)) <= 2 &&
+				Math.abs(save.x + save.width - (signOut.x + signOut.width)) <= 2
+			);
+		})
+		.toBe(true);
 });
