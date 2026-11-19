@@ -569,6 +569,51 @@ test('市场在激活完成前返回 202，客户端关闭请求后宿主继续�
 	);
 });
 
+test('官方仓库只在本地登记一次，目录离线时保留缓存', { timeout: 10000 }, async (t) => {
+	const url = 'https://raw.githubusercontent.com/0honus0/nexus-agent-plugins/catalog/catalog.json';
+	const manifest = catalogEntry('@test/official', 'https://example.test');
+	const originalFetch = globalThis.fetch;
+	let online = true;
+	let requests = 0;
+	t.mock.method(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+		if (input !== url) return originalFetch(input, init);
+		requests++;
+		if (!online) throw new TypeError('offline');
+		return Response.json([manifest]);
+	});
+
+	const { app, restart } = await setup(t);
+	let origin = app.services.get('http').origin;
+	const cookie = await initializeOwner(origin);
+
+	const repositories = async () =>
+		MarketplaceRepositoryListSchema.parse(await (await marketRequest(origin, repositoriesPath, cookie)).json())
+			.items;
+
+	const catalog = async () =>
+		MarketplaceCatalogListSchema.parse(await (await marketRequest(origin, catalogPath, cookie)).json()).items;
+
+	const [official] = await repositories();
+	assert.equal(official.url, url);
+	assert.equal(official.official, true);
+	assert.deepEqual(await catalog(), []);
+	assert.equal(requests, 0);
+
+	const path = `${repositoriesPath}/${official.id}`;
+	assert.equal((await marketRequest(origin, path + '/refresh', cookie, 'POST')).status, 204);
+	online = false;
+	assert.equal((await marketRequest(origin, path + '/refresh', cookie, 'POST')).status, 502);
+	assert.equal((await catalog())[0].versions[0].repositoryId, official.id);
+
+	origin = (await restart()).services.get('http').origin;
+	assert.deepEqual(await repositories(), [official]);
+	assert.equal((await catalog())[0].id, manifest.id);
+	assert.equal(requests, 2);
+	assert.equal((await marketRequest(origin, path, cookie, 'DELETE')).status, 204);
+	origin = (await restart()).services.get('http').origin;
+	assert.deepEqual(await repositories(), []);
+});
+
 test('仓库目录按宿主分配的来源合并，刷新失败保留缓存，编辑和重启保留仓库身份', { timeout: 10000 }, async (t) => {
 	const remote = await serveRepositories(t);
 	const id = '@test/shared';

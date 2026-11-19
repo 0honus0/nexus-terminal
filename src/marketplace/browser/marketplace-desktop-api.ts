@@ -149,8 +149,8 @@ export class MarketplaceDesktopApi {
 			: request('/repositories', MarketplaceRepositorySchema, this.#signal, 'POST', { url });
 	}
 
-	refreshRepository(id: string): Promise<void> {
-		return repositoryChange('/repositories/' + encodeURIComponent(id) + '/refresh', 'POST', this.#signal);
+	refreshRepository(id: string, signal = this.#signal): Promise<void> {
+		return repositoryChange('/repositories/' + encodeURIComponent(id) + '/refresh', 'POST', signal);
 	}
 
 	removeRepository(id: string): Promise<void> {

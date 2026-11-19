@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { MigrationProvider } from 'kysely/migration';
 import type { PluginDatabaseApi } from '../../database/node/database-plugin-api.js';
 import {
@@ -19,6 +20,9 @@ const repositories = 'repositories';
 const retained = 'retained_data';
 
 const attempts = 'install_attempts';
+
+export const officialRepositoryUrl =
+	'https://raw.githubusercontent.com/0honus0/nexus-agent-plugins/catalog/catalog.json';
 
 type RepositoryRecord = Pick<MarketplaceRepository, 'id' | 'url' | 'label'>;
 
@@ -85,6 +89,22 @@ export const marketplaceMigrations: MigrationProvider = {
 						.addColumn('pluginId', 'text', (column) => column.primaryKey())
 						.addColumn('target', 'text', (column) => column.notNull())
 						.addColumn('state', 'text', (column) => column.notNull())
+						.execute();
+				},
+			},
+			'005_official_repository': {
+				async up(db) {
+					// 只登记一次。保留现有同地址仓库的 ID 和缓存，用户删除后也不在重启时重新插入。
+					await db
+						.$extendTables<MarketplaceTables>()
+						.insertInto(repositories)
+						.values({
+							id: randomUUID(),
+							url: officialRepositoryUrl,
+							label: 'Nexus Terminal',
+							catalogJson: '[]',
+						})
+						.onConflict((conflict) => conflict.column('url').doNothing())
 						.execute();
 				},
 			},

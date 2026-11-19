@@ -19,13 +19,10 @@ import {
 	MarketplaceRepositoryParamsSchema,
 	MarketplaceUpdateRepositorySchema,
 } from '../marketplace-http-types.js';
-import type { MarketplaceStorage } from './marketplace-storage.js';
+import { officialRepositoryUrl, type MarketplaceStorage } from './marketplace-storage.js';
 
 const empty = z.strictObject({});
 const catalogTimeout = 15000;
-
-/** 市场内置的官方仓库完整目录地址。 */
-const officialRepositoryUrls: readonly string[] = [];
 
 type Change = <Result>(operation: () => Promise<Result>) => Promise<Result>;
 
@@ -273,6 +270,6 @@ export class MarketplaceCatalog {
 	}
 
 	#view(repository: Omit<MarketplaceRepository, 'official'>): MarketplaceRepository {
-		return { ...repository, official: officialRepositoryUrls.includes(repository.url) };
+		return { ...repository, official: repository.url === officialRepositoryUrl };
 	}
 }

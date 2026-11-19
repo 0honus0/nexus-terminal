@@ -120,7 +120,7 @@
 		}
 	});
 	onScopeDispose(() => scope.abort());
-	void discover();
+	void discover(true);
 
 	watch(operations, (next, previous) => {
 		if (
@@ -162,7 +162,7 @@
 		}
 	}
 
-	async function discover(): Promise<void> {
+	async function discover(refreshOfficial = false): Promise<void> {
 		// 仓库变更可能在读取期间提交，此时旧快照不能覆盖新目录。
 		catalogRead?.abort();
 		const request = new AbortController();
@@ -175,6 +175,15 @@
 			if (sources.status === 'fulfilled') repositories.value = sources.value;
 			if (items.status === 'rejected') throw items.reason;
 			catalog.value = sortMarketplacePlugins(items.value);
+
+			// 先显示已有目录，官方仓库联网失败时继续使用缓存。
+			const official = refreshOfficial && repositories.value.find(({ official }) => official);
+			if (!official) return;
+
+			await api.refreshRepository(official.id, signal);
+			const updated = await api.readCatalog(signal);
+			signal.throwIfAborted();
+			catalog.value = sortMarketplacePlugins(updated);
 		} catch {
 			if (!signal.aborted)
 				log.report({ source: 'marketplace', code: 'MARKETPLACE_CATALOG_READ_FAILED', level: 'warn' });
@@ -306,19 +315,21 @@
 		}
 	});
 
+	function refreshManagement(): void {
+		emit('refresh');
+		void readManagement();
+		void api.readOperations().catch(() => undefined);
+	}
+
 	function refresh(): void {
-		void discover();
-		if (managing.value) {
-			emit('refresh');
-			void readManagement();
-			void api.readOperations().catch(() => undefined);
-		}
+		void discover(true);
+		if (managing.value) refreshManagement();
 	}
 
 	function toggle(): void {
 		managing.value = !managing.value;
 		query.value = '';
-		if (managing.value) refresh();
+		if (managing.value) refreshManagement();
 		root.value?.closest('.application-window__body')?.scrollTo(0, 0);
 	}
 </script>

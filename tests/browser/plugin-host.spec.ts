@@ -193,6 +193,61 @@ test('桌面卡片保留圆角键盘焦点，鼠标收起和关闭窗口不留�
 	await expect(icon).toHaveCSS('border-radius', '19px');
 });
 
+test('市场先显示缓存，官方仓库刷新后显示新目录', async ({ page, host: _host }) => {
+	const id = '123e4567-e89b-42d3-a456-426614174005';
+	const release = Promise.withResolvers<void>();
+	let refreshed = false;
+
+	await page.route('**/api/plugins/*/repositories', (route) =>
+		route.fulfill({
+			json: {
+				items: [{ id, label: 'Nexus Terminal', url: 'https://example.test/catalog.json', official: true }],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/repositories/' + id + '/refresh', async (route) => {
+		expect(route.request().method()).toBe('POST');
+		await release.promise;
+		refreshed = true;
+		await route.fulfill({ status: 204 });
+	});
+	await page.route('**/api/plugins/*/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						id: '@test/official',
+						versions: [
+							{
+								repositoryId: id,
+								distributions: [],
+								package: {
+									name: '@test/official',
+									version: refreshed ? '1.1.0' : '1.0.0',
+									description: refreshed ? 'Refreshed catalog' : 'Cached catalog',
+									type: 'module',
+									peerDependencies: { 'nexus-terminal': '^1.0.0' },
+									nexus: { kind: 'extension', entry: { backend: 'index.mjs' } },
+								},
+							},
+						],
+					},
+				],
+			},
+		}),
+	);
+
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	try {
+		await expect(market.getByText('Cached catalog')).toBeVisible();
+	} finally {
+		release.resolve();
+	}
+	await expect(market.getByText('Refreshed catalog')).toBeVisible();
+});
+
 test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖计划', async ({ page, host: _host }) => {
 	const pluginId = '@test/remote-tools';
 	const sourceId = '123e4567-e89b-42d3-a456-426614174000';
