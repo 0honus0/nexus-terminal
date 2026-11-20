@@ -323,6 +323,60 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	await expect(desktop.getByRole('button', { name: 'Remove page 1', exact: true })).toBeDisabled();
 });
 
+test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩放', async ({ page, host: _host }) => {
+	await page.goto('/');
+	const desktop = page.locator('.desktop-shell');
+	const tile = desktop.locator('[data-tile="builtin:settings"]');
+	const move = tile.getByRole('button', { name: 'Move Settings', exact: true });
+	const resize = tile.locator('.desktop-tile__resize');
+	const settings = page.getByRole('region', { name: 'Settings', exact: true });
+
+	const reveal = () => desktop.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
+
+	async function drag(handle: Locator, dx: number, dy: number) {
+		const box = (await handle.boundingBox())!;
+		const x = box.x + box.width / 2;
+		const y = box.y + box.height / 2;
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x + dx, y + dy, { steps: 8 });
+		await page.mouse.up();
+	}
+
+	await reveal();
+	await desktop.getByRole('button', { name: 'Edit desktop' }).click();
+	await expect(move).toBeVisible();
+	const initial = (await tile.boundingBox())!;
+	const row = Number(await tile.getAttribute('gs-y'));
+	const width = Number((await tile.getAttribute('gs-w')) ?? '1');
+	const height = Number((await tile.getAttribute('gs-h')) ?? '1');
+	await drag(move, 0, (initial.height / height) * 2);
+	await expect(tile).toHaveAttribute('gs-y', String(row + 2));
+	await expect(settings).toHaveCount(0);
+
+	await expect(tile.locator('.ui-resizable-handle')).toHaveCount(1);
+	await expect(resize).toHaveClass(/\bui-resizable-se\b/u);
+	await drag(resize, initial.width / width, 0);
+	await expect(tile).toHaveAttribute('gs-w', String(width + 1));
+	await expect(page.getByRole('dialog', { name: 'Tile size' })).toHaveCount(0);
+
+	await reveal();
+	await desktop.getByRole('button', { name: 'Finish editing' }).click();
+	await expect(resize).toBeHidden();
+	await tile.getByRole('button', { name: 'Settings', exact: true }).click();
+	await expect(settings).toBeVisible();
+	await settings.getByRole('button', { name: 'Close application' }).click();
+	await expect(settings).toHaveCount(0);
+
+	await reveal();
+	await desktop.getByRole('button', { name: 'Edit desktop' }).click();
+	await drag(move, 0, initial.height / height);
+	await expect(tile).toHaveAttribute('gs-y', String(row + 3));
+	await page.reload();
+	await expect(tile).toHaveAttribute('gs-y', String(row + 3));
+	await expect(tile).toHaveAttribute('gs-w', String(width + 1));
+});
+
 test('选择框定位后纵向淡入，普通菜单淡入，布局菜单纵向展开', async ({ page, host: _host }) => {
 	const warnings: string[] = [];
 	page.on('pageerror', (error) => warnings.push(error.stack ?? error.message));
@@ -640,10 +694,13 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	const open = card.getByRole('button', { name: 'Open Counter', exact: true });
 	const before = (await update.boundingBox())!;
 	const after = (await open.boundingBox())!;
+	const status = (await card.getByRole('status').boundingBox())!;
 	expect(before.x + before.width).toBeLessThan(after.x);
 	expect(before.y).toBeCloseTo(after.y, 1);
 	expect(before.width).toBeCloseTo(after.width, 1);
 	expect(before.height).toBeCloseTo(after.height, 1);
+	expect(status.x).toBeCloseTo(after.x, 1);
+	expect(status.width).toBeCloseTo(after.width, 1);
 	await update.click();
 	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
 	await expect(plan.getByText(newVersion, { exact: false })).toBeVisible();
@@ -653,6 +710,7 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	await expect(card).toContainText(newVersion);
 	await expect(update).toHaveCount(0);
 	await expect(open).toBeEnabled();
+	await expect.poll(async () => (await card.getByRole('status').boundingBox())!.width).toBeCloseTo(status.width, 1);
 });
 
 test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖计划', async ({ page, host: _host }) => {
@@ -1185,6 +1243,7 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 });
 
 test('市场等待远程目录并从依赖解析推进到配置完成', async ({ page, host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	const pluginId = '@nexus-terminal/test';
 	const dependency = '@example/support';
 	const version = '1.0.0';
@@ -1247,6 +1306,7 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 					{ package: pack, source: target, action: 'install' },
 				],
 				blockers: [],
+				affected: Array.from({ length: 8 }, (_, index) => `@example/affected-${index}`),
 			},
 		});
 	});
@@ -1312,15 +1372,41 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 	await page.getByRole('button', { name: 'Preview installation' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Plugin installation' });
 	const currentStage = dialog.locator('[aria-current="step"]');
+
+	const layout = () =>
+		dialog.evaluate((element) =>
+			[element, ...element.querySelectorAll('.install-stages, .ui-dialog__footer')].map((part) => {
+				const { x, y, width, height } = part.getBoundingClientRect();
+				return { x, y, width, height };
+			}),
+		);
+
+	let initialLayout: Awaited<ReturnType<typeof layout>>;
 	try {
 		await expect(currentStage).toHaveText(/Resolve dependencies/u);
 		await expect(dialog.locator('[data-state="running"]')).toBeVisible();
+		initialLayout = await layout();
 	} finally {
 		planGate.resolve();
 	}
 
-	await dialog.getByRole('button', { name: 'Install', exact: true }).click();
+	const confirm = dialog.getByRole('button', { name: 'Install', exact: true });
+	await expect(confirm).toBeVisible();
+	expect(await layout()).toEqual(initialLayout);
+	await dialog.getByText('@example/affected-7', { exact: true }).scrollIntoViewIfNeeded();
+	const stageBody = dialog.locator('.install-stage-body');
+	expect(await stageBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+	expect(await layout()).toEqual(initialLayout);
+	const viewport = page.viewportSize()!;
+	await page.setViewportSize({ ...viewport, height: 360 });
+	await expect(dialog).toBeInViewport({ ratio: 1 });
+	await expect(confirm).toBeInViewport({ ratio: 1 });
+	await page.setViewportSize(viewport);
+	expect(await layout()).toEqual(initialLayout);
+	await confirm.click();
 	await expect(currentStage).toHaveText(/Install packages/u);
+	expect(await stageBody.evaluate((element) => element.scrollTop)).toBe(0);
+	expect(await layout()).toEqual(initialLayout);
 	const progress = dialog.locator('[data-ui="progress-row"]');
 	await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'running');
 	await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'pending');
@@ -1340,6 +1426,7 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 	await expect(currentStage).toHaveText(/Check configuration/u);
 	const openConfiguration = dialog.getByRole('button', { name: 'Open configuration' });
 	await expect(dialog.getByRole('button', { name: 'Configure later' })).toBeVisible();
+	expect(await layout()).toEqual(initialLayout);
 	await openConfiguration.click();
 	const configuration = page.getByRole('region', { name: 'Counter', exact: true });
 	await expect(configuration).toBeVisible();
@@ -1353,6 +1440,7 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 	host.setRuntime([{ ...runtime, readiness: { state: 'ready' } }]);
 	await configuration.getByRole('button', { name: 'Close application' }).click();
 	await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+	expect(await layout()).toEqual(initialLayout);
 	await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
 	await dialog.getByRole('button', { name: 'Done', exact: true }).click();
 	await expect(dialog).toHaveCount(0);

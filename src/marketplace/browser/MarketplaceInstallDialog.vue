@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import { Check } from '@lucide/vue';
-	import { computed } from 'vue';
+	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { PluginReadiness, PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import type { UiProgressState } from '../../ui/browser/ui-component-types.js';
@@ -11,6 +11,7 @@
 		UiList,
 		UiListItem,
 		UiProgressRow,
+		UiScrollArea,
 		UiSection,
 	} from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceInstallPlan } from '../marketplace-install-types.js';
@@ -44,6 +45,8 @@
 				? 'install'
 				: 'resolve',
 	);
+	const stageBody = ref<HTMLElement>();
+	watch(stage, () => stageBody.value?.scrollTo({ top: 0 }), { flush: 'post' });
 	const failed = computed(() => props.operation?.state === 'failed');
 	const canConfirm = computed(() => !!props.plan?.steps.length && !props.plan.blockers.length);
 	const checking = computed(() => !props.installed || props.loadingInstalled);
@@ -92,107 +95,148 @@
 </script>
 
 <template>
-	<UiDialog v-model:open="open" :title="t('marketplace.installFlow.title')" :close-label="t('closeApplication')">
-		<ol class="install-stages" :aria-label="t('marketplace.installFlow.title')">
-			<li
-				v-for="(step, index) in stages"
-				:key="step"
-				:aria-current="step === stage ? 'step' : undefined"
-				:data-complete="index < stages.indexOf(stage) || (step === 'configure' && stage === step && configured)"
-			>
-				<span class="install-stages__marker" aria-hidden="true">
-					<Check
-						v-if="index < stages.indexOf(stage) || (step === 'configure' && stage === step && configured)"
-						:size="14"
-					/>
-					<template v-else>{{ index + 1 }}</template>
-				</span>
-				{{ t('marketplace.installFlow.' + step) }}
-			</li>
-		</ol>
-		<div class="install-stage-body" :aria-busy="planning || submitting">
-			<template v-if="stage === 'resolve'">
-				<UiProgressRow
-					v-if="planning"
-					:label="t('marketplace.installFlow.resolve')"
-					state="running"
-					status-label=""
-					:show-progress="false"
-				/>
-				<p v-else-if="!plan" role="status">{{ t('notices.MARKETPLACE_INSTALL_PLAN_FAILED') }}</p>
-				<template v-else>
-					<UiSection v-if="plan.blockers.length" :title="t('marketplace.blockers')">
-						<UiList>
-							<UiListItem
-								v-for="(issue, index) in plan.blockers"
-								:key="index"
-								:title="issue.pluginId"
-								:description="t('marketplace.blocker.' + issue.code)"
-							/>
-						</UiList>
-					</UiSection>
-					<UiSection v-if="plan.affected?.length" :title="t('marketplace.affected')">
-						<UiList>
-							<UiListItem v-for="id in plan.affected" :key="id" :title="id" />
-						</UiList>
-					</UiSection>
-					<UiList v-if="plan.steps.length">
-						<UiListItem
-							v-for="step in plan.steps"
-							:key="step.package.name"
-							:title="marketplacePackageName(step.package, locale)"
-							:description="
-								[step.package.name, step.package.version, step.repository?.label]
-									.filter(Boolean)
-									.join(' · ')
+	<UiDialog
+		v-model:open="open"
+		class="marketplace-install-dialog"
+		:title="t('marketplace.installFlow.title')"
+		:close-label="t('closeApplication')"
+	>
+		<template #body>
+			<div class="install-body">
+				<UiScrollArea as-child gutter="symmetric" overflow="hidden">
+					<ol class="install-stages" :aria-label="t('marketplace.installFlow.title')">
+						<li
+							v-for="(step, index) in stages"
+							:key="step"
+							:aria-current="step === stage ? 'step' : undefined"
+							:data-complete="
+								index < stages.indexOf(stage) || (step === 'configure' && stage === step && configured)
 							"
 						>
-							<template #actions>
-								<UiBadge tone="neutral">{{ t('marketplace.planAction.' + step.action) }}</UiBadge>
+							<span class="install-stages__marker" aria-hidden="true">
+								<Check
+									v-if="
+										index < stages.indexOf(stage) ||
+										(step === 'configure' && stage === step && configured)
+									"
+									:size="14"
+								/>
+								<template v-else>{{ index + 1 }}</template>
+							</span>
+							{{ t('marketplace.installFlow.' + step) }}
+						</li>
+					</ol>
+				</UiScrollArea>
+				<UiScrollArea as-child gutter="symmetric">
+					<div
+						ref="stageBody"
+						class="install-stage-body"
+						role="region"
+						:aria-label="t('marketplace.installFlow.' + stage)"
+						:aria-busy="planning || submitting"
+						tabindex="0"
+					>
+						<template v-if="stage === 'resolve'">
+							<UiProgressRow
+								v-if="planning"
+								:label="t('marketplace.installFlow.resolve')"
+								state="running"
+								status-label=""
+								:show-progress="false"
+							/>
+							<p v-else-if="!plan" role="status">{{ t('notices.MARKETPLACE_INSTALL_PLAN_FAILED') }}</p>
+							<template v-else>
+								<UiSection v-if="plan.blockers.length" :title="t('marketplace.blockers')">
+									<UiList>
+										<UiListItem
+											v-for="(issue, index) in plan.blockers"
+											:key="index"
+											:title="issue.pluginId"
+											:description="t('marketplace.blocker.' + issue.code)"
+										/>
+									</UiList>
+								</UiSection>
+								<UiSection v-if="plan.affected?.length" :title="t('marketplace.affected')">
+									<UiList>
+										<UiListItem v-for="id in plan.affected" :key="id" :title="id" />
+									</UiList>
+								</UiSection>
+								<UiList v-if="plan.steps.length">
+									<UiListItem
+										v-for="step in plan.steps"
+										:key="step.package.name"
+										:title="marketplacePackageName(step.package, locale)"
+										:description="
+											[step.package.name, step.package.version, step.repository?.label]
+												.filter(Boolean)
+												.join(' · ')
+										"
+									>
+										<template #actions>
+											<UiBadge tone="neutral">{{
+												t('marketplace.planAction.' + step.action)
+											}}</UiBadge>
+										</template>
+									</UiListItem>
+								</UiList>
 							</template>
-						</UiListItem>
-					</UiList>
-				</template>
-			</template>
-			<template v-else-if="stage === 'install'">
-				<p v-if="failed" role="status">
-					{{ t('notices.' + (operation?.error ?? 'MARKETPLACE_OPERATION_FAILED')) }}
-				</p>
-				<UiProgressRow
-					v-for="row in installationRows"
-					:key="row.id"
-					:label="row.name"
-					:state="row.state"
-					:status-label="t('marketplace.installFlow.progress.' + row.state)"
-					:show-progress="false"
-					status-display="label"
-				/>
-				<UiProgressRow
-					v-if="operation?.step?.phase === 'activate' && !failed"
-					:label="t('marketplace.installFlow.activating')"
-					state="running"
-					status-label=""
-					:show-progress="false"
-				/>
-			</template>
-			<template v-else>
-				<p role="status">
-					{{ t(configured ? 'marketplace.installFlow.ready' : 'marketplace.installFlow.checkHint') }}
-				</p>
-				<UiList>
-					<UiListItem v-for="row in configurationRows" :key="row.id" :title="row.name" :description="row.id">
-						<template #actions>
-							<UiBadge :tone="marketplaceStatusTones[row.status]" dot>
-								{{ t('marketplace.status.' + row.status) }}
-							</UiBadge>
-							<UiButton v-if="row.application" @click="emit('configure', row.application.key)">
-								{{ t('marketplace.installFlow.openConfiguration') }}
-							</UiButton>
 						</template>
-					</UiListItem>
-				</UiList>
-			</template>
-		</div>
+						<template v-else-if="stage === 'install'">
+							<p v-if="failed" role="status">
+								{{ t('notices.' + (operation?.error ?? 'MARKETPLACE_OPERATION_FAILED')) }}
+							</p>
+							<UiProgressRow
+								v-for="row in installationRows"
+								:key="row.id"
+								:label="row.name"
+								:state="row.state"
+								:status-label="t('marketplace.installFlow.progress.' + row.state)"
+								:show-progress="false"
+								status-display="label"
+							/>
+							<UiProgressRow
+								v-if="operation?.step?.phase === 'activate' && !failed"
+								:label="t('marketplace.installFlow.activating')"
+								state="running"
+								status-label=""
+								:show-progress="false"
+							/>
+						</template>
+						<template v-else>
+							<p role="status">
+								{{
+									t(
+										configured
+											? 'marketplace.installFlow.ready'
+											: 'marketplace.installFlow.checkHint',
+									)
+								}}
+							</p>
+							<UiList>
+								<UiListItem
+									v-for="row in configurationRows"
+									:key="row.id"
+									:title="row.name"
+									:description="row.id"
+								>
+									<template #actions>
+										<UiBadge :tone="marketplaceStatusTones[row.status]" dot>
+											{{ t('marketplace.status.' + row.status) }}
+										</UiBadge>
+										<UiButton
+											v-if="row.application"
+											@click="emit('configure', row.application.key)"
+										>
+											{{ t('marketplace.installFlow.openConfiguration') }}
+										</UiButton>
+									</template>
+								</UiListItem>
+							</UiList>
+						</template>
+					</div>
+				</UiScrollArea>
+			</div>
+		</template>
 		<template #footer>
 			<UiButton v-if="stage === 'resolve' && canConfirm" tone="primary" :disabled="busy" @click="emit('confirm')">
 				{{
@@ -218,12 +262,28 @@
 </template>
 
 <style scoped>
+	:global(.marketplace-install-dialog) {
+		block-size: 420px;
+	}
+
+	:global(.marketplace-install-dialog .ui-dialog__footer) {
+		min-block-size: calc(var(--ui-dialog-action-height, 40px) + var(--ui-dialog-padding, 26px));
+	}
+
+	.install-body {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-block-size: 0;
+	}
+
 	.install-stages {
 		display: grid;
+		flex: none;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
 		gap: 8px;
 		margin: 0 0 16px;
-		padding: 0;
+		padding: 0 var(--ui-dialog-padding, 26px);
 		list-style: none;
 	}
 
@@ -259,9 +319,10 @@
 
 	.install-stage-body {
 		display: grid;
+		flex: 1 1 auto;
 		align-content: start;
 		gap: 12px;
-		min-height: 112px;
+		padding: 0 var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px);
 	}
 
 	.install-stage-body p {

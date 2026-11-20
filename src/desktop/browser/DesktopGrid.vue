@@ -99,7 +99,7 @@
 					minRow: rows,
 					maxRow: rows,
 					draggable: { handle: '.desktop-tile__move' },
-					resizable: { handles: 'se' },
+					resizable: { handles: 'se', element: '.desktop-tile__resize' },
 				},
 				root.value,
 			) ?? undefined;
@@ -111,6 +111,7 @@
 	watch(
 		() => editing,
 		(value) => grid?.setStatic(!value),
+		{ flush: 'post' },
 	);
 	useResizeObserver(canvas, ([entry]) => {
 		availableHeight = entry.contentRect.height;

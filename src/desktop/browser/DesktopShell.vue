@@ -286,13 +286,17 @@
 							<div v-else class="desktop-tile__placeholder">
 								<Package :size="20" /><span>{{ tile.label }}</span>
 							</div>
+							<button
+								v-show="editing"
+								class="desktop-tile__move"
+								type="button"
+								:aria-label="t('desktop.move', { title: tile.label })"
+								@keydown="nudge"
+							/>
+							<span v-show="editing" class="desktop-tile__resize" aria-hidden="true">
+								<MoveDiagonal2 :size="18" />
+							</span>
 							<template v-if="editing">
-								<button
-									class="desktop-tile__move"
-									type="button"
-									:aria-label="t('desktop.move', { title: tile.label })"
-									@keydown="nudge"
-								/>
 								<button
 									class="desktop-tile__size"
 									type="button"
@@ -300,15 +304,6 @@
 									@click="sizingKey = tile.key"
 								>
 									{{ tile.w }} × {{ tile.h }}
-								</button>
-								<button
-									class="desktop-tile__resize"
-									type="button"
-									tabindex="-1"
-									:aria-label="t('desktop.resize', { title: tile.label })"
-									@click="sizingKey = tile.key"
-								>
-									<MoveDiagonal2 :size="18" />
 								</button>
 								<button
 									v-if="!applications.has(tile.key)"

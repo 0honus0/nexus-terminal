@@ -41,27 +41,25 @@
 				<UiBadge :tone="marketplaceStatusTones[status]" role="status" dot>{{
 					t('marketplace.status.' + status)
 				}}</UiBadge>
-				<div v-if="openable || updateVersion" class="marketplace-installed-card__actions">
-					<UiButton
-						v-if="updateVersion"
-						density="compact"
-						tone="primary"
-						:disabled="updateDisabled"
-						:aria-label="t('marketplace.updateNamed', { name, version: updateVersion })"
-						:title="t('marketplace.updateVersion', { version: updateVersion })"
-						@click="$emit('update')"
-					>
-						{{ t('marketplace.confirmUpdate') }}
-					</UiButton>
-					<UiButton
-						v-if="openable"
-						density="compact"
-						:aria-label="t('marketplace.openNamedApplication', { name })"
-						@click="$emit('open')"
-					>
-						{{ t('marketplace.open') }}
-					</UiButton>
-				</div>
+				<UiButton
+					v-if="updateVersion"
+					density="compact"
+					tone="primary"
+					:disabled="updateDisabled"
+					:aria-label="t('marketplace.updateNamed', { name, version: updateVersion })"
+					:title="t('marketplace.updateVersion', { version: updateVersion })"
+					@click="$emit('update')"
+				>
+					{{ t('marketplace.confirmUpdate') }}
+				</UiButton>
+				<UiButton
+					v-if="openable"
+					density="compact"
+					:aria-label="t('marketplace.openNamedApplication', { name })"
+					@click="$emit('open')"
+				>
+					{{ t('marketplace.open') }}
+				</UiButton>
 			</div>
 		</template>
 	</UiCard>
@@ -76,15 +74,16 @@
 		grid-template-columns: minmax(66px, max-content);
 		gap: 6px;
 	}
+	.marketplace-installed-card__controls:has(> [data-ui='button'] + [data-ui='button']) {
+		grid-template-columns: repeat(2, minmax(66px, 1fr));
+	}
 	.marketplace-installed-card__controls > [data-ui='badge'] {
+		grid-area: 1 / -2 / 2 / -1;
 		width: 100%;
 		justify-content: center;
 	}
-	.marketplace-installed-card__actions {
-		display: grid;
-		grid-auto-flow: column;
-		grid-auto-columns: 1fr;
-		gap: 6px;
+	.marketplace-installed-card__controls > [data-ui='button'] {
+		grid-row: 2;
 	}
 	.marketplace-installed-card__builtin {
 		color: var(--ui-muted);
