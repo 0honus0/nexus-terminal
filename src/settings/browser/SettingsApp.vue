@@ -489,10 +489,10 @@
 	}
 	@container (max-width: 420px) {
 		.account-fields {
-			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+			grid-template-columns: minmax(0, 1fr);
 		}
 		.account-save {
-			grid-column: 1 / -1;
+			justify-self: stretch;
 		}
 		.theme-options {
 			gap: 8px;

@@ -178,10 +178,12 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await page.getByLabel('Password', { exact: true }).fill('test-password');
 		expect(importRequests).toBe(0);
 		await page.getByRole('button', { name: 'Create account', exact: true }).click();
-		await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
 		await expect.poll(() => importRequests).toBe(1);
+		await expect(page.getByRole('status', { name: 'Preparing your workspace' })).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
 		releaseImports();
 		const result = await firstResponse;
+		await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
 		expect(result.status()).toBe(200);
 		const firstURL = result.url();
 		expect((await anonymous.get(firstURL)).status()).toBe(401);

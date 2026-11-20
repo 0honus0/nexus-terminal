@@ -526,7 +526,7 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await expect.poll(() => tile.evaluate((element) => Number(element.getAttribute('gs-w') ?? 1))).toBe(1);
 });
 
-test('账户密码字段和保存按钮同行，保存按钮与退出登录右侧对齐', async ({ page, host: _host }) => {
+test('账户密码表单在宽屏同行，在窄屏排列为三行', async ({ page, host: _host }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const settings = page.getByRole('region', { name: 'Settings', exact: true });
@@ -551,6 +551,26 @@ test('账户密码字段和保存按钮同行，保存按钮与退出登录右�
 				Math.abs(first.y + first.height - (save.y + save.height)) <= 2 &&
 				Math.abs(second.y + second.height - (save.y + save.height)) <= 2 &&
 				Math.abs(save.x + save.width - (signOut.x + signOut.width)) <= 2
+			);
+		})
+		.toBe(true);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	const fields = settings.locator('.account-fields');
+	await expect
+		.poll(async () => {
+			const [first, second, save, form] = await Promise.all([
+				current.boundingBox(),
+				next.boundingBox(),
+				update.boundingBox(),
+				fields.boundingBox(),
+			]);
+			if (!first || !second || !save || !form) return false;
+			return (
+				first.y + first.height < second.y &&
+				second.y + second.height < save.y &&
+				Math.abs(save.x - form.x) <= 2 &&
+				Math.abs(save.width - form.width) <= 2
 			);
 		})
 		.toBe(true);
