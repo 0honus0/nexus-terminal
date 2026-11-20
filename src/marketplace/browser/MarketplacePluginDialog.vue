@@ -6,7 +6,7 @@
 	import { UiButton, UiDialog, UiSelect } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin, MarketplaceRepository } from '../marketplace-catalog-types.js';
 	import type { MarketplaceRepositorySource } from '../marketplace-install-types.js';
-	import { marketplaceDescription, marketplaceLabel } from './marketplace-presentation.js';
+	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
 
 	const props = defineProps<{
 		plugin: MarketplaceCatalogPlugin | undefined;
@@ -85,7 +85,7 @@
 						)
 					}}</span>
 				</div>
-				<h2>{{ marketplaceLabel(plugin.id) }}</h2>
+				<h2>{{ marketplacePackageName(displayPackage, locale) }}</h2>
 				<small data-ui-selection="text">{{ plugin.id }}</small>
 			</div>
 			<p class="catalog-detail__description" data-ui-selection="text">

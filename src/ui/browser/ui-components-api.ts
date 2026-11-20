@@ -2,11 +2,9 @@
  * 固定基础组件入口；按需求逐个调整组件，并在 tests/components 维护对应的 Vue 展示页。
  * 直接导出 Vue 组件及其自身类型，不建立组件注册表或动态代理。
  */
-export { UiButton, UiField, UiInput, UiSelect, UiToastStack } from './ui-base-api.js';
+export { UiButton, UiField, UiInput, UiSelect, UiToastStack, UiTransition } from './ui-base-api.js';
 
 export { default as UiDialog } from './components/UiDialog.vue';
-
-export { default as UiTransition } from './components/UiTransition.vue';
 
 export { default as UiResizeHandle } from './components/UiResizeHandle.vue';
 

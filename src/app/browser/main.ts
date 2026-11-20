@@ -36,6 +36,8 @@ const vue = createApp(AppView, {
 
 	getState: () => app.state,
 
+	desktopPluginsReady: () => app.desktopPluginsReady,
+
 	preparePlugins: () => app.preparePlugins(),
 });
 

@@ -37,6 +37,7 @@ import {
 } from '../../../src/marketplace/marketplace-types.js';
 import { inspectPluginPackage } from '../../../src/plugin/plugin-api.node.js';
 import { PluginScope } from '../../../src/plugin/plugin-api.js';
+import type { PluginManifest } from '../../../src/plugin/plugin-manifest-types.js';
 import { readPluginRuntime } from './plugin-test-host.js';
 import { StateMessageSchema } from '../../../src/state/state-ws-types.js';
 
@@ -80,11 +81,15 @@ async function writePlugin(
 		dependsOn = {},
 		source = 'export function activate() {}',
 		frontendOnly = false,
+		displayName,
+		i18n,
 	}: {
 		version?: string;
 		dependsOn?: Record<string, string>;
 		source?: string;
 		frontendOnly?: boolean;
+		displayName?: string;
+		i18n?: PluginManifest['nexus']['i18n'];
 	} = {},
 ): Promise<string> {
 	const path = join(directory, pluginId);
@@ -95,12 +100,14 @@ async function writePlugin(
 			JSON.stringify({
 				name: pluginId,
 				version,
+				displayName,
 				type: 'module',
 				peerDependencies: { 'nexus-terminal': '^1.0.0' },
 				nexus: {
 					kind: 'extension',
 					entry: { [frontendOnly ? 'frontend' : 'backend']: 'index.mjs' },
 					dependsOn,
+					i18n,
 				},
 			}),
 		),
@@ -350,7 +357,10 @@ test('市场由宿主登记为内置插件，运行时关闭时撤销市场路�
 test('安装记录持久化，市场列表和启停需要登录', { timeout: 10000 }, async (t) => {
 	const { directory, app, restart } = await setup(t);
 	const pluginId = '@test/managed';
-	const path = await writePlugin(directory, pluginId);
+	const path = await writePlugin(directory, pluginId, {
+		displayName: 'Managed plugin',
+		i18n: { 'zh-CN': { displayName: '受管理插件' } },
+	});
 	await recordInstalledPlugin(app, path);
 
 	let origin = app.services.get('http').origin;
@@ -362,6 +372,10 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 		{
 			pluginId,
 			version: '1.0.0',
+			kind: 'extension',
+			hasBackend: true,
+			displayName: 'Managed plugin',
+			localizedNames: { 'zh-CN': '受管理插件' },
 			source: { kind: 'local' },
 			enabled: false,
 			runtime: null,
@@ -415,6 +429,7 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 	const [beforeRestore] = await listInstalledPlugins(origin, cookie);
 	assert.equal(beforeRestore.enabled, true);
 	assert.equal(beforeRestore.runtime, null);
+	assert.deepEqual(beforeRestore.localizedNames, { 'zh-CN': '受管理插件' });
 
 	await recovered.startExternalPlugins();
 	assert.equal(

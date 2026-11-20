@@ -14,6 +14,8 @@ export { PluginAppService } from './plugin-app.js';
 
 export { PluginScope } from './plugin-api.js';
 
+export { resolveApplicationLabel } from './browser/plugin-contribution-api.js';
+
 export { PluginRuntime, type BrowserPluginTarget } from './browser/plugin-runtime-api.js';
 
 export type {

@@ -1,50 +1,10 @@
 import { z } from 'zod';
-import { sql } from 'kysely';
 import type { BackupDataApi } from '../../backup/node/backup-data-api.js';
-import type { BackupDeclaration } from '../../backup/backup-types.js';
-import { CodedError } from '../../utils/error.js';
-import type { MigrationProvider } from 'kysely/migration';
 import hostPackage from '../../../package.json' with { type: 'json' };
 import type { BuiltinPlugin, PluginContextApi } from '../../plugin/plugin-api.node.js';
 import { SettingsPatchSchema, SettingsSnapshotSchema, settingsPath } from '../settings-http-types.js';
-import {
-	SettingsPluginId,
-	SettingsPreferencesSchema,
-	SettingsTopic,
-	defaultSettings,
-	type SettingsSnapshot,
-} from '../settings-types.js';
-
-const table = 'preferences';
-
-const backup = [
-	{ table, version: 1, keys: ['id'], fields: { id: 'plain', value: 'plain' } },
-] satisfies BackupDeclaration;
-
-type Tables = { [table]: { id: string; revision: number; value: string } };
-
-const migrations: MigrationProvider = {
-	async getMigrations() {
-		return {
-			'001_preferences': {
-				async up(db) {
-					await db.schema
-						.createTable(table)
-						.addColumn('id', 'text', (column) => column.primaryKey())
-						.addColumn('revision', 'integer', (column) => column.notNull())
-						.addColumn('value', 'text', (column) => column.notNull())
-						.execute();
-				},
-			},
-		};
-	},
-};
-
-function snapshot(row: Tables['preferences'] | undefined): SettingsSnapshot {
-	return row
-		? SettingsSnapshotSchema.parse({ revision: row.revision, preferences: JSON.parse(row.value) })
-		: { revision: 0, preferences: defaultSettings };
-}
+import { SettingsPluginId, SettingsTopic, type SettingsSnapshot } from '../settings-types.js';
+import { SettingsStorage, backup, migrations, settingsTable } from './settings-storage.js';
 
 export class SettingsPlugin implements BuiltinPlugin {
 	readonly id = SettingsPluginId;
@@ -59,28 +19,10 @@ export class SettingsPlugin implements BuiltinPlugin {
 
 	async activate(context: PluginContextApi): Promise<void> {
 		const { database, http, state } = context.app;
-		await database.withClient((client) =>
-			client
-				.$extendTables<Tables>()
-				.insertInto(table)
-				.values({ id: 'owner', revision: 0, value: JSON.stringify(defaultSettings) })
-				.onConflict((conflict) => conflict.column('id').doNothing())
-				.execute(),
-		);
+		const storage = new SettingsStorage(database);
+		await storage.initialize();
 
-		const read = () =>
-			database.withClient(async (client) =>
-				snapshot(
-					await client
-						.$extendTables<Tables>()
-						.selectFrom(table)
-						.selectAll()
-						.where('id', '=', 'owner')
-						.executeTakeFirst(),
-				),
-			);
-
-		let current = await read();
+		let current = await storage.read();
 		context.signal.throwIfAborted();
 		const publisher = state.register({
 			name: SettingsTopic.name,
@@ -96,22 +38,15 @@ export class SettingsPlugin implements BuiltinPlugin {
 
 		this.#backupData.registerHostTable(
 			this.id,
-			table,
+			settingsTable,
 			{
-				validate(rows) {
-					const row = rows[0];
-					if (rows.length !== 1 || row?.id !== 'owner' || typeof row.value !== 'string')
-						throw new CodedError('BACKUP_SETTINGS_INVALID');
-					SettingsPreferencesSchema.parse(JSON.parse(row.value));
-				},
+				validate: (rows) => storage.validateBackupRows(rows),
 
-				async written(db, name) {
-					await sql`update ${sql.id(name)} set revision = revision + 1 where id = 'owner'`.execute(db);
-				},
+				written: (db, name) => storage.incrementBackupRevision(db, name),
 
 				async committed() {
 					if (context.signal.aborted) return;
-					publish(await read());
+					publish(await storage.read());
 				},
 			},
 			context,
@@ -132,32 +67,7 @@ export class SettingsPlugin implements BuiltinPlugin {
 				output: SettingsSnapshotSchema,
 
 				handler: async (input: z.infer<typeof SettingsPatchSchema>, signal) => {
-					signal.throwIfAborted();
-					const saved = await database.withClient((client) =>
-						client
-							.$extendTables<Tables>()
-							.transaction()
-							.execute(async (db) => {
-								const stored = snapshot(
-									await db.selectFrom(table).selectAll().where('id', '=', 'owner').executeTakeFirst(),
-								);
-								if (!Object.keys(input).length) return stored;
-								const next = {
-									revision: stored.revision + 1,
-									preferences: { ...stored.preferences, ...input },
-								};
-								const value = JSON.stringify(next.preferences);
-								signal.throwIfAborted();
-								await db
-									.insertInto(table)
-									.values({ id: 'owner', revision: next.revision, value })
-									.onConflict((conflict) =>
-										conflict.column('id').doUpdateSet({ revision: next.revision, value }),
-									)
-									.execute();
-								return next;
-							}),
-					);
+					const saved = await storage.update(input, signal);
 					// 已提交的更新即使浏览器断开也继续发布，较早的响应不覆盖新修订。
 					publish(saved);
 					return saved;

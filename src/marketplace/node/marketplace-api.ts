@@ -488,11 +488,24 @@ export class MarketplaceApi {
 		return planMarketplaceInstall({ target, installed, ...snapshot });
 	}
 
-	readonly #listPlugins: HttpRoute<typeof empty, typeof MarketplacePluginListSchema>['handler'] = async () => {
+	readonly #listPlugins: HttpRoute<typeof empty, typeof MarketplacePluginListSchema>['handler'] = async (
+		_,
+		signal,
+	) => {
 		this.#assertOpen();
 		// 列表直接读取安装记录与运行状态，无需等待市场操作完成。
 		const records = await this.#storage.list();
-		return { items: records.map((record) => this.#view(record)) };
+		const read = pLimit(8);
+		const items = await Promise.all(
+			records.map((record) =>
+				read(() => {
+					signal.throwIfAborted();
+					return this.#view(record);
+				}),
+			),
+		);
+		signal.throwIfAborted();
+		return { items };
 	};
 
 	readonly #getPlugin: HttpRoute<typeof MarketplacePluginParamsSchema, typeof MarketplacePluginSchema>['handler'] =
@@ -761,13 +774,28 @@ export class MarketplaceApi {
 		}
 	}
 
-	#view(record: InstalledPlugin): MarketplacePlugin {
+	async #view(record: InstalledPlugin): Promise<MarketplacePlugin> {
+		const { manifest } = await inspectInstalled(record);
 		const { pluginId, version, enabled, directory } = record;
 		const runtime = this.#runtime.getInstalled({ pluginId, version, directory }) ?? null;
 		const issue =
 			this.#issues.get(pluginId) ??
 			(runtime?.runtime === 'failed' && enabled ? 'MARKETPLACE_PLUGIN_START_FAILED' : null);
-		return { pluginId, version, source: installedSource(record), enabled, runtime, issue };
+		const localizedNames = Object.entries(manifest?.nexus.i18n ?? {}).flatMap(([language, { displayName }]) =>
+			displayName ? [[language, displayName] as const] : [],
+		);
+		return {
+			pluginId,
+			version,
+			kind: manifest?.nexus.kind ?? null,
+			displayName: manifest?.displayName,
+			...(localizedNames.length && { localizedNames: Object.fromEntries(localizedNames) }),
+			hasBackend: manifest ? manifest.nexus.entry.backend !== undefined : null,
+			source: installedSource(record),
+			enabled,
+			runtime,
+			issue,
+		};
 	}
 
 	#change<Result>(operation: () => Promise<Result>): Promise<Result> {

@@ -46,28 +46,44 @@ export class MarketplaceFrontendSource {
 		this.#loadEntry = loadEntry;
 	}
 
-	connect(state: Pick<StateClient, 'subscribe'>): void {
+	connect(state: Pick<StateClient, 'subscribe'>, onInitialSync: () => void): void {
+		let confirmed = false;
+		let ready = false;
+		let revision = 0;
+
+		// 运行状态和安装清单可交错到达，只有最新一轮已确认的清单能结束首屏等待。
+		const sync = async (): Promise<void> => {
+			const current = ++revision;
+			await this.#reconcile();
+			if (ready || !confirmed || current !== revision) return;
+
+			ready = true;
+			onInitialSync();
+		};
+
 		state.subscribe(MarketplaceFrontendsTopic, MarketplaceFrontendsSchema, {
 			updated: (value) => {
 				this.#installed = value;
-				void this.#reconcile();
+				confirmed = true;
+				void sync();
 			},
 
 			unconfirmed: (reason) => {
-				if (reason === 'unavailable') this.#installed = [];
+				confirmed = reason === 'unavailable';
+				if (confirmed) this.#installed = [];
 				this.#runtime.clear();
-				void this.#reconcile();
+				void sync();
 			},
 		});
 		state.subscribe(PluginRuntimeStateTopic, PluginRuntimeListSchema, {
 			updated: (value) => {
 				this.#runtime = new Map(value.map((entry) => [entry.pluginId, entry]));
-				void this.#reconcile();
+				void sync();
 			},
 
 			unconfirmed: () => {
 				this.#runtime.clear();
-				void this.#reconcile();
+				void sync();
 			},
 		});
 	}

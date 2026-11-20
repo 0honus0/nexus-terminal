@@ -14,7 +14,15 @@ export function activate(context: PluginContextApi): void {
 		zh: { TEST_COUNTER_INCREMENTED: '已保存 {count} 项。' },
 	});
 	context.contribute({
-		applications: [{ id: 'counter', label: 'Counter', component: CounterView }],
+		applications: [
+			{
+				id: 'counter',
+
+				label: (locale) => (locale === 'zh' ? '计数器' : 'Counter'),
+
+				component: CounterView,
+			},
+		],
 		widgets: [{ id: 'counter', label: 'Counter Widget', component: CounterView }],
 	});
 	context.onDispose(() => {

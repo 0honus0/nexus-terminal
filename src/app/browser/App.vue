@@ -1,22 +1,24 @@
 <script setup lang="ts">
 	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 	import { usePreferredDark, usePreferredReducedMotion } from '@vueuse/core';
-	import { computed, defineAsyncComponent, onScopeDispose, ref, watch } from 'vue';
+	import { computed, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { StateClient } from '../../state/browser/state-api.js';
 	import { AuthPage, type AuthApi } from '../../auth/browser/auth-api.js';
 	import { LogNotices, type LogApi } from '../../log/browser/log-api.js';
 	import { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
 	import type { PluginContributionList, PluginThemeEntry } from '../../plugin/plugin-api.browser.js';
-	import { UiSelect } from '../../ui/browser/ui-base-api.js';
+	import { UiSelect, UiTransition } from '../../ui/browser/ui-base-api.js';
 	import { provideUiMotion } from '../../ui/browser/ui-motion-api.js';
 	import { provideUiThemes } from '../../ui/browser/ui-theme-api.js';
+	import AppStartup from './AppStartup.vue';
 
 	const props = defineProps<{
 		contributions: PluginContributionList;
 		log: LogApi;
 		auth: AuthApi;
 		getState: () => Pick<StateClient, 'subscribe'> | undefined;
+		desktopPluginsReady: () => boolean;
 		preparePlugins: () => void;
 		windowLauncher: Pick<WindowLauncher, 'attach'>;
 	}>();
@@ -62,13 +64,52 @@
 	);
 	onScopeDispose(() => preferences.disconnect());
 
-	const loadDesktop = () => import('./AppDesktop.vue');
+	// 认证首次读取在根组件挂载后启动，之后的后台刷新沿用原界面。
+	const checkingSession = ref(true);
+	watch(props.auth.checking, (checking) => {
+		if (!checking) checkingSession.value = false;
+	});
 
-	const Desktop = defineAsyncComponent(loadDesktop);
+	const desktop = shallowRef<Component>();
+	const desktopFailed = ref(false);
+	const desktopReady = computed(() => !!desktop.value && props.desktopPluginsReady());
+	let desktopLoad: Promise<void> | undefined;
+
+	function loadDesktop(): Promise<void> {
+		return (desktopLoad ??= import('./AppDesktop.vue')
+			.then(({ default: component }) => {
+				desktop.value = component;
+			})
+			.catch((cause: unknown) => {
+				desktopLoad = undefined;
+				throw cause;
+			}));
+	}
 
 	function prepareHome(): void {
 		props.preparePlugins();
 		void loadDesktop().catch(() => undefined);
+	}
+
+	watch(
+		signedIn,
+		(active, _, onCleanup) => {
+			if (!active || desktop.value) return;
+
+			const scope = new AbortController();
+			onCleanup(() => scope.abort());
+			desktopFailed.value = false;
+			void loadDesktop().catch(() => {
+				if (scope.signal.aborted) return;
+				desktopFailed.value = true;
+				props.log.report({ source: 'app', level: 'error', code: 'APP_DESKTOP_LOAD_FAILED' });
+			});
+		},
+		{ immediate: true },
+	);
+
+	function reload(): void {
+		location.reload();
 	}
 
 	const dark = usePreferredDark();
@@ -131,16 +172,25 @@
 
 <template>
 	<LogNotices :log="log" />
-	<AuthPage v-if="!signedIn" :auth="auth" :contributions="contributions" @sign-in="prepareHome" />
+	<UiTransition preset="fade" :appear="false">
+		<AppStartup
+			v-if="checkingSession || (signedIn && !desktopReady)"
+			:motion-enabled="motionEnabled"
+			:failed="desktopFailed"
+			@retry="reload"
+		/>
+	</UiTransition>
+	<AuthPage v-if="!signedIn && !checkingSession" :auth="auth" :contributions="contributions" @sign-in="prepareHome" />
 	<UiSelect
-		v-if="!signedIn"
+		v-if="!signedIn && !checkingSession"
 		v-model="language"
 		class="app-language"
 		:options="languageOptions"
 		:aria-label="t('language')"
 	/>
-	<Desktop
-		v-else
+	<component
+		:is="desktop"
+		v-if="signedIn && desktopReady"
 		v-model:preview-speed="previewSpeed"
 		:preferences="preferences"
 		:auth="auth"

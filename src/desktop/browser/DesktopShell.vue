@@ -13,7 +13,11 @@
 	} from '../../layout/layout-api.js';
 	import type { LogApi } from '../../log/browser/log-api.js';
 	import { PluginView } from '../../plugin/browser/plugin-view-api.js';
-	import type { PluginComponentEntry, PluginContributionList } from '../../plugin/plugin-api.browser.js';
+	import {
+		resolveApplicationLabel,
+		type PluginComponentEntry,
+		type PluginContributionList,
+	} from '../../plugin/plugin-api.browser.js';
 	import {
 		UiActionCard,
 		UiButton,
@@ -38,7 +42,7 @@
 		escapeAction: 'minimize' | 'close';
 		windowLauncher: Pick<WindowLauncher, 'attach'>;
 	}>();
-	const { t, n } = useI18n({ useScope: 'global' });
+	const { t, n, locale } = useI18n({ useScope: 'global' });
 	const { width } = useWindowSize({ includeScrollbar: false });
 	const { play } = useUiMotion();
 	const profile = computed(() => resolveLayoutProfile(width.value));
@@ -64,7 +68,7 @@
 								{
 									key: plugin.key,
 
-									label: () => toValue(plugin.label),
+									label: () => resolveApplicationLabel(plugin.label, locale.value),
 
 									icon: Package,
 									multipleWindows: plugin.multipleWindows,

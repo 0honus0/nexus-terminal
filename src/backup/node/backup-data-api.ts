@@ -1,13 +1,18 @@
 import { isDeepStrictEqual } from 'node:util';
 import { sql, type QueryExecutorProvider, type Kysely } from 'kysely';
 import { z } from 'zod';
-import { pluginTablePrefix, type DatabaseApi } from '../../database/node/database-api.js';
+import type { DatabaseApi } from '../../database/node/database-api.js';
 import type { CryptoApi } from '../../crypto/node/crypto-api.js';
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
 import { CodedError } from '../../utils/error.js';
 import { BackupDeclarationSchema, BackupPackageSchema, BackupTableSchema, type BackupTable } from '../backup-types.js';
-
-const registry = 'nexus_backup_declarations';
+import {
+	BackupStorage,
+	backupTableName,
+	verifyBackupTable,
+	type BackupRow as Row,
+	type BackupTables,
+} from './backup-storage.js';
 
 export const backupDataLimit = 16 * 1024 * 1024;
 
@@ -36,49 +41,7 @@ type ArchiveEntry = Archive['entries'][number];
 
 type Cell = z.infer<typeof CellSchema>;
 
-type Row = Record<string, string | number | null | Uint8Array>;
-
-type Schema = { nexus_backup_declarations: { id: string; version: string; tables: string } } & Record<string, Row>;
-
-type Connection = Kysely<Schema>;
-
-function tableName(pluginId: string, { table }: BackupTable): string {
-	return pluginTablePrefix(pluginId) + table;
-}
-
-async function verifyTable(db: Connection, name: string, table: BackupTable): Promise<void> {
-	const entry = await sql<{ type: string }>`select type from sqlite_schema where name = ${name}`.execute(db);
-	const { rows: columns } = await sql<{
-		name: string;
-		pk: number;
-	}>`select name, pk from pragma_table_info(${name})`.execute(db);
-	const primary = columns
-		.filter(({ pk }) => pk > 0)
-		.sort((a, b) => a.pk - b.pk)
-		.map(({ name }) => name);
-
-	const matches = (key: readonly (string | null)[]) =>
-		key.length === table.keys.length &&
-		new Set(key).size === key.length &&
-		key.every((column) => column !== null && table.keys.includes(column));
-
-	if (
-		entry.rows[0]?.type !== 'table' ||
-		Object.keys(table.fields).some((key) => !columns.some(({ name }) => name === key))
-	)
-		throw new CodedError('BACKUP_TABLE_INVALID');
-	if (matches(primary)) return;
-	const indexes = await sql<{
-		name: string;
-	}>`select name from pragma_index_list(${name}) where "unique" = 1 and partial = 0`.execute(db);
-	for (const index of indexes.rows) {
-		const { rows } = await sql<{ name: string | null }>`select name from pragma_index_info(${index.name})`.execute(
-			db,
-		);
-		if (matches(rows.map(({ name }) => name))) return;
-	}
-	throw new CodedError('BACKUP_TABLE_INVALID');
-}
+type Connection = Kysely<BackupTables>;
 
 interface Mutation {
 	readonly name: string;
@@ -170,7 +133,8 @@ export interface BackupHostTableHooks {
 
 /** 跨插件数据库只在宿主内部使用。输入归档只能匹配迁移后登记的声明。 */
 export class BackupDataApi {
-	readonly #database: Pick<DatabaseApi, 'withClient' | 'migrateHost' | 'clearPluginData'>;
+	readonly #database: Pick<DatabaseApi, 'withClient'>;
+	readonly #storage: BackupStorage;
 	readonly #crypto: Pick<CryptoApi, 'bind'>;
 	readonly #hostTables = new Map<string, { table: string; hooks: BackupHostTableHooks }>();
 
@@ -182,6 +146,7 @@ export class BackupDataApi {
 		crypto: Pick<CryptoApi, 'bind'>;
 	}) {
 		this.#database = database;
+		this.#storage = new BackupStorage(database);
 		this.#crypto = crypto;
 	}
 
@@ -199,77 +164,31 @@ export class BackupDataApi {
 	}
 
 	initialize(signal: AbortSignal): Promise<void> {
-		return this.#database.migrateHost(
-			'nexus_backup',
-			{
-				async getMigrations() {
-					return {
-						'001_declarations': {
-							async up(db) {
-								await db.schema
-									.createTable(registry)
-									.addColumn('id', 'text', (column) => column.primaryKey())
-									.addColumn('version', 'text', (column) => column.notNull())
-									.addColumn('tables', 'text', (column) => column.notNull())
-									.execute();
-							},
-						},
-					};
-				},
-			},
-			signal,
-		);
+		return this.#storage.initialize(signal);
 	}
 
 	async register(pluginId: string, version: string, input: unknown, signal: AbortSignal): Promise<void> {
 		const tables = BackupDeclarationSchema.parse(input === undefined ? [] : input);
-		await this.#database.withClient((client) =>
-			client
-				.$extendTables<Schema>()
-				.transaction()
-				.execute(async (db) => {
-					signal.throwIfAborted();
-					if (!tables.length) {
-						await db.deleteFrom(registry).where('id', '=', pluginId).execute();
-						return;
-					}
-					for (const table of tables) await verifyTable(db, tableName(pluginId, table), table);
-					signal.throwIfAborted();
-					await db
-						.insertInto(registry)
-						.values({ id: pluginId, version, tables: JSON.stringify(tables) })
-						.onConflict((conflict) =>
-							conflict.column('id').doUpdateSet({ version, tables: JSON.stringify(tables) }),
-						)
-						.execute();
-					signal.throwIfAborted();
-				}),
-		);
+		return this.#storage.register(pluginId, version, tables, signal);
 	}
 
-	async clearPluginData(pluginId: string, signal: AbortSignal): Promise<void> {
-		await this.#database.clearPluginData(pluginId, signal, async (db) => {
-			await db.$extendTables<Schema>().deleteFrom(registry).where('id', '=', pluginId).execute();
-		});
+	clearPluginData(pluginId: string, signal: AbortSignal): Promise<void> {
+		return this.#storage.clearPluginData(pluginId, signal);
 	}
 
 	export(scope: PluginScopeApi): Promise<Archive> {
 		return this.#database.withClient((client) =>
 			client
-				.$extendTables<Schema>()
+				.$extendTables<BackupTables>()
 				.transaction()
 				.execute(async (db) => {
 					const entries: ArchiveEntry[] = [];
 					let bytes = 0;
-					for (const { id, version, tables } of await db
-						.selectFrom(registry)
-						.selectAll()
-						.orderBy('id')
-						.execute()) {
-						for (const table of BackupDeclarationSchema.parse(JSON.parse(tables))) {
+					for (const { id, version, tables } of await this.#storage.list(db)) {
+						for (const table of tables) {
 							scope.signal.throwIfAborted();
-							const name = tableName(id, table);
-							await verifyTable(db, name, table);
+							const name = backupTableName(id, table);
+							await verifyBackupTable(db, name, table);
 							const rows: ArchiveEntry['rows'] = [];
 							const query = table.keys.reduce(
 								(query, key) => query.orderBy(key),
@@ -330,7 +249,7 @@ export class BackupDataApi {
 	async preview(archive: Archive, scope: PluginScopeApi, missing: ReadonlySet<string> = new Set()) {
 		await this.#database.withClient((client) =>
 			client
-				.$extendTables<Schema>()
+				.$extendTables<BackupTables>()
 				.transaction()
 				.execute(async (db) => {
 					await this.#prepareRestore(
@@ -352,11 +271,11 @@ export class BackupDataApi {
 	async restore(archive: Archive, scope: PluginScopeApi): Promise<void> {
 		const hostTables = archive.entries.flatMap(({ pluginId, table }) => {
 			const host = this.#hostTables.get(pluginId);
-			return host?.table === table.table ? [{ name: tableName(pluginId, table), hooks: host.hooks }] : [];
+			return host?.table === table.table ? [{ name: backupTableName(pluginId, table), hooks: host.hooks }] : [];
 		});
 		await this.#database.withClient((client) =>
 			client
-				.$extendTables<Schema>()
+				.$extendTables<BackupTables>()
 				.transaction()
 				.execute(async (db) => {
 					const { mutations, guards } = await this.#prepareRestore(db, archive, scope);
@@ -408,7 +327,7 @@ export class BackupDataApi {
 			await this.#validate(db, entry);
 			const host = this.#hostTables.get(pluginId);
 			if (host?.table === table.table) host.hooks.validate(rows);
-			const name = tableName(pluginId, table);
+			const name = backupTableName(pluginId, table);
 			const keys = table.keys;
 			const query = db.selectFrom(name).select(Object.keys(table.fields));
 			const previous = new Map((await query.execute()).map((row) => [identity(row, keys), row]));
@@ -445,13 +364,12 @@ export class BackupDataApi {
 	}
 
 	async #validate(db: Connection, { pluginId, pluginVersion, table }: ArchiveEntry): Promise<void> {
-		const row = await db.selectFrom(registry).selectAll().where('id', '=', pluginId).executeTakeFirst();
-		const declared =
-			row && BackupDeclarationSchema.parse(JSON.parse(row.tables)).find((item) => item.table === table.table);
-		if (row?.version !== pluginVersion || !isDeepStrictEqual(declared, table))
+		const registration = await this.#storage.get(db, pluginId);
+		const declared = registration?.tables.find((item) => item.table === table.table);
+		if (registration?.version !== pluginVersion || !isDeepStrictEqual(declared, table))
 			throw new CodedError('BACKUP_VERSION_MISMATCH');
-		const name = tableName(pluginId, table);
-		await verifyTable(db, name, table);
+		const name = backupTableName(pluginId, table);
+		await verifyBackupTable(db, name, table);
 	}
 
 	async #encode(

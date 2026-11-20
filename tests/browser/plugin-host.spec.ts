@@ -1,4 +1,51 @@
+import { randomUUID } from 'node:crypto';
+import { version as hostVersion } from '../../package.json' with { type: 'json' };
+import { marketplaceFrontendBase } from '../../src/marketplace/marketplace-http-types.js';
 import { expect, test } from './plugin-host-fixture.js';
+
+for (const entryFails of [false, true]) {
+	test(`桌面等待首批插件入口完成（入口失败：${entryFails}）`, async ({ page, host: _host }) => {
+		const release = Promise.withResolvers<void>();
+		let requested = false;
+		await page.route('**' + marketplaceFrontendBase + '/*/*/index.js', async (route) => {
+			requested = true;
+			await release.promise;
+			if (entryFails) await route.fulfill({ status: 503 });
+			else await route.fallback();
+		});
+
+		await page.goto('/');
+		const loading = page.getByRole('status', { name: 'Preparing your workspace' });
+		const desktop = page.locator('.desktop-shell');
+		try {
+			await expect(loading).toBeVisible();
+			await expect.poll(() => requested).toBe(true);
+			await expect(desktop).toHaveCount(0);
+		} finally {
+			release.resolve();
+		}
+
+		await expect(loading).toHaveCount(0);
+		await expect(desktop.getByRole('button', { name: 'Plugin Marketplace', exact: true })).toBeVisible();
+		await expect(desktop.getByRole('button', { name: 'Counter', exact: true })).toHaveCount(entryFails ? 0 : 1);
+	});
+}
+
+test('首份插件清单超时后仍可打开内置应用', async ({ page, host: _host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.clock.install();
+	await page.routeWebSocket('**/api/state/ws', () => {});
+	await page.goto('/');
+
+	const loading = page.getByRole('status', { name: 'Preparing your workspace' });
+	const desktop = page.locator('.desktop-shell');
+	await expect(loading).toBeVisible();
+	await expect(desktop).toHaveCount(0);
+	await page.clock.fastForward(15_000);
+	await expect(loading).toHaveCount(0);
+	await desktop.getByRole('button', { name: 'Settings', exact: true }).click();
+	await expect(page.getByRole('region', { name: 'Settings', exact: true })).toBeVisible();
+});
 
 test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ page, host }) => {
 	const errors: string[] = [];
@@ -26,13 +73,15 @@ test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ p
 	await page.getByRole('region', { name: '设置', exact: true }).getByRole('button', { name: '关闭应用' }).click();
 	await expect(page.getByRole('region', { name: '设置', exact: true })).toHaveCount(0);
 	await expect(widget.getByText('计数：0')).toBeVisible();
-	await launcher.click();
-	const application = page.getByRole('region', { name: 'Counter', exact: true });
+	const localizedLauncher = page.getByRole('button', { name: '计数器', exact: true });
+	await expect(localizedLauncher).toBeVisible();
+	await localizedLauncher.click();
+	const application = page.getByRole('region', { name: '计数器', exact: true });
 	await application.getByRole('button', { name: '加一' }).click();
 	await expect(application.getByText('计数：1')).toBeVisible();
 	await application.getByRole('button', { name: '最小化' }).click();
 	await expect(application).toBeHidden();
-	await launcher.click();
+	await localizedLauncher.click();
 	await expect(application.getByText('计数：1')).toBeVisible();
 	await application.getByRole('button', { name: '关闭应用' }).click();
 	await expect(application).toHaveCount(0);
@@ -41,13 +90,13 @@ test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ p
 
 	host.setPluginVersion(null);
 	await expect(widget).toHaveCount(0);
-	await expect(launcher).toHaveCount(0);
+	await expect(localizedLauncher).toHaveCount(0);
 	await expect(page.locator('html')).toHaveAttribute(
 		'data-lifecycle',
 		'activated,view-disposed,view-disposed,deactivated,plugin-disposed',
 	);
 	host.setPluginVersion('1.0.0');
-	await expect(launcher).toBeVisible();
+	await expect(localizedLauncher).toBeVisible();
 	await expect(widget.getByText('计数：0')).toBeVisible();
 	host.setPluginVersion('1.0.1');
 	await expect(page.locator('html')).toHaveAttribute(
@@ -356,6 +405,8 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 							{
 								pluginId,
 								version: manifest.version,
+								kind: manifest.nexus.kind,
+								hasBackend: false,
 								source: {
 									kind: 'repository',
 									repositoryId: alternateId,
@@ -396,8 +447,8 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(page.getByRole('dialog', { name: '预览安装' }).getByText('1.1.0 · Second source')).toBeVisible();
 	await page.getByRole('dialog', { name: '预览安装' }).getByRole('button', { name: '安装', exact: true }).click();
 	await expect(market.getByRole('heading', { name: '已安装插件' })).toBeVisible();
-	await expect(market.getByRole('button', { name: pluginId })).toBeVisible();
-	await expect(market.getByText('已完成', { exact: true })).toBeVisible();
+	await expect(market.getByRole('button', { name: '管理Remote Tools', exact: true })).toBeVisible();
+	await expect(page.locator('[data-ui="toast"]').getByText(`已完成 ${pluginId} 的操作。`)).toBeVisible();
 
 	const repositoriesSection = market.getByRole('region', { name: '插件仓库' });
 	await repositoriesSection.getByRole('textbox', { name: '仓库目录地址' }).fill('https://three.example/catalog.json');
@@ -440,7 +491,16 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 			.filter({ has: page.getByRole('button', { name: 'Manage ' + name, exact: true }) });
 		await expect(main).toBeVisible();
 		await expect(card.getByRole('status')).toHaveText('Available');
-		await expect(card.getByRole('button', { name: 'Open ' + name, exact: true })).toBeVisible();
+		await expect(card.getByText(hostVersion, { exact: true })).toBeVisible();
+		await expect(card.getByText('Built in', { exact: true })).toBeVisible();
+		await expect(card.getByText('App', { exact: true })).toHaveCount(0);
+		await expect(card.getByRole('switch')).toHaveCount(0);
+		const open = card.getByRole('button', { name: 'Open ' + name, exact: true });
+		await expect(open).toBeVisible();
+		const badgeBounds = await card.getByRole('status').boundingBox();
+		const openBounds = await open.boundingBox();
+		expect(openBounds!.x).toBeCloseTo(badgeBounds!.x, 0);
+		expect(openBounds!.width).toBeCloseTo(badgeBounds!.width, 0);
 	}
 
 	await market.getByRole('searchbox').fill('Logs');
@@ -448,6 +508,8 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await market.getByRole('button', { name: 'Manage Logs' }).click();
 	const details = page.getByRole('dialog', { name: 'Logs' });
 	await expect(details.getByRole('button', { name: 'Uninstall' })).toHaveCount(0);
+	await expect(details.getByText('Version ' + hostVersion, { exact: true })).toHaveCSS('font-size', '12px');
+	await expect(details.getByText('Frontend activity in this browser session', { exact: true })).toBeVisible();
 	await details.getByRole('switch', { name: 'Show on desktop' }).click();
 	await expect(tile).toHaveCount(0);
 	await details.getByRole('button', { name: 'Close application' }).click();
@@ -492,4 +554,229 @@ test('账户密码字段和保存按钮同行，保存按钮与退出登录右�
 			);
 		})
 		.toBe(true);
+});
+
+test('已安装卡片按清单区分应用与扩展，启用意图独立于运行状态', async ({ page, host }) => {
+	const byId = (pluginId: string) => ({ pluginId, version: '0.0.1-dev.1' });
+
+	const firstRequest = Promise.withResolvers<void>();
+	const finishFirst = Promise.withResolvers<void>();
+	let appEnabled = true;
+
+	host.setPluginVersion('0.0.1-dev.1');
+	await page.route('**/api/plugins/*/manager/plugins/*', async (route) => {
+		const pluginId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!);
+		const { enabled, observationId } = route.request().postDataJSON();
+		if (pluginId === '@nexus-terminal/test') {
+			firstRequest.resolve();
+			await finishFirst.promise;
+			appEnabled = enabled;
+		}
+		const failed = pluginId === '@example/support';
+		await route.fulfill({
+			status: 202,
+			json: {
+				id: randomUUID(),
+				observationId,
+				change: { action: 'set-enabled', pluginId, enabled },
+				state: failed ? 'failed' : 'succeeded',
+				...(failed && { error: 'MARKETPLACE_OPERATION_FAILED' }),
+				createdAt: new Date().toISOString(),
+				committed: true,
+			},
+		});
+	});
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						...byId('@nexus-terminal/test'),
+						kind: 'application',
+						hasBackend: false,
+						source: { kind: 'local' },
+						enabled: appEnabled,
+						runtime: null,
+						issue: null,
+					},
+					{
+						...byId('@example/support'),
+						kind: 'extension',
+						hasBackend: true,
+						source: { kind: 'local' },
+						enabled: true,
+						runtime: {
+							...byId('@example/support'),
+							runtime: 'stopped',
+							readiness: { state: 'pending' },
+							issues: [{ code: 'PLUGIN_DEPENDENCY_NOT_READY', pluginId: '@example/provider' }],
+						},
+						issue: null,
+					},
+				],
+			},
+		}),
+	);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
+	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
+	const application = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
+	await expect(application.getByRole('status')).toHaveText('Available');
+	await expect(application.locator('[title="0.0.1-dev.1"]')).toHaveText('0.0.1-dev.1');
+	await expect(application.getByRole('switch')).toHaveCount(0);
+	await expect(application.getByText('App', { exact: true })).toHaveCount(0);
+	await expect(application.getByRole('button', { name: 'Open Counter' })).toBeVisible();
+	const extension = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Support' }) });
+	await expect(extension.getByRole('status')).toHaveText('Dependency blocked');
+	await expect(extension.getByRole('switch')).toHaveCount(0);
+	await expect(extension.getByText('Extension', { exact: true })).toHaveCount(0);
+	await expect(extension.getByRole('button', { name: 'Open Support' })).toHaveCount(0);
+	await expect(market.getByRole('heading', { name: 'Extensions', exact: true })).toBeVisible();
+	const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	const enable = details.getByRole('switch', { name: 'Enable plugin', exact: true });
+	const close = details.getByRole('button', { name: 'Close application' });
+	const status = application.getByRole('status');
+
+	const relativeStatusTop = () =>
+		status.evaluate(
+			(badge) => badge.getBoundingClientRect().top - badge.closest('article')!.getBoundingClientRect().top,
+		);
+
+	const initialStatusTop = await relativeStatusTop();
+
+	try {
+		await application.getByRole('button', { name: 'Manage Counter', exact: true }).click();
+		await expect(details.getByRole('switch', { name: 'Show on desktop', exact: true })).toBeChecked();
+		await expect(details.getByText('0.0.1-dev.1', { exact: true })).toHaveCSS('font-weight', '400');
+		await expect(enable).toBeChecked();
+		await enable.click();
+		await firstRequest.promise;
+		await expect(enable).toBeDisabled();
+		await close.press('Enter');
+		await extension.getByRole('button', { name: 'Manage Support', exact: true }).click();
+		await expect(enable).toBeEnabled();
+		await expect(enable).toBeChecked();
+		await expect(details.getByRole('switch', { name: 'Show on desktop', exact: true })).toHaveCount(0);
+		const supportRequest = page.waitForRequest(
+			(request) => request.method() === 'PATCH' && request.url().endsWith(encodeURIComponent('@example/support')),
+		);
+		await enable.click();
+		expect((await supportRequest).postDataJSON()).toMatchObject({ enabled: false });
+		await close.press('Enter');
+	} finally {
+		finishFirst.resolve();
+	}
+
+	await expect(status).toHaveText('Disabled');
+	await expect(application.getByRole('button', { name: 'Open Counter' })).toHaveCount(0);
+	expect(await relativeStatusTop()).toBeCloseTo(initialStatusTop, 0);
+
+	await expect(market.getByRole('heading', { name: 'Operations', exact: true })).toHaveCount(0);
+	await market.getByRole('button', { name: 'Close application' }).click();
+	await page.getByRole('button', { name: 'Logs', exact: true }).click();
+	const logs = page.getByRole('region', { name: 'Logs', exact: true });
+	const success = logs.locator('details').filter({ hasText: 'Completed the operation for @nexus-terminal/test.' });
+	const failure = logs.locator('details').filter({ hasText: 'The marketplace operation failed.' });
+	await success.locator('summary').click();
+	await expect(success.locator('pre')).toContainText('"action": "set-enabled"');
+	await expect(success.locator('pre')).toContainText('"enabled": false');
+	await expect(success.locator('pre')).toContainText('"state": "succeeded"');
+	await failure.locator('summary').click();
+	await expect(failure.locator('pre')).toContainText('"pluginId": "@example/support"');
+	await expect(failure.locator('pre')).toContainText('"state": "failed"');
+	await expect(failure.locator('pre')).toContainText('"committed": true');
+});
+
+test('市场按清单显示插件名称，停用及刷新后仍随语言变化', async ({ page, host }) => {
+	const pluginId = '@nexus-terminal/test';
+	const version = '0.0.1-dev.1';
+	let enabled = true;
+
+	host.setPluginVersion(version);
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						pluginId,
+						version,
+						kind: 'application',
+						hasBackend: false,
+						displayName: 'Package name',
+						localizedNames: { 'zh-CN': '清单名称' },
+						source: { kind: 'local' },
+						enabled,
+						runtime: null,
+						issue: null,
+					},
+				],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/plugins/' + encodeURIComponent(pluginId), async (route) => {
+		const request = route.request().postDataJSON();
+		enabled = request.enabled;
+		host.setPluginVersion(enabled ? version : null);
+		await route.fulfill({
+			status: 202,
+			json: {
+				id: randomUUID(),
+				observationId: request.observationId,
+				change: { action: 'set-enabled', pluginId, enabled },
+				state: 'succeeded',
+				createdAt: new Date().toISOString(),
+				committed: true,
+			},
+		});
+	});
+
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('combobox', { name: 'Language' }).click();
+	await page.getByRole('option', { name: '简体中文' }).click();
+	await page.getByRole('region', { name: '设置', exact: true }).getByRole('button', { name: '关闭应用' }).click();
+
+	const market = page.getByRole('region', { name: '插件市场', exact: true });
+	const card = market
+		.getByRole('article')
+		.filter({ has: page.getByRole('button', { name: '管理清单名称', exact: true }) });
+
+	await page.getByRole('button', { name: '插件市场', exact: true }).click();
+	await market.getByRole('button', { name: '管理已安装插件', exact: true }).click();
+	await expect(card.getByRole('button', { name: '打开清单名称' })).toBeVisible();
+	await card.getByRole('button', { name: '管理清单名称', exact: true }).click();
+	const details = page.getByRole('dialog', { name: '管理已安装插件', exact: true });
+	await expect(details.locator('.marketplace-managed-heading')).toHaveText(/^清单名称\s*可用$/u);
+	await expect(details.locator('.marketplace-managed-package')).toHaveText(
+		/^@nexus-terminal\/test\s*0\.0\.1-dev\.1$/u,
+	);
+	await details.getByRole('switch', { name: '启用插件', exact: true }).click();
+	const visibility = details.getByRole('switch', { name: '在桌面显示', exact: true });
+	await expect(visibility).toBeDisabled();
+	await expect(visibility).not.toBeChecked();
+	await details.getByRole('button', { name: '关闭应用' }).press('Enter');
+	await expect(card.getByRole('status')).toHaveText('已停用');
+	await expect(card.getByRole('button', { name: '打开清单名称' })).toHaveCount(0);
+
+	await page.reload();
+	await page.getByRole('button', { name: '插件市场', exact: true }).click();
+	await market.getByRole('button', { name: '管理已安装插件', exact: true }).click();
+	await expect(card.getByRole('status')).toHaveText('已停用');
+	await card.getByRole('button', { name: '管理清单名称', exact: true }).click();
+	await expect(visibility).toBeDisabled();
+	await expect(visibility).not.toBeChecked();
+	await details.getByRole('button', { name: '关闭应用' }).press('Enter');
+
+	await market.getByRole('button', { name: '关闭应用' }).click();
+	await page.getByRole('button', { name: '设置', exact: true }).click();
+	await page.getByRole('combobox', { name: '语言' }).click();
+	await page.getByRole('option', { name: 'English', exact: true }).click();
+	await page
+		.getByRole('region', { name: 'Settings', exact: true })
+		.getByRole('button', { name: 'Close application' })
+		.click();
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	await page.getByRole('button', { name: 'Manage installed plugins', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Manage Package name', exact: true })).toBeVisible();
 });

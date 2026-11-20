@@ -190,6 +190,7 @@
 		</UiSection>
 		<UiSection class="settings-section">
 			<UiFormRow
+				class="settings-compact-control"
 				:label="t('desktop.escapeAction')"
 				:description="t('desktop.escapeActionHint')"
 				:icon="Keyboard"
@@ -213,7 +214,13 @@
 			</UiFormRow>
 		</UiSection>
 		<UiSection class="settings-section">
-			<UiFormRow :label="t('language')" :description="t('desktop.languageHint')" :icon="Globe" v-slot="field">
+			<UiFormRow
+				class="settings-compact-control"
+				:label="t('language')"
+				:description="t('desktop.languageHint')"
+				:icon="Globe"
+				v-slot="field"
+			>
 				<UiSelect
 					:id="field.id"
 					:aria-describedby="field.describedby"
@@ -325,6 +332,10 @@
 		margin-top: 28px;
 		padding-bottom: 26px;
 		border-bottom: 1px solid var(--ui-border);
+	}
+	.settings-compact-control {
+		--ui-form-control-width: 150px;
+		--ui-control-gap: 6px;
 	}
 	.settings-section:last-of-type {
 		border: 0;

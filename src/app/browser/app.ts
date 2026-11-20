@@ -42,6 +42,7 @@ export class App {
 	#stopAuth: WatchHandle | undefined;
 	#phase: AbortController | undefined;
 	readonly #state = shallowRef<StateClient>();
+	readonly #desktopPluginsReady = shallowRef(false);
 
 	get contributions() {
 		return this.#plugins.contributions;
@@ -49,6 +50,10 @@ export class App {
 
 	get state(): Pick<StateClient, 'subscribe'> | undefined {
 		return this.#state.value;
+	}
+
+	get desktopPluginsReady(): boolean {
+		return this.#desktopPluginsReady.value;
 	}
 
 	/** 认证状态决定插件清单来源。登录前后的同一修订可以复用加载器与实例。 */
@@ -97,7 +102,16 @@ export class App {
 		this.#phase = new AbortController();
 		this.#state.value?.close();
 		this.#state.value = undefined;
+		this.#desktopPluginsReady.value = false;
 		if (account) {
+			// 首份清单或入口长时间不可用时，仍进入桌面。状态连接继续正常恢复。
+			const deadline = setTimeout(() => {
+				if (this.#desktopPluginsReady.value) return;
+
+				this.#desktopPluginsReady.value = true;
+				this.log.report({ source: 'app', level: 'warn', code: 'APP_INSTALLED_PLUGINS_FAILED' });
+			}, 15_000);
+			this.#phase.signal.addEventListener('abort', () => clearTimeout(deadline), { once: true });
 			this.preparePlugins();
 			this.#connect();
 		} else void this.#startPrelogin(this.#phase.signal, wasAuthenticated);
@@ -112,12 +126,16 @@ export class App {
 				onSessionExpired: () => void this.#recoverSession(client),
 			});
 			state = client;
-			this.#source.connect(client);
+			this.#source.connect(client, () => {
+				if (!this.#controller.signal.aborted && this.#state.value === client)
+					this.#desktopPluginsReady.value = true;
+			});
 			this.#state.value = client;
 			client.open();
 		} catch {
 			this.#state.value = undefined;
 			state?.close();
+			this.#desktopPluginsReady.value = true;
 			this.log.report({ source: 'app', level: 'error', code: 'APP_INSTALLED_PLUGINS_FAILED' });
 		}
 	}

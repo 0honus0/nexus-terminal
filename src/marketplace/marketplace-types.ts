@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { PluginManifestSchema, PluginPackageNameSchema } from '../plugin/plugin-manifest-types.js';
+import {
+	PluginDisplayNameSchema,
+	PluginKindSchema,
+	PluginManifestSchema,
+	PluginPackageNameSchema,
+} from '../plugin/plugin-manifest-types.js';
 import { PluginRuntimeInfoSchema } from '../plugin/plugin-state-types.js';
 
 export const MarketplacePluginId = '@nexus-terminal/marketplace';
@@ -56,6 +61,10 @@ export type MarketplacePluginIssue = z.infer<typeof MarketplacePluginIssueSchema
 export const MarketplacePluginSchema = z.strictObject({
 	pluginId: z.string().min(1),
 	version: z.string().min(1),
+	kind: PluginKindSchema.nullable(),
+	hasBackend: z.boolean().nullable(),
+	displayName: PluginDisplayNameSchema.optional(),
+	localizedNames: z.record(z.string(), PluginDisplayNameSchema).optional(),
 	source: MarketplacePluginSourceSchema,
 	enabled: z.boolean(),
 	runtime: PluginRuntimeInfoSchema.nullable(),

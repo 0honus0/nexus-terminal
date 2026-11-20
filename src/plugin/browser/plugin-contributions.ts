@@ -6,6 +6,7 @@ import { CodedError } from '../../utils/error.js';
 import type { PluginContextApi } from '../plugin-api.browser.js';
 import type { PluginScopeApi } from '../plugin-api.js';
 import type {
+	PluginApplicationContribution,
 	PluginApplicationTileContribution,
 	PluginComponentContribution,
 	PluginContributions,
@@ -13,7 +14,8 @@ import type {
 
 type ContributionKind = keyof PluginContributions;
 
-type ComponentContribution = PluginComponentContribution &
+type ComponentContribution = Omit<PluginComponentContribution, 'label'> &
+	Pick<PluginApplicationContribution, 'label'> &
 	Pick<
 		z.infer<typeof ApplicationSchema>,
 		'multipleWindows' | 'defaultWindowSize' | 'scrollMode' | 'scrollbarGutter' | 'tile'

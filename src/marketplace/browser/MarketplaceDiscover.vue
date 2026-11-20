@@ -5,7 +5,7 @@
 	import { UiEmptyState, vSelectableAction } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
 	import type { MarketplacePlugin } from '../marketplace-types.js';
-	import { marketplaceDescription, marketplaceLabel } from './marketplace-presentation.js';
+	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
 	const props = defineProps<{
 		plugins: readonly MarketplaceCatalogPlugin[];
 		installed: readonly MarketplacePlugin[];
@@ -17,20 +17,24 @@
 	const groups = computed(() =>
 		(['application', 'extension'] as const).map((kind) => ({
 			kind,
-			plugins: props.plugins.filter((plugin) => {
+			plugins: props.plugins.flatMap((plugin) => {
 				const pack = plugin.versions[0]?.package;
-				return (
-					pack?.nexus.kind === kind &&
-					[
-						plugin.id,
-						marketplaceLabel(plugin.id),
-						pack.description,
-						...Object.values(pack.nexus.i18n ?? {}).map((value) => value.description),
-					]
-						.join(' ')
-						.toLowerCase()
-						.includes(props.query.trim().toLowerCase())
-				);
+				if (pack?.nexus.kind !== kind) return [];
+
+				const name = marketplacePackageName(pack, locale.value);
+				const search = [
+					plugin.id,
+					name,
+					pack.displayName,
+					pack.description,
+					...Object.values(pack.nexus.i18n ?? {}).flatMap(({ description, displayName }) => [
+						description,
+						displayName,
+					]),
+				]
+					.join(' ')
+					.toLowerCase();
+				return search.includes(props.query.trim().toLowerCase()) ? [{ plugin, pack, name }] : [];
 			}),
 		})),
 	);
@@ -60,11 +64,11 @@
 			<div class="catalog-grid">
 				<button
 					v-selectable-action
-					v-for="plugin in group.plugins"
+					v-for="{ plugin, pack, name } in group.plugins"
 					:key="plugin.id"
 					type="button"
 					class="catalog-card"
-					:aria-label="t('marketplace.viewPlugin', { name: marketplaceLabel(plugin.id) })"
+					:aria-label="t('marketplace.viewPlugin', { name: name })"
 					@click="emit('inspect', plugin.id)"
 				>
 					<div class="catalog-card__art" aria-hidden="true">
@@ -72,25 +76,22 @@
 							:is="group.kind === 'application' ? AppWindow : Puzzle"
 							:size="group.kind === 'application' ? 30 : 24"
 							:stroke-width="1.5"
-						/><span v-if="group.kind === 'application'">{{ marketplaceLabel(plugin.id).slice(0, 1) }}</span>
+						/><span v-if="group.kind === 'application'">{{ name.slice(0, 1) }}</span>
 					</div>
 					<div class="catalog-card__body" data-ui-selection="text">
 						<div class="catalog-card__title">
-							<h3>{{ marketplaceLabel(plugin.id) }}</h3>
+							<h3>{{ name }}</h3>
 							<ArrowUpRight :size="15" aria-hidden="true" />
 						</div>
 						<p>
-							{{
-								marketplaceDescription(plugin.versions[0]?.package, locale) ??
-								t(`marketplace.${group.kind}Hint`)
-							}}
+							{{ marketplaceDescription(pack, locale) ?? t(`marketplace.${group.kind}Hint`) }}
 						</p>
 						<footer>
 							<span class="catalog-card__package">{{ plugin.id }}</span><span
 								v-if="installed.some((item) => item.pluginId === plugin.id)"
 								class="catalog-card__installed"
 								><Check :size="12" />{{ t('marketplace.installed') }}</span
-							><span v-else>v{{ plugin.versions[0]?.package.version }}</span>
+							><span v-else>v{{ pack.version }}</span>
 						</footer>
 					</div>
 				</button>

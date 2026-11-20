@@ -220,14 +220,20 @@ export class MarketplaceDesktopApi {
 		if (this.#signal.aborted) return;
 		this.#publication++;
 		this.#operations.value = operations;
-		for (const { observationId, state, error, change } of operations) {
+		for (const { observationId, state, error, change, committed } of operations) {
 			if (!observationId || (state !== 'succeeded' && state !== 'failed') || !this.#owned.delete(observationId))
 				continue;
 			this.#log.report({
 				source: 'marketplace',
 				level: state === 'failed' ? 'error' : 'info',
 				code: error ?? 'MARKETPLACE_OPERATION_SUCCEEDED',
-				params: { pluginId: change.pluginId },
+				params: {
+					pluginId: change.pluginId,
+					action: change.action,
+					state,
+					committed,
+					...(change.action === 'set-enabled' && { enabled: change.enabled }),
+				},
 				userVisible: true,
 			});
 		}

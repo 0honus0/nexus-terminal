@@ -1,7 +1,8 @@
 <script setup lang="ts">
+	import { version as hostVersion } from '../../../package.json';
 	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
 	import { Archive, ScrollText, Settings, Store } from '@lucide/vue';
-	import { computed, onMounted, onScopeDispose, ref, shallowRef, toValue, watch } from 'vue';
+	import { computed, onMounted, onScopeDispose, ref, shallowRef, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { StateClient } from '../../state/browser/state-api.js';
 	import { BackupApi, BackupApp, BackupTile } from '../../backup/browser/backup-api.js';
@@ -14,7 +15,7 @@
 		MarketplaceTile,
 	} from '../../marketplace/browser/marketplace-desktop-api.js';
 	import type { MarketplacePlugin } from '../../marketplace/marketplace-types.js';
-	import type { PluginContributionList } from '../../plugin/plugin-api.browser.js';
+	import { resolveApplicationLabel, type PluginContributionList } from '../../plugin/plugin-api.browser.js';
 	import { SettingsApp, SettingsTile } from '../../settings/browser/settings-api.js';
 	import type { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
 	import type { AuthApi } from '../../auth/browser/auth-api.js';
@@ -31,14 +32,16 @@
 	const emit = defineEmits<{ logout: [] }>();
 	const previewSpeed = defineModel<number>('previewSpeed');
 	const settings = preferences.value;
-	const { t } = useI18n({ useScope: 'global' });
+	const { t, locale } = useI18n({ useScope: 'global' });
 	const desktop = new DesktopApi(log);
 	const backup = new BackupApi();
-	const builtins: readonly DesktopApplication[] = [
+	const builtins: readonly (DesktopApplication & { description: () => string })[] = [
 		{
 			key: 'builtin:marketplace',
 
 			label: () => t('market'),
+
+			description: () => t('marketDescription'),
 
 			icon: Store,
 			scrollMode: 'window',
@@ -51,6 +54,8 @@
 
 			label: () => t('settings'),
 
+			description: () => t('settingsDescription'),
+
 			icon: Settings,
 			color: 'var(--ui-app-blue)',
 			tileSize: { w: 2, h: 1 },
@@ -60,6 +65,8 @@
 
 			label: () => t('logViewer.title'),
 
+			description: () => t('logViewer.description'),
+
 			icon: ScrollText,
 			color: 'var(--ui-app-amber)',
 			tileSize: { w: 1, h: 1 },
@@ -68,6 +75,8 @@
 			key: 'builtin:backup',
 
 			label: () => t('backup.title'),
+
+			description: () => t('backup.description'),
 
 			icon: Archive,
 			color: 'var(--ui-app-steel)',
@@ -80,7 +89,9 @@
 			key: application.key,
 			label: application.label(),
 			icon: application.icon,
+			version: hostVersion,
 			visible: desktop.isTileVisible(application.key),
+			description: application.description(),
 		})),
 	);
 
@@ -91,7 +102,7 @@
 						{
 							key: entry.key,
 							pluginId: entry.context.self.id,
-							label: toValue(entry.label),
+							label: resolveApplicationLabel(entry.label, locale.value),
 							visible: desktop.isTileVisible(entry.key),
 						},
 					]
@@ -113,6 +124,7 @@
 	const marketplace = new MarketplaceDesktopApi(request.signal, log);
 	const installed = shallowRef<readonly MarketplacePlugin[]>();
 	const loading = ref(false);
+	let installedRead: AbortController | undefined;
 
 	onScopeDispose(() => request.abort());
 	watch(
@@ -137,15 +149,26 @@
 	});
 
 	async function refreshMarketplace(): Promise<void> {
-		if (loading.value || request.signal.aborted) return;
+		if (request.signal.aborted) return;
+
+		// 多个插件连续完成时，以最后一次读取为准。
+		installedRead?.abort();
+		const read = new AbortController();
+		installedRead = read;
+		const signal = AbortSignal.any([request.signal, read.signal]);
 		loading.value = true;
+
 		try {
-			installed.value = await marketplace.readInstalled(request.signal);
+			const items = await marketplace.readInstalled(signal);
+			if (!signal.aborted) installed.value = items;
 		} catch {
-			if (!request.signal.aborted)
+			if (!signal.aborted)
 				log.report({ source: 'marketplace', level: 'warn', code: 'MARKETPLACE_PLUGINS_READ_FAILED' });
 		} finally {
-			loading.value = false;
+			if (installedRead === read) {
+				installedRead = undefined;
+				loading.value = false;
+			}
 		}
 	}
 </script>

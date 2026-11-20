@@ -22,6 +22,8 @@ export const PluginPackageNameSchema = z
 	.max(214)
 	.refine((name) => validatePackageName(name).validForNewPackages);
 
+export const PluginDisplayNameSchema = z.string().trim().min(1).max(128);
+
 export const PluginKindSchema = z.enum(['application', 'extension']);
 
 const PlatformListSchema = z.union([z.string(), z.array(z.string())]);
@@ -32,6 +34,7 @@ export const PluginManifestSchema = z
 		name: PluginPackageNameSchema,
 		version: z.string().refine((version) => valid(version) !== null),
 		description: z.string().optional(),
+		displayName: PluginDisplayNameSchema.optional(),
 		type: z.literal('module'),
 		peerDependencies: z.object({ 'nexus-terminal': VersionRangeSchema }).catchall(z.string()),
 		engines: z.looseObject({ node: VersionRangeSchema.optional() }).optional(),
@@ -44,7 +47,12 @@ export const PluginManifestSchema = z
 			dependsOn: z.record(PluginPackageNameSchema, VersionRangeSchema).optional(),
 			requiredFor: z.array(z.string().min(1)).optional(),
 			mandatory: z.boolean().optional(),
-			i18n: z.record(z.string(), z.object({ description: z.string() })).optional(),
+			i18n: z
+				.record(
+					z.string(),
+					z.object({ description: z.string().optional(), displayName: PluginDisplayNameSchema.optional() }),
+				)
+				.optional(),
 			/** 后端插件是否提供登录方式。 */
 			authMethods: z.boolean().optional(),
 		}),

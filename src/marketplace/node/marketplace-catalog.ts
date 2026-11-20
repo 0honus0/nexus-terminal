@@ -211,7 +211,11 @@ export class MarketplaceCatalog {
 					return [
 						manifest.name,
 						manifest.description,
-						...Object.values(manifest.nexus.i18n ?? {}).map(({ description }) => description),
+						manifest.displayName,
+						...Object.values(manifest.nexus.i18n ?? {}).flatMap(({ description, displayName }) => [
+							description,
+							displayName,
+						]),
 					]
 						.join(' ')
 						.toLowerCase()

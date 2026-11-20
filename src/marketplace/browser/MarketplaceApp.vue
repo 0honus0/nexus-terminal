@@ -18,7 +18,6 @@
 	import {
 		UiBadge,
 		UiButton,
-		UiCard,
 		UiDialog,
 		UiEmptyState,
 		UiInput,
@@ -30,9 +29,15 @@
 	} from '../../ui/browser/ui-components-api.js';
 
 	import MarketplaceDiscover from './MarketplaceDiscover.vue';
+	import MarketplaceInstalledCard from './MarketplaceInstalledCard.vue';
 	import MarketplacePluginDialog from './MarketplacePluginDialog.vue';
 	import MarketplaceRepositories from './MarketplaceRepositories.vue';
-	import { sortMarketplacePlugins } from './marketplace-presentation.js';
+	import {
+		marketplaceInstalledStatus,
+		marketplaceInstalledName,
+		marketplaceStatusTones,
+		sortMarketplacePlugins,
+	} from './marketplace-presentation.js';
 
 	const { installed, loading, api, minimized, log, applications, builtins } = defineProps<{
 		installed?: readonly MarketplacePlugin[];
@@ -40,7 +45,14 @@
 		api: MarketplaceDesktopApi;
 		minimized: boolean;
 		applications: readonly { key: string; pluginId: string; label: string; visible: boolean }[];
-		builtins: readonly { key: string; label: string; icon?: Component; visible: boolean }[];
+		builtins: readonly {
+			key: string;
+			label: string;
+			description: string;
+			icon?: Component;
+			visible: boolean;
+			version: string;
+		}[];
 		log: Pick<LogApi, 'report'>;
 	}>();
 	const emit = defineEmits<{
@@ -48,7 +60,7 @@
 		showApplication: [key: string, visible: boolean];
 		openApplication: [key: string];
 	}>();
-	const { t } = useI18n({ useScope: 'global' });
+	const { t, locale } = useI18n({ useScope: 'global' });
 	const root = ref<HTMLElement>();
 	const catalog = shallowRef<readonly MarketplaceCatalogPlugin[]>();
 	const repositories = shallowRef<readonly MarketplaceRepository[]>([]);
@@ -57,13 +69,15 @@
 	const planOpen = ref(false);
 	const plan = shallowRef<MarketplaceInstallPlan>();
 	const planning = ref(false);
-	const submitting = ref(false);
+	const submittingIds = ref(new Set<string>());
 	const dismissing = ref<string>();
 	const attempts = shallowRef<readonly MarketplaceInstallAttempt[]>([]);
 	let managementRead: AbortController | undefined;
 	const managedId = ref<string>();
 	const managedOpen = ref(false);
 	const managed = computed(() => installed?.find(({ pluginId }) => pluginId === managedId.value));
+	const managedStatus = computed(() => (managed.value ? marketplaceInstalledStatus(managed.value) : 'unavailable'));
+	const managedEntries = computed(() => applications.filter(({ pluginId }) => pluginId === managedId.value));
 	const managedBuiltinKey = ref<string>();
 	const managedBuiltin = computed(() => builtins.find(({ key }) => key === managedBuiltinKey.value));
 	const builtinOpen = ref(false);
@@ -79,15 +93,13 @@
 	const clearTarget = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items'][number]>();
 	const clearOpen = ref(false);
 	const retained = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items']>([]);
-	const operations = computed(() => [...api.operations.value].reverse());
-	const activeIds = computed(
-		() =>
-			new Set(
-				operations.value
-					.filter(({ state }) => state === 'queued' || state === 'running')
-					.map(({ change }) => change.pluginId),
-			),
-	);
+	const operations = api.operations;
+	const activeIds = computed(() => {
+		const ids = new Set(submittingIds.value);
+		for (const { change, state } of operations.value)
+			if (state === 'queued' || state === 'running') ids.add(change.pluginId);
+		return ids;
+	});
 	let planRequest: AbortController | undefined;
 	const selected = computed(() => catalog.value?.find(({ id }) => id === selectedId.value));
 	const managing = ref(false);
@@ -97,8 +109,21 @@
 	let catalogRead: AbortController | undefined;
 	const results = computed(() => {
 		const filter = query.value.trim().toLowerCase();
-		return installed?.filter(({ pluginId }) => pluginId.toLowerCase().includes(filter));
+		return installed?.flatMap((item) => {
+			const entries = applications.filter(({ pluginId }) => pluginId === item.pluginId);
+			const name = marketplaceInstalledName(item, locale.value, entries[0]?.label);
+			const kind = t('marketplace.kind.' + (item.kind ?? 'unknown'));
+			return `${name} ${item.pluginId} ${kind}`.toLowerCase().includes(filter)
+				? [{ item, name, entries, status: marketplaceInstalledStatus(item) }]
+				: [];
+		});
 	});
+	const installedGroups = computed(() =>
+		(['application', 'extension', null] as const).map((kind) => ({
+			kind,
+			items: results.value?.filter(({ item }) => item.kind === kind) ?? [],
+		})),
+	);
 	watch(
 		() => minimized,
 		(hidden) => {
@@ -266,16 +291,27 @@
 	}
 
 	async function submit(command: Parameters<MarketplaceDesktopApi['submit']>[0]): Promise<void> {
-		if (submitting.value) return;
-		submitting.value = true;
+		const pluginId =
+			command.action === 'install'
+				? command.plan.target.pluginId
+				: command.action === 'uninstall'
+					? command.plan.pluginId
+					: command.pluginId;
+		if (activeIds.value.has(pluginId)) return;
+
+		submittingIds.value.add(pluginId);
 		try {
 			await api.submit(command);
-			if (scope.signal.aborted) return;
-			planOpen.value = false;
-			detailOpen.value = false;
-			uninstallOpen.value = false;
-			clearOpen.value = false;
-			if (command.action !== 'set-enabled' && command.action !== 'reload') managedOpen.value = false;
+			if (scope.signal.aborted || command.action === 'set-enabled' || command.action === 'reload') return;
+
+			// 等待受理时用户可能已切换目标，只关闭仍属于本次操作的界面。
+			if (command.action === 'install' && plan.value === command.plan) {
+				planOpen.value = false;
+				if (selectedId.value === pluginId) detailOpen.value = false;
+			}
+			if (command.action === 'uninstall' && uninstallPlan.value === command.plan) uninstallOpen.value = false;
+			if (command.action === 'clear-data' && clearTarget.value?.pluginId === pluginId) clearOpen.value = false;
+			if (managedId.value === pluginId) managedOpen.value = false;
 
 			managing.value = true;
 			query.value = '';
@@ -283,7 +319,7 @@
 		} catch (cause) {
 			reportFailure(cause);
 		} finally {
-			if (!scope.signal.aborted) submitting.value = false;
+			submittingIds.value.delete(pluginId);
 		}
 	}
 
@@ -383,54 +419,45 @@
 						:icon="Package"
 						:title="t(query ? 'logViewer.noMatches' : 'marketplaceTile.empty')"
 					/>
-					<div v-else class="marketplace-cards">
-						<UiCard
-							v-for="item in builtinResults"
-							:key="item.key"
-							:title="item.label"
-							:icon="item.icon"
-							:description="t('marketplace.builtin')"
-							:action-label="t('marketplace.manageBuiltin', { name: item.label })"
-							@select="
-								managedBuiltinKey = item.key;
-								builtinOpen = true;
-							"
+					<template v-for="group in installedGroups" :key="group.kind ?? 'unknown'">
+						<section
+							v-if="group.items.length || (group.kind === 'application' && builtinResults.length)"
+							class="marketplace-installed-group"
 						>
-							<template #badge>
-								<UiBadge tone="success" role="status" dot>{{ t('marketplace.available') }}</UiBadge>
-							</template>
-							<template #actions>
-								<UiButton
-									density="compact"
-									:aria-label="t('marketplace.openNamedApplication', { name: item.label })"
-									@click="emit('openApplication', item.key)"
-								>
-									{{ t('marketplace.open') }}
-								</UiButton>
-							</template>
-						</UiCard>
-						<UiCard
-							v-for="item in results"
-							:key="item.pluginId"
-							:title="item.pluginId"
-							@select="inspectInstalled(item.pluginId)"
-						>
-							<template #aside>
-								<UiBadge :tone="item.issue ? 'danger' : item.enabled ? 'success' : 'neutral'">
-									{{
-										t(
-											item.issue
-												? 'desktop.issue'
-												: item.enabled
-													? 'desktop.enabled'
-													: 'desktop.disabled',
-										)
-									}}
-								</UiBadge>
-							</template>
-							<template #footer>{{ item.version }}</template>
-						</UiCard>
-					</div>
+							<h3>{{ t('marketplace.installedGroup.' + (group.kind ?? 'unknown')) }}</h3>
+							<div class="marketplace-cards">
+								<template v-if="group.kind === 'application'">
+									<MarketplaceInstalledCard
+										v-for="item in builtinResults"
+										:key="item.key"
+										:name="item.label"
+										:icon="item.icon"
+										:version="item.version"
+										kind="application"
+										status="available"
+										builtin
+										openable
+										@manage="
+											managedBuiltinKey = item.key;
+											builtinOpen = true;
+										"
+										@open="emit('openApplication', item.key)"
+									/>
+								</template>
+								<MarketplaceInstalledCard
+									v-for="{ item, name, entries, status } in group.items"
+									:key="item.pluginId"
+									:name="name"
+									:kind="item.kind"
+									:version="item.version"
+									:status="status"
+									:openable="item.kind === 'application' && item.enabled && entries.length === 1"
+									@manage="inspectInstalled(item.pluginId)"
+									@open="entries[0] && emit('openApplication', entries[0].key)"
+								/>
+							</div>
+						</section>
+					</template>
 				</UiSection>
 				<MarketplaceRepositories
 					:api="api"
@@ -496,42 +523,6 @@
 						</UiListItem>
 					</UiList>
 				</UiSection>
-				<UiSection
-					v-if="operations.length"
-					class="marketplace-management-section"
-					:title="t('marketplace.operations')"
-				>
-					<UiList>
-						<UiListItem
-							v-for="operation in operations"
-							:key="operation.id"
-							:title="operation.change.pluginId"
-							:description="t('marketplace.operation.' + operation.change.action)"
-						>
-							<template #actions>
-								<UiBadge
-									:tone="
-										operation.state === 'failed'
-											? 'danger'
-											: operation.state === 'succeeded'
-												? 'success'
-												: 'neutral'
-									"
-								>
-									{{ t('marketplace.operationState.' + operation.state) }}
-								</UiBadge>
-							</template>
-							<template v-if="operation.error" #description>
-								{{ t('marketplace.operation.' + operation.change.action) }}
-								· {{ t('notices.' + operation.error) }}
-								<span v-if="operation.committed"> · {{ t('marketplace.partialCommit') }}</span>
-							</template>
-							<template v-else-if="operation.step && operation.state === 'running'" #description>
-								{{ t('marketplace.phase.' + operation.step.phase) }} · {{ operation.step.pluginId }}
-							</template>
-						</UiListItem>
-					</UiList>
-				</UiSection>
 			</template>
 		</div>
 		<MarketplacePluginDialog
@@ -549,6 +540,15 @@
 			size="sm"
 			:close-label="t('closeApplication')"
 		>
+			<div v-if="managedBuiltin" class="marketplace-managed-summary">
+				<div class="marketplace-managed-meta">
+					<span class="marketplace-managed-version">{{
+						t('marketplace.installedVersion', { version: managedBuiltin.version })
+					}}</span>
+					<UiBadge tone="success" dot>{{ t('marketplace.status.available') }}</UiBadge>
+				</div>
+				<p>{{ managedBuiltin.description }}</p>
+			</div>
 			<UiList v-if="managedBuiltin">
 				<UiListItem :title="t('marketplace.showOnHome')">
 					<template #actions>
@@ -580,15 +580,25 @@
 			:close-label="t('closeApplication')"
 		>
 			<template v-if="managed">
-				<h3>{{ managed.pluginId }}</h3>
-				<p>{{ managed.version }}</p>
+				<div class="marketplace-managed-summary">
+					<div class="marketplace-managed-heading">
+						<h3>{{ marketplaceInstalledName(managed, locale, managedEntries[0]?.label) }}</h3>
+						<UiBadge :tone="marketplaceStatusTones[managedStatus]" dot>{{
+							t('marketplace.status.' + managedStatus)
+						}}</UiBadge>
+					</div>
+					<div class="marketplace-managed-meta marketplace-managed-package" data-ui-selection="text">
+						<span>{{ managed.pluginId }}</span>
+						<span class="marketplace-managed-version">{{ managed.version }}</span>
+					</div>
+				</div>
 				<UiList>
 					<UiListItem :title="t('marketplace.enablePlugin')">
 						<template #actions>
 							<UiSwitch
 								:model-value="managed.enabled"
 								:aria-label="t('marketplace.enablePlugin')"
-								:disabled="submitting || activeIds.has(managed.pluginId)"
+								:disabled="activeIds.has(managed.pluginId)"
 								@update:model-value="
 									(enabled) =>
 										managed &&
@@ -597,23 +607,29 @@
 							/>
 						</template>
 					</UiListItem>
-				</UiList>
-				<UiList
-					v-if="applications.some((entry) => entry.pluginId === managedId)"
-					class="marketplace-management-section"
-				>
-					<UiListItem
-						v-for="entry in applications.filter((item) => item.pluginId === managedId)"
-						:key="entry.key"
-						:title="entry.label"
-						:description="t('marketplace.showOnHome')"
-					>
+					<template v-if="managed.enabled && managedEntries.length">
+						<UiListItem
+							v-for="entry in managedEntries"
+							:key="entry.key"
+							:title="t('marketplace.showOnHome')"
+							:description="managedEntries.length > 1 ? entry.label : undefined"
+						>
+							<template #actions>
+								<UiSwitch
+									:model-value="entry.visible"
+									:aria-label="
+										managedEntries.length > 1
+											? t('marketplace.showOnHomeNamed', { name: entry.label })
+											: t('marketplace.showOnHome')
+									"
+									@update:model-value="(value) => emit('showApplication', entry.key, value)"
+								/>
+							</template>
+						</UiListItem>
+					</template>
+					<UiListItem v-else-if="managed.kind === 'application'" :title="t('marketplace.showOnHome')">
 						<template #actions>
-							<UiSwitch
-								:model-value="entry.visible"
-								:aria-label="t('marketplace.showOnHome') + ' · ' + entry.label"
-								@update:model-value="(value) => emit('showApplication', entry.key, value)"
-							/>
+							<UiSwitch :model-value="false" disabled :aria-label="t('marketplace.showOnHome')" />
 						</template>
 					</UiListItem>
 				</UiList>
@@ -637,7 +653,7 @@
 				</UiButton>
 				<UiButton
 					v-if="managed.enabled"
-					:disabled="submitting || activeIds.has(managed.pluginId)"
+					:disabled="activeIds.has(managed.pluginId)"
 					@click="submit({ action: 'reload', pluginId: managed.pluginId })"
 				>
 					{{ t('marketplace.reload') }}
@@ -662,7 +678,8 @@
 			<template v-if="uninstallPlan && !uninstallPlan.required" #footer>
 				<UiButton
 					tone="danger"
-					:loading="submitting"
+					:loading="submittingIds.has(uninstallPlan.pluginId)"
+					:disabled="activeIds.has(uninstallPlan.pluginId)"
 					@click="
 						submit({ action: 'uninstall', plan: uninstallPlan, data: clearOnUninstall ? 'clear' : 'keep' })
 					"
@@ -676,7 +693,8 @@
 			<template v-if="clearTarget" #footer>
 				<UiButton
 					tone="danger"
-					:loading="submitting"
+					:loading="submittingIds.has(clearTarget.pluginId)"
+					:disabled="activeIds.has(clearTarget.pluginId)"
 					@click="submit({ action: 'clear-data', pluginId: clearTarget.pluginId })"
 				>
 					{{ t('marketplace.clearData') }}
@@ -722,7 +740,7 @@
 			<template v-if="plan && plan.steps.length && !plan.blockers.length" #footer>
 				<UiButton
 					tone="primary"
-					:loading="submitting"
+					:loading="submittingIds.has(plan.target.pluginId)"
 					:disabled="activeIds.has(plan.target.pluginId)"
 					@click="submit({ action: 'install', plan })"
 				>
@@ -783,6 +801,45 @@
 			padding: 0 16px 28px;
 		}
 	}
+	.marketplace-managed-summary {
+		display: grid;
+		gap: 8px;
+		margin-bottom: 18px;
+	}
+	.marketplace-managed-summary h3,
+	.marketplace-managed-summary p {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.marketplace-managed-summary h3 {
+		font-size: 16px;
+		font-weight: 600;
+	}
+	.marketplace-managed-summary p {
+		color: var(--ui-muted);
+		font-size: 13px;
+		line-height: 1.6;
+	}
+	.marketplace-managed-heading,
+	.marketplace-managed-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 12px;
+	}
+	.marketplace-managed-heading {
+		align-items: center;
+	}
+	.marketplace-managed-meta {
+		align-items: baseline;
+	}
+	.marketplace-managed-package,
+	.marketplace-managed-version {
+		color: var(--ui-muted);
+		font-size: 12px;
+		font-weight: 400;
+		font-variant-numeric: tabular-nums;
+		overflow-wrap: anywhere;
+	}
 	.marketplace-management-section {
 		margin-top: 28px;
 	}
@@ -791,6 +848,15 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
+	}
+	.marketplace-installed-group + .marketplace-installed-group {
+		margin-top: 22px;
+	}
+	.marketplace-installed-group > h3 {
+		margin: 0 0 10px;
+		color: var(--ui-text);
+		font-size: 14px;
+		font-weight: 600;
 	}
 	.marketplace-cards {
 		display: grid;
