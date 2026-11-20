@@ -13,6 +13,7 @@ test('仅类型文件变化时，热更新同步 Vue 组件的运行时属性', 
 	const types = join(components, 'menu-types.ts');
 	const config = join(directory, 'vite.config.ts');
 	const modules = fileURLToPath(new URL('../../node_modules', import.meta.url));
+	const previousNodeEnv = process.env.NODE_ENV;
 	let server: ViteDevServer | undefined;
 
 	try {
@@ -38,6 +39,8 @@ const transition = computed(() => Reflect.get(props, 'transition'));
 <template><button :data-transition="transition">Menu</button></template>`,
 			),
 		]);
+		// Vite 的生产构建会设置 NODE_ENV，复用同一测试进程时显式恢复开发模式。
+		process.env.NODE_ENV = 'development';
 		server = await createServer({
 			configFile: config,
 			configLoader: 'runner',
@@ -59,6 +62,8 @@ const transition = computed(() => Reflect.get(props, 'transition'));
 		await rename(replacement, types);
 		await expect(menu).toHaveAttribute('data-transition', 'drop');
 	} finally {
+		if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previousNodeEnv;
 		await server?.close();
 		await rm(directory, { recursive: true, force: true });
 	}

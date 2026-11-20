@@ -54,20 +54,30 @@ await login.body.cancel();
 
 const settings = { pluginId: '@nexus-terminal/settings', name: 'preferences' };
 const marketplace = '/api/plugins/' + encodeURIComponent('@nexus-terminal/marketplace');
+const pluginReady = AbortSignal.timeout(20_000);
 for (const path of [marketplace + '/plugins', '/api/plugins/' + encodeURIComponent(settings.pluginId) + '/preferences']) {
-	const response = await fetch(origin + path, { headers: { cookie }, signal });
-	assert.equal(response.status, 200, path);
-	await response.json();
+	// Authentication is available before built-in plugins finish registering their routes.
+	for (;;) {
+		const response = await fetch(origin + path, { headers: { cookie }, signal: pluginReady });
+		if (response.status !== 404) {
+			assert.equal(response.status, 200, path);
+			await response.json();
+			break;
+		}
+		await response.body?.cancel();
+		await setTimeout(100, undefined, { signal: pluginReady });
+	}
 }
 
+const socketSignal = AbortSignal.timeout(5000);
 const socket = new WebSocket(origin.replace('http:', 'ws:') + '/api/state/ws', {
 	headers: { cookie },
 	origin,
 	handshakeTimeout: 5000,
 });
 try {
-	await once(socket, 'open', { signal });
-	const reply = once(socket, 'message', { signal });
+	await once(socket, 'open', { signal: socketSignal });
+	const reply = once(socket, 'message', { signal: socketSignal });
 	socket.send(JSON.stringify({ type: 'subscribe', topic: settings }));
 	const [data] = await reply;
 	const snapshot = JSON.parse(String(data));
