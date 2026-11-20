@@ -8,7 +8,7 @@ if (( EUID == 0 )); then
 	exec gosu node "$0" "$@"
 fi
 
-PORT=9999 node --import tsx src/app/node/main.ts &
+PORT=9999 HTTP_TRUST_LOOPBACK_PROXY=1 node --import tsx src/app/node/main.ts &
 backend=$!
 nginx -c /etc/nexus-nginx.conf -g 'daemon off;' &
 frontend=$!

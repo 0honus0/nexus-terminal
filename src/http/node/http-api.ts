@@ -38,6 +38,7 @@ type HttpHostBatch<Routes extends readonly HttpHostRegistration[]> = Routes & {
 
 interface HttpOptions {
 	readonly port: number;
+	readonly trustLoopbackProxy?: boolean;
 	readonly services: HttpServices;
 }
 
@@ -53,11 +54,12 @@ export class HttpApi {
 	#closing: Promise<void> | undefined;
 	#detachUpgrade: (() => void) | undefined;
 
-	constructor({ port, services }: HttpOptions) {
+	constructor({ port, trustLoopbackProxy, services }: HttpOptions) {
 		this.#port = port;
 		this.#log = services.log;
 		this.#router = new HttpRouter(services);
 		const app = express().disable('x-powered-by').disable('etag');
+		if (trustLoopbackProxy) app.set('trust proxy', (ip: string, hop: number) => hop === 0 && ip === host);
 		app.use((request, response, next) => {
 			response.set('Cache-Control', 'no-store');
 			// 先验证监听的 Host，来源校验根据匹配到的路由执行。

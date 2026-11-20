@@ -16,6 +16,8 @@ export { PluginScope } from './plugin-api.js';
 
 export { resolveApplicationLabel } from './browser/plugin-contribution-api.js';
 
+export { resolvePluginIcon } from './browser/plugin-icons.js';
+
 export { PluginRuntime, type BrowserPluginTarget } from './browser/plugin-runtime-api.js';
 
 export type {

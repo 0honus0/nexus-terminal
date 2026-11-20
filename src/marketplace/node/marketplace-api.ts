@@ -792,6 +792,7 @@ export class MarketplaceApi {
 			pluginId,
 			version,
 			kind: manifest?.nexus.kind ?? null,
+			icon: manifest?.nexus.icon,
 			displayName: manifest?.displayName,
 			...(localizedNames.length && { localizedNames: Object.fromEntries(localizedNames) }),
 			hasBackend: manifest ? manifest.nexus.entry.backend !== undefined : null,

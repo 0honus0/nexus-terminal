@@ -62,6 +62,7 @@ async function main(): Promise<void> {
 	const app = new App({
 		dataDirectory: process.env.DATA_DIRECTORY ?? '.data',
 		httpPort: port.data,
+		httpTrustLoopbackProxy: process.env.HTTP_TRUST_LOOPBACK_PROXY === '1',
 	});
 	using shutdown = listenForShutdown(app);
 	try {

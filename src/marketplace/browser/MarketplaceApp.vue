@@ -14,6 +14,7 @@
 	import { CodedError } from '../../utils/error.js';
 	import type { MarketplaceInstallAttempt, MarketplaceOperation, MarketplacePlugin } from '../marketplace-types.js';
 	import type { PluginReadiness, PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
+	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import type { MarketplaceInstallPlan, MarketplaceRepositorySource } from '../marketplace-install-types.js';
 	import type { MarketplaceCatalogPlugin, MarketplaceRepository } from '../marketplace-catalog-types.js';
 	import {
@@ -41,7 +42,17 @@
 		sortMarketplacePlugins,
 	} from './marketplace-presentation.js';
 
-	const { installed, loading, api, minimized, log, applications, pluginRuntime, builtins } = defineProps<{
+	const {
+		installed,
+		loading,
+		api,
+		minimized,
+		log,
+		applications,
+		pluginRuntime,
+		builtins,
+		openConfigurationApplication,
+	} = defineProps<{
 		installed?: readonly MarketplacePlugin[];
 		loading: boolean;
 		api: MarketplaceDesktopApi;
@@ -51,6 +62,7 @@
 			id: string;
 			pluginId: string;
 			label: string;
+			icon?: Component;
 			visible: boolean;
 			readiness: PluginReadiness;
 		}[];
@@ -64,6 +76,7 @@
 			version: string;
 		}[];
 		log: Pick<LogApi, 'report'>;
+		openConfigurationApplication(key: string): AbortSignal | undefined;
 	}>();
 	const emit = defineEmits<{
 		refresh: [];
@@ -117,6 +130,7 @@
 		return ids;
 	});
 	let planRequest: AbortController | undefined;
+	let configuration: AbortController | undefined;
 	let uninstallRequest: AbortController | undefined;
 	const selected = computed(() => catalog.value?.find(({ id }) => id === selectedId.value));
 	const managing = ref(false);
@@ -149,15 +163,12 @@
 				detailOpen.value = false;
 				managedOpen.value = false;
 				builtinOpen.value = false;
-				planOpen.value = false;
+				dismissInstallation();
 				uninstallOpen.value = false;
 				clearOpen.value = false;
 			}
 		},
 	);
-	watch(planOpen, (visible) => {
-		if (!visible) planRequest?.abort();
-	});
 	onScopeDispose(() => scope.abort());
 	void discover(true);
 
@@ -272,13 +283,11 @@
 	});
 
 	async function preview(source: MarketplaceRepositorySource): Promise<void> {
-		planRequest?.abort();
+		dismissInstallation();
 		const request = new AbortController();
 		planRequest = request;
 		const signal = AbortSignal.any([request.signal, scope.signal]);
 		installTarget.value = source;
-		installOperation.value = undefined;
-		plan.value = undefined;
 		detailOpen.value = false;
 		managedOpen.value = false;
 		planOpen.value = true;
@@ -305,15 +314,35 @@
 	}
 
 	function openConfiguration(key: string): void {
+		if (configuration || !planOpen.value || scope.signal.aborted) return;
+		const closed = openConfigurationApplication(key);
+		if (!closed || closed.aborted) return;
+		const request = new AbortController();
+		configuration = request;
 		planOpen.value = false;
-		emit('openApplication', key);
+		closed.addEventListener(
+			'abort',
+			() => {
+				configuration = undefined;
+				planOpen.value = true;
+				emit('refresh');
+			},
+			{ once: true, signal: AbortSignal.any([request.signal, scope.signal]) },
+		);
 	}
 
-	function finishInstallation(): void {
+	function dismissInstallation(): void {
+		planRequest?.abort();
+		configuration?.abort();
+		configuration = undefined;
 		planOpen.value = false;
 		installOperation.value = undefined;
 		installTarget.value = undefined;
 		plan.value = undefined;
+	}
+
+	function finishInstallation(): void {
+		dismissInstallation();
 		managing.value = true;
 		query.value = '';
 		void readManagement();
@@ -429,9 +458,6 @@
 						@click="refresh()"
 						><RotateCw :size="17"
 					/></UiButton>
-					<UiButton v-if="installOperation && !planOpen" @click="planOpen = true">
-						{{ t('marketplace.installFlow.resume') }}
-					</UiButton>
 					<UiButton
 						class="marketplace-manage-entry"
 						icon-only
@@ -490,6 +516,7 @@
 									v-for="{ item, name, entries, status } in group.items"
 									:key="item.pluginId"
 									:name="name"
+									:icon="resolvePluginIcon(item.icon) ?? entries[0]?.icon"
 									:kind="item.kind"
 									:version="item.version"
 									:status="status"
@@ -745,7 +772,7 @@
 		</UiDialog>
 		<MarketplaceInstallDialog
 			v-if="installTarget"
-			v-model:open="planOpen"
+			:open="planOpen"
 			:plan="plan"
 			:planning="planning"
 			:operation="installOperation"
@@ -755,6 +782,7 @@
 			:loading-installed="loading"
 			:plugin-runtime="pluginRuntime"
 			:applications="applications"
+			@update:open="!$event && dismissInstallation()"
 			@confirm="plan && submit({ action: 'install', plan })"
 			@retry="preview(installTarget)"
 			@configure="openConfiguration"

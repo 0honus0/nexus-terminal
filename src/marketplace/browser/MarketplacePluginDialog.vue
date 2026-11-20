@@ -3,6 +3,7 @@
 	import { computed, ref, watch } from 'vue';
 	import { AppWindow, Puzzle, Info, Download, SlidersHorizontal } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
+	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import { UiButton, UiDialog, UiSelect } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin, MarketplaceRepository } from '../marketplace-catalog-types.js';
 	import type { MarketplaceRepositorySource } from '../marketplace-install-types.js';
@@ -73,7 +74,10 @@
 				<div class="catalog-detail__top">
 					<span class="catalog-detail__icon"
 						><component
-							:is="displayPackage.nexus.kind === 'application' ? AppWindow : Puzzle"
+							:is="
+								resolvePluginIcon(displayPackage.nexus.icon) ??
+								(displayPackage.nexus.kind === 'application' ? AppWindow : Puzzle)
+							"
 							:size="30"
 							:stroke-width="1.5"
 					/></span>

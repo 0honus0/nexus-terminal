@@ -99,13 +99,16 @@ export class WindowApi {
 		else this.focus(existing);
 	}
 
-	open(application: WindowApplication, launcher?: HTMLElement): void {
+	open(application: WindowApplication, launcher?: HTMLElement): DesktopWindow | undefined {
 		if (this.#closed || application.plugin?.lifetime.signal.aborted) return;
 		if (!application.multipleWindows) {
 			const existing = this.#items.value.find(
 				(item) => item.application.key === application.key && !item.closing,
 			);
-			if (existing) return this.focus(existing);
+			if (existing) {
+				this.focus(existing);
+				return existing;
+			}
 			// 快速重开时先移除已退出输入的旧窗口，避免同一个应用出现两套可见内容。
 			this.#items.value = this.#items.value.filter((item) => item.application.key !== application.key);
 		}
@@ -161,12 +164,13 @@ export class WindowApi {
 			stack: ++this.#nextStack,
 		});
 		this.#items.value = [...this.#items.value, item];
+		return item;
 	}
 
 	focus(item: DesktopWindow): void {
-		if (item.closing) return;
-		item.minimized = false;
+		if (item.closing || this.active.value === item) return;
 		item.stack = ++this.#nextStack;
+		item.minimized = false;
 	}
 
 	requestClose(item: DesktopWindow): void {

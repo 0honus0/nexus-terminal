@@ -426,6 +426,9 @@ test('桌面卡片保留圆角键盘焦点，鼠标收起和关闭窗口不留�
 
 	await expect(launcher).toHaveCSS('border-radius', '21px');
 	await launcher.click();
+	const stack = await settings.evaluate((element) => getComputedStyle(element).zIndex);
+	await settings.locator('.application-window__identity').click();
+	await expect(settings).toHaveCSS('z-index', stack);
 	await settings.getByRole('button', { name: 'Minimize' }).click();
 	await expect(settings).toBeHidden();
 	await expect(launcher).toHaveCSS('outline-style', 'none');
@@ -517,6 +520,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 		peerDependencies: { 'nexus-terminal': '^1.0.0' },
 		nexus: {
 			kind: 'extension',
+			icon: 'wrench',
 			entry: { backend: 'index.mjs' },
 			i18n: { zh: { description: '管理远程文件和进程。' } },
 		},
@@ -625,6 +629,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	const market = page.getByRole('region', { name: '插件市场' });
 	const card = market.getByRole('button', { name: '查看 Remote Tools' });
 	await expect(card.getByText('管理远程文件和进程。')).toBeVisible();
+	await expect(card.locator('svg.lucide-wrench')).toBeVisible();
 	const marketplaceSearch = market.getByRole('searchbox');
 	await expect(marketplaceSearch).toHaveAttribute('id', /\S/u);
 	await expect(marketplaceSearch).toHaveAccessibleName(/\S/u);
@@ -634,6 +639,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await card.click();
 	const details = page.getByRole('dialog', { name: '插件详情' });
 	await expect(details.getByText('管理远程文件和进程。')).toBeVisible();
+	await expect(details.locator('svg.lucide-wrench')).toBeVisible();
 	await details.getByRole('combobox', { name: '版本与来源' }).click();
 	await page.getByRole('option', { name: '1.1.0 · Second source' }).click();
 	await details.getByRole('button', { name: '预览安装' }).click();
@@ -828,6 +834,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 					{
 						...byId('@nexus-terminal/test'),
 						kind: 'application',
+						icon: 'fingerprint',
 						hasBackend: false,
 						source: { kind: 'local' },
 						enabled: appEnabled,
@@ -853,11 +860,22 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		}),
 	);
 	await page.goto('/');
+	const launcher = page.getByRole('main').getByRole('button', { name: 'Counter', exact: true });
+	await expect(launcher.locator('svg.lucide-fingerprint')).toBeVisible();
+	await launcher.click();
+	const counter = page.getByRole('region', { name: 'Counter', exact: true });
+	await expect(counter.locator('.application-window__identity svg.lucide-fingerprint')).toBeVisible();
+	await page.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
+	await expect(
+		page.getByRole('button', { name: 'Switch to Counter' }).locator('svg.lucide-fingerprint'),
+	).toBeVisible();
+	await counter.getByRole('button', { name: 'Close application' }).click();
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
 	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
 	const application = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
 	await expect(application.getByRole('status')).toHaveText('Available');
+	await expect(application.locator('svg.lucide-fingerprint')).toBeVisible();
 	await expect(application.locator('[title="0.0.1-dev.1"]')).toHaveText('0.0.1-dev.1');
 	await expect(application.getByRole('switch')).toHaveCount(0);
 	await expect(application.getByText('App', { exact: true })).toHaveCount(0);
@@ -1171,14 +1189,20 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 	host.setRuntime([runtime]);
 	host.setOperations([{ ...operation, state: 'succeeded', completedPackages: [dependency, pluginId] }]);
 	await expect(currentStage).toHaveText(/Check configuration/u);
-	await dialog.getByRole('button', { name: 'Configure later' }).click();
-	await market.getByRole('button', { name: 'Installation progress' }).click();
-	await dialog.getByRole('button', { name: 'Open configuration' }).click();
+	const openConfiguration = dialog.getByRole('button', { name: 'Open configuration' });
+	await expect(dialog.getByRole('button', { name: 'Configure later' })).toBeVisible();
+	await openConfiguration.click();
 	const configuration = page.getByRole('region', { name: 'Counter', exact: true });
+	await expect(configuration).toBeVisible();
+	await expect(dialog).toBeHidden();
+	await expect(market.getByRole('button', { name: 'Installation progress' })).toHaveCount(0);
+	await configuration.getByRole('button', { name: 'Close application' }).click();
+	await expect(currentStage).toHaveText(/Check configuration/u);
+	await expect(openConfiguration).toBeVisible();
+	await openConfiguration.click();
 	await expect(configuration).toBeVisible();
 	host.setRuntime([{ ...runtime, readiness: { state: 'ready' } }]);
 	await configuration.getByRole('button', { name: 'Close application' }).click();
-	await market.getByRole('button', { name: 'Installation progress' }).click();
 	await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
 	await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
 	await dialog.getByRole('button', { name: 'Done', exact: true }).click();

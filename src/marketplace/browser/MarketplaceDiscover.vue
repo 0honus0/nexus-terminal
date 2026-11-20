@@ -2,6 +2,7 @@
 	import { computed } from 'vue';
 	import { AppWindow, Puzzle, ArrowUpRight, Check, Boxes, PackageOpen } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
+	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import { UiEmptyState, UiLoadingTiles, vSelectableAction } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
 	import type { MarketplacePlugin } from '../marketplace-types.js';
@@ -37,7 +38,9 @@
 					]
 						.join(' ')
 						.toLowerCase();
-					return search.includes(props.query.trim().toLowerCase()) ? [{ plugin, pack, name }] : [];
+					return search.includes(props.query.trim().toLowerCase())
+						? [{ plugin, pack, name, icon: resolvePluginIcon(pack.nexus.icon) }]
+						: [];
 				}),
 			}))
 			.filter(({ plugins }) => !props.refreshing || plugins.length),
@@ -73,7 +76,7 @@
 				<div class="catalog-grid">
 					<button
 						v-selectable-action
-						v-for="{ plugin, pack, name } in group.plugins"
+						v-for="{ plugin, pack, name, icon } in group.plugins"
 						:key="plugin.id"
 						type="button"
 						class="catalog-card"
@@ -82,10 +85,10 @@
 					>
 						<div class="catalog-card__art" aria-hidden="true">
 							<component
-								:is="group.kind === 'application' ? AppWindow : Puzzle"
-								:size="group.kind === 'application' ? 30 : 24"
+								:is="icon ?? (group.kind === 'application' ? AppWindow : Puzzle)"
+								:size="icon ? 36 : group.kind === 'application' ? 30 : 24"
 								:stroke-width="1.5"
-							/><span v-if="group.kind === 'application'">{{ name.slice(0, 1) }}</span>
+							/><span v-if="!icon && group.kind === 'application'">{{ name.slice(0, 1) }}</span>
 						</div>
 						<div class="catalog-card__body" data-ui-selection="text">
 							<div class="catalog-card__title">

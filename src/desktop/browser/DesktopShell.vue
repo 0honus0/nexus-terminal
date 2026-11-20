@@ -3,7 +3,7 @@
 	import { ChevronLeft, ChevronRight, MoveDiagonal2, Package, Plus, X } from '@lucide/vue';
 	import { useWindowSize } from '@vueuse/core';
 	import { PaginationList, PaginationListItem, PaginationRoot } from 'reka-ui';
-	import { computed, onScopeDispose, ref, toValue, watch } from 'vue';
+	import { computed, onScopeDispose, ref, toValue, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import {
 		LayoutProfiles,
@@ -35,8 +35,9 @@
 	import { useDesktopNavigation } from './desktop-navigation.js';
 	import { useDesktopPreload } from './desktop-preload.js';
 
-	const { contributions, log, builtins, desktop, escapeAction, windowLauncher } = defineProps<{
+	const { contributions, pluginIcons, log, builtins, desktop, escapeAction, windowLauncher } = defineProps<{
 		contributions: PluginContributionList;
+		pluginIcons: ReadonlyMap<string, Component>;
 		log: Pick<LogApi, 'report'>;
 		builtins: readonly DesktopApplication[];
 		desktop: DesktopApi;
@@ -71,7 +72,7 @@
 
 									label: () => resolveApplicationLabel(plugin.label, locale.value),
 
-									icon: plugin.icon ?? Package,
+									icon: pluginIcons.get(plugin.context.self.id) ?? plugin.icon ?? Package,
 									multipleWindows: plugin.multipleWindows,
 									size: plugin.defaultWindowSize,
 									scrollMode: plugin.scrollMode,
@@ -128,7 +129,7 @@
 		},
 		{ immediate: true },
 	);
-	const detachLauncher = windowLauncher.attach(openApplication);
+	const detachLauncher = windowLauncher.attach((key) => !!openApplication(key));
 	onScopeDispose(() => {
 		detachLauncher();
 		windows.close();
@@ -146,12 +147,11 @@
 		windows.toggle(application, launcher instanceof HTMLElement ? launcher : undefined);
 	}
 
-	function openApplication(key: string): boolean {
+	function openApplication(key: string) {
 		const application = applications.value.get(key);
-		if (!application || application.plugin?.lifetime.signal.aborted) return false;
+		if (!application || application.plugin?.lifetime.signal.aborted) return;
 		preloads.opened(key);
-		windows.open(application);
-		return true;
+		return windows.open(application);
 	}
 
 	function tileEntry(tile: DesktopTile): PluginComponentEntry | undefined {

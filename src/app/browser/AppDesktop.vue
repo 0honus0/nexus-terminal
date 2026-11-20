@@ -15,7 +15,11 @@
 		MarketplaceTile,
 	} from '../../marketplace/browser/marketplace-desktop-api.js';
 	import type { MarketplacePlugin } from '../../marketplace/marketplace-types.js';
-	import { resolveApplicationLabel, type PluginContributionList } from '../../plugin/plugin-api.browser.js';
+	import {
+		resolveApplicationLabel,
+		resolvePluginIcon,
+		type PluginContributionList,
+	} from '../../plugin/plugin-api.browser.js';
 	import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import { SettingsApp, SettingsTile } from '../../settings/browser/settings-api.js';
 	import type { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
@@ -108,6 +112,7 @@
 							id: entry.id,
 							pluginId: entry.context.self.id,
 							label: resolveApplicationLabel(entry.label, locale.value),
+							icon: entry.icon,
 							visible: desktop.isTileVisible(entry.key),
 							readiness: entry.context.self.readiness.value,
 						},
@@ -129,6 +134,15 @@
 	const request = new AbortController();
 	const marketplace = new MarketplaceDesktopApi(request.signal, log);
 	const installed = shallowRef<readonly MarketplacePlugin[]>();
+	const pluginIcons = computed(
+		() =>
+			new Map(
+				installed.value?.flatMap(({ pluginId, icon }) => {
+					const component = resolvePluginIcon(icon);
+					return component ? [[pluginId, component] as const] : [];
+				}),
+			),
+	);
 	const loading = ref(false);
 	const initialReadSettled = ref(false);
 	const initialReadDeadline = AbortSignal.timeout(5_000);
@@ -197,6 +211,7 @@
 		:desktop="desktop"
 		:builtins="builtins"
 		:contributions="contributions"
+		:plugin-icons="pluginIcons"
 		:log="log"
 		:escape-action="settings.escapeAction"
 		:window-launcher="windowLauncher"
@@ -239,6 +254,7 @@
 				:applications="marketplaceApplications"
 				:plugin-runtime="pluginRuntime"
 				:builtins="marketplaceBuiltins"
+				:open-configuration-application="(key) => openApplication(key)?.view?.signal"
 				@open-application="openApplication"
 				@show-application="showApplication"
 				:minimized="minimized"

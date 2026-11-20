@@ -46,11 +46,28 @@ const denied = await fetch(origin + setup, {
 });
 assert.equal(denied.status, 403);
 await denied.body.cancel();
-const login = await fetch(origin + setup, { method: 'POST', headers, body: input, signal });
+const forwarded = {
+	'x-forwarded-for': '192.0.2.23',
+	'x-forwarded-proto': 'https',
+	'x-forwarded-host': 'proxy.invalid',
+	forwarded: 'for=192.0.2.23;proto=https;host=proxy.invalid',
+};
+const login = await fetch(origin + setup, { method: 'POST', headers: { ...headers, ...forwarded }, body: input, signal });
 assert.equal(login.status, 201, await login.clone().text());
+assert.match(login.headers.get('ratelimit') ?? '', /\br=9;/);
 const cookie = login.headers.get('set-cookie')?.split(';')[0];
 assert.ok(cookie);
 await login.body.cancel();
+
+const samePeer = await fetch(origin + '/api/auth/login', {
+	method: 'POST',
+	headers: { ...headers, 'x-forwarded-for': '198.51.100.42' },
+	body: input,
+	signal,
+});
+assert.equal(samePeer.status, 200, await samePeer.clone().text());
+assert.match(samePeer.headers.get('ratelimit') ?? '', /\br=8;/);
+await samePeer.body.cancel();
 
 const settings = { pluginId: '@nexus-terminal/settings', name: 'preferences' };
 const marketplace = '/api/plugins/' + encodeURIComponent('@nexus-terminal/marketplace');
@@ -89,6 +106,29 @@ try {
 JS
 then
 	docker logs "$container" >&2
+	exit 1
+fi
+
+if ! docker exec -i "$container" node --input-type=module <<'JS'
+import assert from 'node:assert/strict';
+
+// Connecting to Nginx from inside the container uses a different socket peer.
+const response = await fetch('http://127.0.0.1:8080/api/auth/login', {
+	method: 'POST',
+	headers: { 'content-type': 'application/json' },
+	body: JSON.stringify({ username: 'smoke', password: 'fixture-owner' }),
+	signal: AbortSignal.timeout(5000),
+});
+assert.equal(response.status, 200, await response.clone().text());
+assert.match(response.headers.get('ratelimit') ?? '', /\br=9;/);
+await response.body.cancel();
+JS
+then
+	docker logs "$container" >&2
+	exit 1
+fi
+
+if docker logs "$container" 2>&1 | grep -E 'ERR_ERL_(UNEXPECTED_X_FORWARDED_FOR|FORWARDED_HEADER|PERMISSIVE_TRUST_PROXY)'; then
 	exit 1
 fi
 

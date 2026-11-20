@@ -82,6 +82,7 @@ async function writePlugin(
 		source = 'export function activate() {}',
 		frontendOnly = false,
 		displayName,
+		icon,
 		i18n,
 	}: {
 		version?: string;
@@ -89,6 +90,7 @@ async function writePlugin(
 		source?: string;
 		frontendOnly?: boolean;
 		displayName?: string;
+		icon?: string;
 		i18n?: PluginManifest['nexus']['i18n'];
 	} = {},
 ): Promise<string> {
@@ -105,6 +107,7 @@ async function writePlugin(
 				peerDependencies: { 'nexus-terminal': '^1.0.0' },
 				nexus: {
 					kind: 'extension',
+					icon,
 					entry: { [frontendOnly ? 'frontend' : 'backend']: 'index.mjs' },
 					dependsOn,
 					i18n,
@@ -359,6 +362,7 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 	const pluginId = '@test/managed';
 	const path = await writePlugin(directory, pluginId, {
 		displayName: 'Managed plugin',
+		icon: 'wrench',
 		i18n: { 'zh-CN': { displayName: '受管理插件' } },
 	});
 	await recordInstalledPlugin(app, path);
@@ -375,6 +379,7 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 			kind: 'extension',
 			hasBackend: true,
 			displayName: 'Managed plugin',
+			icon: 'wrench',
 			localizedNames: { 'zh-CN': '受管理插件' },
 			source: { kind: 'local' },
 			enabled: false,

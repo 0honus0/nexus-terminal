@@ -20,6 +20,9 @@ export interface AppOptions {
 
 	/** 省略或传入 0 时，由系统分配监听端口。 */
 	readonly httpPort?: number;
+
+	/** 仅在回环代理已重写转发头时启用。 */
+	readonly httpTrustLoopbackProxy?: boolean;
 }
 
 interface AppPlugins {

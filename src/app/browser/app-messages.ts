@@ -86,7 +86,6 @@ export const appMessages = {
 				openConfiguration: 'Open configuration',
 				later: 'Configure later',
 				done: 'Done',
-				resume: 'Installation progress',
 			},
 			blockers: 'Installation blocked',
 			planAction: { install: 'Install', update: 'Update', reuse: 'Reuse' },
@@ -361,7 +360,6 @@ export const appMessages = {
 				openConfiguration: '打开配置',
 				later: '稍后配置',
 				done: '完成',
-				resume: '安装进度',
 			},
 			blocker: {
 				MARKETPLACE_PLUGIN_SOURCE_NOT_FOUND: '插件来源已不可用。',

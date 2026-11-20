@@ -15,6 +15,7 @@ interface AppServicesOptions {
 	readonly dataDirectory: string;
 	readonly logLevel?: Level;
 	readonly httpPort?: number;
+	readonly httpTrustLoopbackProxy?: boolean;
 }
 
 interface ServiceLifecycle {
@@ -37,12 +38,12 @@ interface ManagedService {
 }
 
 /** 构造时显式传入依赖。登记顺序决定初始化和逆序关闭的顺序。 */
-function registerServices(directory: string, logLevel: Level, httpPort: number) {
+function registerServices(directory: string, logLevel: Level, httpPort: number, httpTrustLoopbackProxy: boolean) {
 	const log = new LogApi(new LogWriter({ level: logLevel }));
 	const database = new DatabaseApi({ directory });
 	const crypto = new CryptoApi({ directory, services: { log } });
 	const auth = new AuthApi({ services: { database, crypto } });
-	const http = new HttpApi({ port: httpPort, services: { log, auth } });
+	const http = new HttpApi({ port: httpPort, trustLoopbackProxy: httpTrustLoopbackProxy, services: { log, auth } });
 	const ws = new WsApi({ services: { http, auth, log } });
 	const state = new StateApi({ services: { ws } });
 
@@ -85,9 +86,14 @@ function selectPluginCapabilities(services: AppServiceMap): PluginCapabilities {
 }
 
 /** App 启动时从同一张登记表取得宿主服务与插件能力名单。 */
-export function assembleAppServices({ dataDirectory, logLevel = 'info', httpPort = 0 }: AppServicesOptions) {
+export function assembleAppServices({
+	dataDirectory,
+	logLevel = 'info',
+	httpPort = 0,
+	httpTrustLoopbackProxy = false,
+}: AppServicesOptions) {
 	const directory = resolve(dataDirectory);
-	const registrations = registerServices(directory, logLevel, httpPort);
+	const registrations = registerServices(directory, logLevel, httpPort, httpTrustLoopbackProxy);
 	return {
 		services: new AppServices(directory, registrations),
 		pluginCapabilities: selectPluginCapabilities(registrations),

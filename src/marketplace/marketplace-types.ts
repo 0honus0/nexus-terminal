@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
 	PluginDisplayNameSchema,
+	PluginIconSchema,
 	PluginKindSchema,
 	PluginManifestSchema,
 	PluginPackageNameSchema,
@@ -63,6 +64,7 @@ export const MarketplacePluginSchema = z.strictObject({
 	version: z.string().min(1),
 	kind: PluginKindSchema.nullable(),
 	hasBackend: z.boolean().nullable(),
+	icon: PluginIconSchema.optional(),
 	displayName: PluginDisplayNameSchema.optional(),
 	localizedNames: z.record(z.string(), PluginDisplayNameSchema).optional(),
 	source: MarketplacePluginSourceSchema,

@@ -26,6 +26,11 @@ export const PluginDisplayNameSchema = z.string().trim().min(1).max(128);
 
 export const PluginKindSchema = z.enum(['application', 'extension']);
 
+export const PluginIconSchema = z
+	.string()
+	.max(64)
+	.regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u);
+
 const PlatformListSchema = z.union([z.string(), z.array(z.string())]);
 
 /** 目录、安装和加载使用同一份清单校验。运行环境及入口文件由消费者另外检查。 */
@@ -43,6 +48,7 @@ export const PluginManifestSchema = z
 		libc: PlatformListSchema.optional(),
 		nexus: z.looseObject({
 			kind: PluginKindSchema,
+			icon: PluginIconSchema.optional().catch(undefined),
 			entry: PluginEntrySchema,
 			dependsOn: z.record(PluginPackageNameSchema, VersionRangeSchema).optional(),
 			requiredFor: z.array(z.string().min(1)).optional(),
