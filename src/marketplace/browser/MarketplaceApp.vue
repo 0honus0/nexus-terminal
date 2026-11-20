@@ -1,6 +1,4 @@
 <script setup lang="ts">
-	import gt from 'semver/functions/gt.js';
-	import prerelease from 'semver/functions/prerelease.js';
 	import { Package, RotateCw, Search, SlidersHorizontal } from '@lucide/vue';
 	import { computed, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -36,6 +34,7 @@
 	import MarketplacePluginDialog from './MarketplacePluginDialog.vue';
 	import MarketplaceRepositories from './MarketplaceRepositories.vue';
 	import {
+		isMarketplaceUpdate,
 		marketplaceInstalledStatus,
 		marketplaceInstalledName,
 		marketplacePluginRuntime,
@@ -134,6 +133,22 @@
 	let configuration: AbortController | undefined;
 	let uninstallRequest: AbortController | undefined;
 	const selected = computed(() => catalog.value?.find(({ id }) => id === selectedId.value));
+	const selectedInstalled = computed(() => installed?.find(({ pluginId }) => pluginId === selectedId.value));
+	const updates = computed(() => {
+		const versions = new Map(catalog.value?.map(({ id, versions }) => [id, versions]));
+		const targets = new Map<string, MarketplaceRepositorySource>();
+		for (const item of installed ?? []) {
+			const next = versions.get(item.pluginId)?.find((candidate) => isMarketplaceUpdate(item, candidate));
+			if (next)
+				targets.set(item.pluginId, {
+					kind: 'repository',
+					repositoryId: next.repositoryId,
+					pluginId: item.pluginId,
+					version: next.package.version,
+				});
+		}
+		return targets;
+	});
 	const managing = ref(false);
 	const query = ref('');
 	const refreshing = ref(false);
@@ -147,7 +162,7 @@
 			const name = marketplaceInstalledName(item, locale.value, entries[0]?.label);
 			const kind = t('marketplace.kind.' + (item.kind ?? 'unknown'));
 			return `${name} ${item.pluginId} ${kind}`.toLowerCase().includes(filter)
-				? [{ item, name, entries, status: installedStatus(item) }]
+				? [{ item, name, entries, status: installedStatus(item), update: updates.value.get(item.pluginId) }]
 				: [];
 		});
 	});
@@ -275,21 +290,6 @@
 		managedId.value = pluginId;
 		managedOpen.value = true;
 	}
-
-	const updateTarget = computed<MarketplaceRepositorySource | undefined>(() => {
-		const current = managed.value;
-		if (!current || current.source.kind !== 'repository') return;
-		const { repositoryId } = current.source;
-		const next = catalog.value
-			?.find(({ id }) => id === current.pluginId)
-			?.versions.find(
-				(item) =>
-					item.repositoryId === repositoryId &&
-					gt(item.package.version, current.version) &&
-					(prerelease(current.version) || !prerelease(item.package.version)),
-			);
-		return next ? { ...current.source, version: next.package.version } : undefined;
-	});
 
 	async function preview(source: MarketplaceRepositorySource): Promise<void> {
 		dismissInstallation();
@@ -463,7 +463,7 @@
 						appearance="ghost"
 						icon-only
 						:aria-label="t('desktop.refresh')"
-						:loading="managing ? loading : refreshing"
+						:loading="refreshing || (managing && loading)"
 						@click="refresh()"
 						><RotateCw :size="17"
 					/></UiButton>
@@ -484,6 +484,7 @@
 				v-if="!managing"
 				:plugins="catalog ?? []"
 				:installed="installed ?? []"
+				:updates="updates"
 				:query="query"
 				:refreshing="refreshing"
 				:failed="catalogFailed"
@@ -522,16 +523,19 @@
 									/>
 								</template>
 								<MarketplaceInstalledCard
-									v-for="{ item, name, entries, status } in group.items"
+									v-for="{ item, name, entries, status, update } in group.items"
 									:key="item.pluginId"
 									:name="name"
 									:icon="resolvePluginIcon(item.icon) ?? entries[0]?.icon"
 									:kind="item.kind"
 									:version="item.version"
 									:status="status"
+									:update-version="update?.version"
+									:update-disabled="planning || activeIds.has(item.pluginId)"
 									:openable="item.kind === 'application' && item.enabled && entries.length === 1"
 									@manage="inspectInstalled(item.pluginId)"
 									@open="entries[0] && emit('openApplication', entries[0].key)"
+									@update="update && preview(update)"
 								/>
 							</div>
 						</section>
@@ -607,8 +611,9 @@
 			v-model:open="detailOpen"
 			:plugin="selected"
 			:repositories="repositories"
-			:installed="!!installed?.some(({ pluginId }) => pluginId === selectedId)"
-			:installing="planning"
+			:installed="selectedInstalled"
+			:update="selectedId ? updates.get(selectedId) : undefined"
+			:installing="planning || (!!selectedId && activeIds.has(selectedId))"
 			@manage="manage"
 			@install="preview"
 		/>
@@ -719,15 +724,6 @@
 					@click="submit({ action: 'reload', pluginId: managed.pluginId })"
 				>
 					{{ t('marketplace.reload') }}
-				</UiButton>
-				<UiButton
-					v-if="updateTarget"
-					tone="primary"
-					:loading="planning"
-					:disabled="activeIds.has(managed.pluginId)"
-					@click="preview(updateTarget)"
-				>
-					{{ t('marketplace.updateVersion', { version: updateTarget.version }) }}
 				</UiButton>
 				<UiButton
 					tone="danger"

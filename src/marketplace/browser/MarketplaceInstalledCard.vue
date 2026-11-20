@@ -14,8 +14,10 @@
 		builtin?: boolean;
 		version: string;
 		openable?: boolean;
+		updateVersion?: string;
+		updateDisabled?: boolean;
 	}>();
-	defineEmits<{ manage: []; open: [] }>();
+	defineEmits<{ manage: []; open: []; update: [] }>();
 	const { t } = useI18n({ useScope: 'global' });
 	const icon = computed(
 		() => props.icon ?? (props.kind === 'application' ? AppWindow : props.kind === 'extension' ? Puzzle : Package),
@@ -39,14 +41,27 @@
 				<UiBadge :tone="marketplaceStatusTones[status]" role="status" dot>{{
 					t('marketplace.status.' + status)
 				}}</UiBadge>
-				<UiButton
-					v-if="openable"
-					density="compact"
-					:aria-label="t('marketplace.openNamedApplication', { name })"
-					@click="$emit('open')"
-				>
-					{{ t('marketplace.open') }}
-				</UiButton>
+				<div v-if="openable || updateVersion" class="marketplace-installed-card__actions">
+					<UiButton
+						v-if="updateVersion"
+						density="compact"
+						tone="primary"
+						:disabled="updateDisabled"
+						:aria-label="t('marketplace.updateNamed', { name, version: updateVersion })"
+						:title="t('marketplace.updateVersion', { version: updateVersion })"
+						@click="$emit('update')"
+					>
+						{{ t('marketplace.confirmUpdate') }}
+					</UiButton>
+					<UiButton
+						v-if="openable"
+						density="compact"
+						:aria-label="t('marketplace.openNamedApplication', { name })"
+						@click="$emit('open')"
+					>
+						{{ t('marketplace.open') }}
+					</UiButton>
+				</div>
 			</div>
 		</template>
 	</UiCard>
@@ -61,10 +76,15 @@
 		grid-template-columns: minmax(66px, max-content);
 		gap: 6px;
 	}
-	.marketplace-installed-card__controls > [data-ui='badge'],
-	.marketplace-installed-card__controls > [data-ui='button'] {
+	.marketplace-installed-card__controls > [data-ui='badge'] {
 		width: 100%;
 		justify-content: center;
+	}
+	.marketplace-installed-card__actions {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 1fr;
+		gap: 6px;
 	}
 	.marketplace-installed-card__builtin {
 		color: var(--ui-muted);

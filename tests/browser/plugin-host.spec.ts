@@ -525,6 +525,136 @@ test('市场先显示缓存，官方仓库刷新后显示新目录', async ({ pa
 	await expect(market.getByText('Refreshed catalog')).toBeVisible();
 });
 
+test('刷新显示可更新版本，已安装卡片的更新和打开等宽并排', async ({ page, host }) => {
+	const pluginId = '@nexus-terminal/test';
+	const installedVersion = '0.0.1-dev.3';
+	const newVersion = '0.0.1-dev.4';
+	const official = { id: randomUUID(), url: 'https://example.com/catalog.json', label: 'Official', official: true };
+	const other = { id: randomUUID(), url: 'https://other.example.com/catalog.json', label: 'Other', official: false };
+	const target = { kind: 'repository', repositoryId: official.id, pluginId, version: newVersion };
+	const manifest = {
+		name: pluginId,
+		displayName: 'Counter',
+		type: 'module',
+		peerDependencies: { 'nexus-terminal': '^1.0.0' },
+		nexus: { kind: 'application', entry: { frontend: 'index.js' } },
+	};
+	let installed = installedVersion;
+	let refreshed = 0;
+	host.setPluginVersion(installedVersion);
+	await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [official, other] } }));
+	await page.route('**/api/plugins/*/repositories/*/refresh', (route) => {
+		refreshed++;
+		return route.fulfill({ status: 204 });
+	});
+	await page.route('**/api/plugins/*/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						id: pluginId,
+						versions: [
+							{
+								repositoryId: official.id,
+								package: { ...manifest, version: refreshed > 1 ? newVersion : installedVersion },
+							},
+							{ repositoryId: other.id, package: { ...manifest, version: '2.0.0' } },
+						],
+					},
+				],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						pluginId,
+						version: installed,
+						kind: 'application',
+						hasBackend: false,
+						displayName: 'Counter',
+						source: { ...target, version: installed },
+						enabled: true,
+						runtime: null,
+						issue: null,
+					},
+				],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/install-plan', (route) => {
+		expect(route.request().postDataJSON()).toEqual(target);
+		return route.fulfill({
+			json: {
+				target,
+				blockers: [],
+				steps: [{ package: { ...manifest, version: newVersion }, source: target, action: 'update' }],
+			},
+		});
+	});
+	await page.route('**/api/plugins/*/manager/install', (route) => {
+		const { plan, observationId } = route.request().postDataJSON();
+		expect(plan.target).toEqual(target);
+		installed = newVersion;
+		host.setPluginVersion(newVersion);
+		return route.fulfill({
+			status: 202,
+			json: {
+				id: randomUUID(),
+				observationId,
+				change: { action: 'install', pluginId, target, revision: 'a'.repeat(64) },
+				state: 'succeeded',
+				createdAt: new Date().toISOString(),
+				committed: true,
+				completedPackages: [pluginId],
+			},
+		});
+	});
+
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	const listing = market.getByRole('button', { name: 'View Counter', exact: true });
+	await expect(listing).toContainText('Installed');
+	await expect.poll(() => refreshed).toBe(1);
+	await market.getByRole('button', { name: 'Refresh', exact: true }).click();
+	await expect(listing).toContainText('Update available');
+	await listing.click();
+	const catalogDetails = page.getByRole('dialog', { name: 'Plugin details' });
+	await expect(catalogDetails.getByRole('combobox', { name: 'Version and source' })).toContainText(
+		`${newVersion} · Official`,
+	);
+	await expect(catalogDetails.getByRole('button', { name: `Update to ${newVersion}` })).toBeEnabled();
+	await catalogDetails.getByRole('button', { name: 'Manage installed plugin', exact: true }).click();
+	const manage = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	await expect(manage).toBeVisible();
+	await expect(manage.getByRole('button', { name: /Update/u })).toHaveCount(0);
+	await manage.getByRole('button', { name: 'Close application' }).click();
+
+	const card = market
+		.getByRole('article')
+		.filter({ has: page.getByRole('button', { name: 'Manage Counter', exact: true }) });
+	const update = card.getByRole('button', { name: `Update Counter to ${newVersion}` });
+	const open = card.getByRole('button', { name: 'Open Counter', exact: true });
+	const before = (await update.boundingBox())!;
+	const after = (await open.boundingBox())!;
+	expect(before.x + before.width).toBeLessThan(after.x);
+	expect(before.y).toBeCloseTo(after.y, 1);
+	expect(before.width).toBeCloseTo(after.width, 1);
+	expect(before.height).toBeCloseTo(after.height, 1);
+	await update.click();
+	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
+	await expect(plan.getByText(newVersion, { exact: false })).toBeVisible();
+	expect(installed).toBe(installedVersion);
+	await plan.getByRole('button', { name: 'Update', exact: true }).click();
+	await plan.getByRole('button', { name: 'Done', exact: true }).click();
+	await expect(card).toContainText(newVersion);
+	await expect(update).toHaveCount(0);
+	await expect(open).toBeEnabled();
+});
+
 test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖计划', async ({ page, host: _host }) => {
 	const pluginId = '@test/remote-tools';
 	const sourceId = '123e4567-e89b-42d3-a456-426614174000';

@@ -7,12 +7,14 @@
 	import { UiButton, UiDialog, UiSelect } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin, MarketplaceRepository } from '../marketplace-catalog-types.js';
 	import type { MarketplaceRepositorySource } from '../marketplace-install-types.js';
-	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
+	import type { MarketplacePlugin } from '../marketplace-types.js';
+	import { isMarketplaceUpdate, marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
 
 	const props = defineProps<{
 		plugin: MarketplaceCatalogPlugin | undefined;
 		repositories: readonly MarketplaceRepository[];
-		installed: boolean;
+		installed?: MarketplacePlugin;
+		update?: MarketplaceRepositorySource;
 		installing: boolean;
 	}>();
 	const emit = defineEmits<{ manage: [id: string]; install: [source: MarketplaceRepositorySource] }>();
@@ -39,16 +41,28 @@
 		[() => props.plugin?.id, sorted, release, open],
 		([id, all, , isOpen], previous) => {
 			if (!isOpen || id !== previous?.[0]) dependenciesOpen.value = false;
-			if (id !== previous?.[0]) {
+			if (id !== previous?.[0] || (isOpen && !previous?.[3])) {
 				// 优先正式版本；只有开发版本的包仍可直接查看和安装。
-				release.value = all.some((item) => !prerelease(item.package.version)) ? 'stable' : 'prerelease';
+				const update = props.update;
+				if (update) {
+					release.value = prerelease(update.version) ? 'prerelease' : 'stable';
+					selection.value = JSON.stringify([update.repositoryId, update.version]);
+				} else {
+					release.value = all.some((item) => !prerelease(item.package.version)) ? 'stable' : 'prerelease';
+					selection.value = versions.value[0]?.value ?? '';
+				}
 			}
-			if (id !== previous?.[0] || !versions.value.some((option) => option.value === selection.value))
+			if (!versions.value.some((option) => option.value === selection.value))
 				selection.value = versions.value[0]?.value ?? '';
 		},
 		{ immediate: true },
 	);
 	const selected = computed(() => versions.value.find((option) => option.value === selection.value)?.version);
+	const selectedUpdate = computed(() =>
+		props.installed && selected.value && isMarketplaceUpdate(props.installed, selected.value)
+			? selected.value
+			: undefined,
+	);
 	// 空分类保留包介绍及分类切换，不把另一分类的版本伪装成当前选项，也不允许安装。
 	const displayPackage = computed(
 		() => selected.value?.package ?? sorted.value[0]?.package ?? props.plugin?.versions[0]?.package,
@@ -57,7 +71,7 @@
 	const sharedDependencies = computed(() => Object.entries(selected.value?.package.peerDependencies ?? {}));
 
 	function install() {
-		if (!props.plugin || !selected.value || props.installing) return;
+		if (!props.plugin || !selected.value || props.installing || (props.installed && !selectedUpdate.value)) return;
 		emit('install', {
 			kind: 'repository',
 			repositoryId: selected.value.repositoryId,
@@ -123,18 +137,27 @@
 			<UiButton :disabled="!selected" @click="dependenciesOpen = true"
 				><template #leading><Info :size="17" /></template>{{ t('marketplace.details') }}</UiButton
 			>
-			<UiButton v-if="installed" tone="primary" @click="emit('manage', plugin.id)">
+			<UiButton
+				v-if="installed"
+				:tone="selectedUpdate ? 'neutral' : 'primary'"
+				@click="emit('manage', plugin.id)"
+			>
 				<template #leading><SlidersHorizontal :size="17" /></template>{{ t('marketplace.manageInstalled') }}
 			</UiButton>
 			<UiButton
-				v-else
+				v-if="!installed || selectedUpdate"
 				tone="primary"
 				:loading="installing"
 				:disabled="!selected"
 				loading-animation="spinner"
 				@click="install"
 			>
-				<template #leading><Download :size="17" /></template>{{ t('marketplace.previewInstall') }}
+				<template #leading><Download :size="17" /></template
+				>{{
+					selectedUpdate
+						? t('marketplace.updateVersion', { version: selectedUpdate.package.version })
+						: t('marketplace.previewInstall')
+				}}
 			</UiButton>
 		</template>
 	</UiDialog>

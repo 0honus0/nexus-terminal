@@ -1,15 +1,17 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
-	import { AppWindow, Puzzle, ArrowUpRight, Check, Boxes, PackageOpen } from '@lucide/vue';
+	import { AppWindow, Puzzle, ArrowUp, ArrowUpRight, Check, Boxes, PackageOpen } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
 	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import { UiEmptyState, UiLoadingTiles, vSelectableAction } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
+	import type { MarketplaceRepositorySource } from '../marketplace-install-types.js';
 	import type { MarketplacePlugin } from '../marketplace-types.js';
 	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
 	const props = defineProps<{
 		plugins: readonly MarketplaceCatalogPlugin[];
 		installed: readonly MarketplacePlugin[];
+		updates: ReadonlyMap<string, MarketplaceRepositorySource>;
 		query: string;
 		refreshing: boolean;
 		failed: boolean;
@@ -99,8 +101,12 @@
 								{{ marketplaceDescription(pack, locale) ?? t(`marketplace.${group.kind}Hint`) }}
 							</p>
 							<footer>
-								<span class="catalog-card__package">{{ plugin.id }}</span><span
-									v-if="installed.some((item) => item.pluginId === plugin.id)"
+								<span class="catalog-card__package">{{ plugin.id }}</span>
+								<span v-if="updates.has(plugin.id)" class="catalog-card__update">
+									<ArrowUp :size="12" aria-hidden="true" />{{ t('marketplace.updateAvailable') }}
+								</span>
+								<span
+									v-else-if="installed.some((item) => item.pluginId === plugin.id)"
 									class="catalog-card__installed"
 									><Check :size="12" />{{ t('marketplace.installed') }}</span
 								><span v-else>v{{ pack.version }}</span>
@@ -318,11 +324,17 @@
 	footer > :last-child {
 		flex: none;
 	}
-	.catalog-card__installed {
+	.catalog-card__installed,
+	.catalog-card__update {
 		display: inline-flex;
 		align-items: center;
 		gap: 3px;
+	}
+	.catalog-card__installed {
 		color: var(--ui-success);
+	}
+	.catalog-card__update {
+		color: var(--ui-primary);
 	}
 	[data-kind='extension'] .catalog-grid {
 		grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));

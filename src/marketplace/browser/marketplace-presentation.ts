@@ -1,4 +1,7 @@
 import rcompare from 'semver/functions/rcompare.js';
+import gt from 'semver/functions/gt.js';
+import prerelease from 'semver/functions/prerelease.js';
+import valid from 'semver/functions/valid.js';
 import type { UiBadgeProps } from '../../ui/browser/ui-component-types.js';
 import type { PluginManifest } from '../../plugin/plugin-manifest-types.js';
 import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
@@ -82,6 +85,17 @@ export function sortMarketplacePlugins(plugins: readonly MarketplaceCatalogPlugi
 		id,
 		versions: [...versions].sort((a, b) => rcompare(a.package.version, b.package.version)),
 	}));
+}
+
+export function isMarketplaceUpdate(item: MarketplacePlugin, candidate: MarketplaceCatalogPlugin['versions'][number]) {
+	return (
+		item.source.kind === 'repository' &&
+		item.source.repositoryId === candidate.repositoryId &&
+		item.pluginId === candidate.package.name &&
+		!!valid(item.version) &&
+		gt(candidate.package.version, item.version) &&
+		(!!prerelease(item.version) || !prerelease(candidate.package.version))
+	);
 }
 
 export type MarketplaceInstalledStatus =
