@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/pnpm/store \
 
 FROM node:26.13.1-bookworm-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash nginx tini \
+    && apt-get install -y --no-install-recommends bash gosu nginx tini \
     && find /var/lib/apt/lists -mindepth 1 -delete \
     && install -d -o node -g node /app/data
 WORKDIR /app
@@ -30,7 +30,6 @@ COPY package.json ./
 COPY src ./src
 COPY scripts/docker/nginx.conf /etc/nexus-nginx.conf
 COPY --chmod=755 scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
-USER node
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s CMD node -e "fetch('http://127.0.0.1:8080/api/auth/state').then(r => { if (!r.ok) process.exitCode = 1 }).catch(() => { process.exitCode = 1 })"
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/nexus-terminal"]
