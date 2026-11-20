@@ -61,6 +61,7 @@ async function buildPlugin(directory: string): Promise<{ archive: Buffer; manife
 		peerDependencies: { 'nexus-terminal': '^' + pkg.version },
 		devDependencies: {
 			'nexus-terminal': 'file:./sdk.tgz',
+			'@lucide/vue': pkg.devDependencies['@lucide/vue'],
 			typescript: pkg.devDependencies.typescript,
 			vue: pkg.devDependencies.vue,
 			'vue-i18n': pkg.devDependencies['vue-i18n'],
