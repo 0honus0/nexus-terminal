@@ -15,6 +15,10 @@ export function provideUiMotion(settings: MotionSettings) {
 	provide(settingsKey, settings);
 }
 
+function cssPropertyName(key: string) {
+	return key.startsWith('--') ? key : key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
 /** Motion's native driver handles playback; Vue/REKA retain ownership of DOM and focus. */
 export function useUiMotion() {
 	const reduced = usePreferredReducedMotion();
@@ -30,7 +34,9 @@ export function useUiMotion() {
 		);
 		const previous = playing.get(element);
 		const current = previous ? getComputedStyle(element) : undefined;
-		const sampled = new Map(previous?.properties.map((key) => [key, current!.getPropertyValue(key)]));
+		const sampled = new Map(
+			previous?.properties.map((key) => [key, current!.getPropertyValue(cssPropertyName(key))]),
+		);
 		previous?.finish();
 		if (!settings.enabled.value || !element.animate) {
 			done();
@@ -38,7 +44,12 @@ export function useUiMotion() {
 		}
 		// Vue owns the final styles. Release Motion's committed values before painting,
 		// so percentages, drag positioning and theme tokens remain authoritative.
-		const baseline = new Map(properties.map((key) => [key, element.style.getPropertyValue(key)]));
+		const baseline = new Map(
+			properties.map((key) => {
+				const name = cssPropertyName(key);
+				return [name, element.style.getPropertyValue(name)];
+			}),
+		);
 		const keyframes = Object.fromEntries(
 			properties.map((key) => [
 				key,

@@ -323,7 +323,7 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	await expect(desktop.getByRole('button', { name: 'Remove page 1', exact: true })).toBeDisabled();
 });
 
-test('下拉选择框和菜单默认淡入，布局菜单沿纵向展开', async ({ page, host: _host }) => {
+test('选择框定位后纵向淡入，普通菜单淡入，布局菜单纵向展开', async ({ page, host: _host }) => {
 	const warnings: string[] = [];
 	page.on('pageerror', (error) => warnings.push(error.stack ?? error.message));
 	page.on('console', (event) => {
@@ -338,6 +338,8 @@ test('下拉选择框和菜单默认淡入，布局菜单沿纵向展开', async
 				const effect = animation.effect as KeyframeEffect;
 				const before = JSON.parse(this.dataset.testFrames ?? '[]') as Keyframe[][];
 				this.dataset.testFrames = JSON.stringify([...before, effect.getKeyframes()]);
+				const popper = this.closest<HTMLElement>('[data-reka-popper-content-wrapper]');
+				if (popper) this.dataset.testPopperTransform = popper.style.transform;
 			}
 			return animation;
 		};
@@ -370,9 +372,24 @@ test('下拉选择框和菜单默认淡入，布局菜单沿纵向展开', async
 
 	await page.goto('/?host-controls');
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
-	await page.getByRole('combobox', { name: 'Language' }).click();
-	await expectFade(page.getByRole('listbox'));
+	const language = page.getByRole('combobox', { name: 'Language' });
+	await language.press('ArrowDown');
+	const options = page.getByRole('listbox');
+	await expect(options).toHaveAttribute('data-test-popper-transform', /^translate\([^%]+px, [^%]+px\)$/);
+	await expect(options.locator('..')).not.toHaveAttribute('data-test-frames', /./);
+	await expectFade(options);
+	const fromTop = (await options.getAttribute('data-side')) === 'top';
+	const selectFrames = await popupFrames(options);
+	expect(selectFrames.flat()).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ clipPath: fromTop ? 'inset(18px -48px -48px)' : 'inset(-48px -48px 18px)' }),
+			expect.objectContaining({ clipPath: 'inset(-48px)' }),
+		]),
+	);
+	await expect(options.getByRole('option', { selected: true })).toBeFocused();
+	await expect(options).toHaveCSS('clip-path', 'none');
 	await page.keyboard.press('Escape');
+	await expect(language).toBeFocused();
 	await page
 		.getByRole('region', { name: 'Settings', exact: true })
 		.getByRole('button', { name: 'Close application' })
@@ -738,7 +755,7 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await expect.poll(() => tile.evaluate((element) => Number(element.getAttribute('gs-w') ?? 1))).toBe(1);
 });
 
-test('账户密码表单在宽屏同行，在窄屏排列为三行', async ({ page, host: _host }) => {
+test('账户密码等宽排列，保存按钮在操作行，窄屏时控件占满宽度', async ({ page, host: _host }) => {
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const settings = page.getByRole('region', { name: 'Settings', exact: true });
@@ -753,7 +770,9 @@ test('账户密码表单在宽屏同行，在窄屏排列为三行', async ({ pa
 			labels.filter((label) => !(label as HTMLLabelElement).control).map((label) => label.textContent),
 		);
 	expect(brokenLabels).toEqual([]);
-	const update = settings.getByRole('button', { name: 'Change password', exact: true });
+	const form = settings.getByRole('form', { name: 'Change password' });
+	await expect(form).toHaveAccessibleDescription('Changing your password signs out other sessions on this server.');
+	const update = form.getByRole('button', { name: 'Save password', exact: true });
 	const logout = settings.getByRole('button', { name: 'Sign out', exact: true });
 	await expect(update).toBeVisible();
 	await expect(logout).toBeVisible();
@@ -768,9 +787,9 @@ test('账户密码表单在宽屏同行，在窄屏排列为三行', async ({ pa
 			if (!first || !second || !save || !signOut) return false;
 			return (
 				first.x < second.x &&
-				second.x < save.x &&
-				Math.abs(first.y + first.height - (save.y + save.height)) <= 2 &&
-				Math.abs(second.y + second.height - (save.y + save.height)) <= 2 &&
+				Math.abs(first.y - second.y) <= 2 &&
+				Math.abs(first.width - second.width) <= 2 &&
+				second.y + second.height < save.y &&
 				Math.abs(save.x + save.width - (signOut.x + signOut.width)) <= 2
 			);
 		})
@@ -1207,4 +1226,15 @@ test('市场等待远程目录并从依赖解析推进到配置完成', async ({
 	await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
 	await dialog.getByRole('button', { name: 'Done', exact: true }).click();
 	await expect(dialog).toHaveCount(0);
+
+	// The installed-list response still reports the earlier pending runtime.
+	const card = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
+	await expect(card.getByRole('status')).toHaveText('Available');
+	await card.getByRole('button', { name: 'Manage Counter' }).click();
+	const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	await expect(details.getByText('Available', { exact: true })).toBeVisible();
+	host.setRuntime([runtime]);
+	await expect(details.getByText('Needs setup', { exact: true })).toBeVisible();
+	await details.getByRole('button', { name: 'Close application' }).click();
+	await expect(card.getByRole('status')).toHaveText('Needs setup');
 });

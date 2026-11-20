@@ -46,6 +46,7 @@
 	const { t, n } = useI18n({ useScope: 'global' });
 	const themeApi = useUiThemes().api;
 	const speedLabel = useId();
+	const passwordHint = useId();
 	const languages = [
 		{ value: 'en', label: 'English' },
 		{ value: 'zh', label: '简体中文' },
@@ -254,10 +255,10 @@
 			<form
 				class="account-password"
 				:aria-label="t('desktop.changePassword')"
+				:aria-describedby="passwordHint"
 				:aria-busy="changing"
 				@submit.prevent="changePassword"
 			>
-				<p>{{ t('desktop.passwordHint') }}</p>
 				<input
 					class="account-autofill"
 					type="text"
@@ -292,6 +293,9 @@
 							required
 						/>
 					</UiField>
+				</div>
+				<div class="account-password-actions">
+					<p :id="passwordHint">{{ t('desktop.passwordHint') }}</p>
 					<UiButton
 						class="account-save"
 						type="submit"
@@ -301,7 +305,7 @@
 						loading-animation="spinner"
 					>
 						<template #leading><KeyRound :size="16" /></template>
-						{{ t('desktop.changePassword') }}
+						{{ t('desktop.savePassword') }}
 					</UiButton>
 				</div>
 			</form>
@@ -461,7 +465,9 @@
 		overflow-wrap: anywhere;
 	}
 	.account-password {
-		margin-top: 22px;
+		margin-top: 6px;
+		padding-top: 18px;
+		border-top: 1px solid var(--ui-border);
 		display: grid;
 		gap: 16px;
 		position: relative;
@@ -474,12 +480,19 @@
 	}
 	.account-fields {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-		align-items: end;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 14px;
 	}
+	.account-password-actions {
+		display: flex;
+		align-items: center;
+		gap: 12px 16px;
+	}
+	.account-password-actions p {
+		flex: 1;
+	}
 	.account-save {
-		justify-self: end;
+		flex: none;
 	}
 	.account-autofill {
 		position: absolute;
@@ -492,8 +505,8 @@
 		.account-fields {
 			grid-template-columns: minmax(0, 1fr);
 		}
-		.account-save {
-			justify-self: stretch;
+		.account-password-actions {
+			display: grid;
 		}
 		.theme-options {
 			gap: 8px;

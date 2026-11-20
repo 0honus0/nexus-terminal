@@ -18,6 +18,7 @@
 	import {
 		marketplaceInstalledStatus,
 		marketplacePackageName,
+		marketplacePluginRuntime,
 		marketplaceStatusTones,
 	} from './marketplace-presentation.js';
 
@@ -63,10 +64,9 @@
 			const item = props.installed?.find(
 				({ pluginId, version }) => pluginId === pack.name && version === pack.version,
 			);
-			const live = props.pluginRuntime?.get(pack.name);
-			const runtime = props.pluginRuntime ? (live?.version === pack.version ? live : null) : item?.runtime;
+			const runtime = item ? marketplacePluginRuntime(item, props.pluginRuntime?.get(pack.name)) : null;
 			const installedStatus = item
-				? marketplaceInstalledStatus({ ...item, runtime: runtime ?? null })
+				? marketplaceInstalledStatus({ ...item, runtime })
 				: checking.value
 					? 'starting'
 					: 'unavailable';

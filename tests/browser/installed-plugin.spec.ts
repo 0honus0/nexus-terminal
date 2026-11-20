@@ -388,7 +388,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await page.getByRole('button', { name: '设置', exact: true }).click();
 		await page.getByLabel('当前密码', { exact: true }).fill('test-password');
 		await page.getByLabel('新密码', { exact: true }).fill('updated-test-password');
-		await page.getByRole('button', { name: '修改密码', exact: true }).click();
+		await page.getByRole('button', { name: '保存密码', exact: true }).click();
 		await expect(page.getByText('密码已修改。', { exact: true })).toBeVisible();
 		await expect.poll(() => settingsSubscriptions).toBe(2);
 		await expect(widget).toBeVisible();

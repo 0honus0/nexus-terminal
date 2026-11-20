@@ -1,6 +1,7 @@
 import rcompare from 'semver/functions/rcompare.js';
 import type { UiBadgeProps } from '../../ui/browser/ui-component-types.js';
 import type { PluginManifest } from '../../plugin/plugin-manifest-types.js';
+import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 import type { MarketplacePlugin } from '../marketplace-types.js';
 import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
 
@@ -96,6 +97,10 @@ export const marketplaceStatusTones = {
 	unavailable: 'warning',
 	failed: 'danger',
 } satisfies Record<MarketplaceInstalledStatus, UiBadgeProps['tone']>;
+
+export function marketplacePluginRuntime(item: MarketplacePlugin, live?: PluginRuntimeInfo): PluginRuntimeInfo | null {
+	return live?.version === item.version ? live : item.runtime;
+}
 
 export function marketplaceInstalledStatus({
 	enabled,

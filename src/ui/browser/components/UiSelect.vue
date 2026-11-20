@@ -1,6 +1,6 @@
 <script setup lang="ts">
-	import UiTransition from './UiTransition.vue';
 	import { computed } from 'vue';
+	import { useUiMotion } from '../ui-motion-api.js';
 	import { useTransientOverlay } from '../ui-overlay.js';
 	import type { UiSelectProps } from '../ui-component-types.js';
 	import {
@@ -21,6 +21,8 @@
 	const value = defineModel<string>();
 	const open = defineModel<boolean>('open', { default: false });
 	const overlay = useTransientOverlay(open);
+	const { play } = useUiMotion();
+	const visibleClip = 'inset(-48px)';
 	const props = withDefaults(defineProps<UiSelectProps>(), {
 		density: 'default',
 		required: false,
@@ -33,6 +35,49 @@
 	const selectedLabel = computed(
 		() => props.options.find((option) => option.value === value.value)?.label ?? props.placeholder ?? '',
 	);
+	let pendingContent: HTMLElement | null = null;
+
+	function beforeEnter(wrapper: Element) {
+		pendingContent = wrapper.querySelector<HTMLElement>('[data-ui="select-content"]');
+		pendingContent?.setAttribute('data-positioning', '');
+	}
+
+	function placed() {
+		if (!open.value || !pendingContent) return;
+		const content = pendingContent;
+		pendingContent = null;
+		// Reka moves the wrapper into place before emitting placed. Animate only the content.
+		content.removeAttribute('data-positioning');
+		const openingClip = content.dataset.side === 'top' ? 'inset(18px -48px -48px)' : 'inset(-48px -48px 18px)';
+		play(
+			content,
+			[
+				{ opacity: 0, clipPath: openingClip },
+				{ opacity: 1, clipPath: visibleClip },
+			],
+			150,
+		);
+	}
+
+	function leave(wrapper: Element, done: () => void) {
+		const content = wrapper.querySelector<HTMLElement>('[data-ui="select-content"]');
+		if (!content || content === pendingContent) {
+			pendingContent = null;
+			done();
+			return;
+		}
+		wrapper.setAttribute('inert', '');
+		wrapper.setAttribute('aria-hidden', 'true');
+		play(
+			content,
+			[
+				{ opacity: 1, clipPath: visibleClip },
+				{ opacity: 0, clipPath: visibleClip },
+			],
+			90,
+			done,
+		);
+	}
 </script>
 
 <template>
@@ -55,8 +100,8 @@
 			<SelectIcon class="ui-select__icon"><ChevronDown :size="15" /></SelectIcon>
 		</SelectTrigger>
 		<SelectPortal v-if="props.options.length">
-			<UiTransition preset="fade"
-				><SelectContent
+			<Transition appear :css="false" @before-enter="beforeEnter" @leave="leave">
+				<SelectContent
 					v-if="open"
 					force-mount
 					data-ui="select-content"
@@ -64,6 +109,7 @@
 					position="popper"
 					:body-lock="false"
 					:disable-outside-pointer-events="false"
+					@placed="placed"
 					@pointer-down-outside="overlay.interactOutside"
 					@close-auto-focus="overlay.closeAutoFocus"
 					:align="props.contentAlign"
@@ -83,10 +129,9 @@
 							<SelectItemText class="ui-select-option__label">{{ option.label }}</SelectItemText>
 						</SelectItem>
 					</SelectViewport>
-					<SelectScrollDownButton class="ui-select-scroll"
-						><ChevronDown :size="15"
-					/></SelectScrollDownButton> </SelectContent
-			></UiTransition>
+					<SelectScrollDownButton class="ui-select-scroll"><ChevronDown :size="15" /></SelectScrollDownButton>
+				</SelectContent>
+			</Transition>
 		</SelectPortal>
 	</SelectRoot>
 </template>
@@ -169,6 +214,9 @@
 		user-select: none;
 		-webkit-user-select: none;
 		caret-color: transparent;
+	}
+	:global(.ui-select-content[data-positioning]) {
+		opacity: 0;
 	}
 	.ui-select-viewport {
 		padding: 5px;

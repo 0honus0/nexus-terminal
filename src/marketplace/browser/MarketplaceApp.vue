@@ -38,6 +38,7 @@
 	import {
 		marketplaceInstalledStatus,
 		marketplaceInstalledName,
+		marketplacePluginRuntime,
 		marketplaceStatusTones,
 		sortMarketplacePlugins,
 	} from './marketplace-presentation.js';
@@ -101,7 +102,7 @@
 	const managedId = ref<string>();
 	const managedOpen = ref(false);
 	const managed = computed(() => installed?.find(({ pluginId }) => pluginId === managedId.value));
-	const managedStatus = computed(() => (managed.value ? marketplaceInstalledStatus(managed.value) : 'unavailable'));
+	const managedStatus = computed(() => (managed.value ? installedStatus(managed.value) : 'unavailable'));
 	const managedEntries = computed(() => applications.filter(({ pluginId }) => pluginId === managedId.value));
 	const managedBuiltinKey = ref<string>();
 	const managedBuiltin = computed(() => builtins.find(({ key }) => key === managedBuiltinKey.value));
@@ -146,10 +147,18 @@
 			const name = marketplaceInstalledName(item, locale.value, entries[0]?.label);
 			const kind = t('marketplace.kind.' + (item.kind ?? 'unknown'));
 			return `${name} ${item.pluginId} ${kind}`.toLowerCase().includes(filter)
-				? [{ item, name, entries, status: marketplaceInstalledStatus(item) }]
+				? [{ item, name, entries, status: installedStatus(item) }]
 				: [];
 		});
 	});
+
+	function installedStatus(item: MarketplacePlugin) {
+		return marketplaceInstalledStatus({
+			...item,
+			runtime: marketplacePluginRuntime(item, pluginRuntime?.get(item.pluginId)),
+		});
+	}
+
 	const installedGroups = computed(() =>
 		(['application', 'extension', null] as const).map((kind) => ({
 			kind,
