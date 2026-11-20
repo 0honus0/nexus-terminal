@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { test as base, type WebSocketRoute } from '@playwright/test';
 import { marketplaceFrontendBase } from '../../src/marketplace/marketplace-http-types.js';
-import { MarketplaceFrontendsTopic, MarketplacePluginId } from '../../src/marketplace/marketplace-types.js';
-import { PluginRuntimeStateTopic } from '../../src/plugin/plugin-state-types.js';
+import {
+	MarketplaceFrontendsTopic,
+	MarketplaceOperationsTopic,
+	MarketplacePluginId,
+	type MarketplaceOperation,
+} from '../../src/marketplace/marketplace-types.js';
+import { PluginRuntimeStateTopic, type PluginRuntimeInfo } from '../../src/plugin/plugin-state-types.js';
 import { settingsBase } from '../../src/settings/settings-http-types.js';
 import { defaultSettings, SettingsPatchSchema, SettingsTopic } from '../../src/settings/settings-types.js';
 import { StateCommandSchema, stateTopicKey, type StateTopic } from '../../src/state/state-ws-types.js';
@@ -10,12 +15,20 @@ import manifest from '../fixtures/plugins/test/package.json' with { type: 'json'
 
 export { expect } from '@playwright/test';
 
-export const test = base.extend<{ host: { setPluginVersion(version: string | null): void } }>({
+interface HostFixture {
+	setPluginVersion(version: string | null): void;
+	setOperations(operations: MarketplaceOperation[]): void;
+	setRuntime(runtime: PluginRuntimeInfo[]): void;
+}
+
+export const test = base.extend<{ host: HostFixture }>({
 	async host({ page }, use) {
 		const market = '/api/plugins/' + encodeURIComponent(MarketplacePluginId);
 		const entry = marketplaceFrontendBase + '/' + encodeURIComponent(manifest.name);
 		let preferences = { revision: 1, preferences: { ...defaultSettings } };
 		let version: string | null = manifest.version;
+		let operations: MarketplaceOperation[] = [];
+		let runtime: PluginRuntimeInfo[] = [];
 		let socket: WebSocketRoute | undefined;
 		const subscribed = new Set<string>();
 		const topics = new Map<string, { instanceId: string; revision: number }>();
@@ -92,14 +105,24 @@ export const test = base.extend<{ host: { setPluginVersion(version: string | nul
 				subscribed.add(key);
 				if (key === stateTopicKey(MarketplaceFrontendsTopic)) publishPlugins();
 				else if (key === stateTopicKey(SettingsTopic)) publish(topic, preferences);
-				else if (key === stateTopicKey(PluginRuntimeStateTopic) || topic.name === 'marketplace.operations')
-					publish(topic, []);
+				else if (key === stateTopicKey(PluginRuntimeStateTopic)) publish(topic, runtime);
+				else if (key === stateTopicKey(MarketplaceOperationsTopic)) publish(topic, operations);
 			});
 		});
 		await use({
 			setPluginVersion(next) {
 				version = next;
 				publishPlugins();
+			},
+
+			setOperations(next) {
+				operations = next;
+				publish(MarketplaceOperationsTopic, operations);
+			},
+
+			setRuntime(next) {
+				runtime = next;
+				publish(PluginRuntimeStateTopic, runtime);
 			},
 		});
 	},

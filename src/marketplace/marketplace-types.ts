@@ -129,6 +129,7 @@ export const MarketplaceOperationSchema = z.strictObject({
 	createdAt: z.iso.datetime(),
 	finishedAt: z.iso.datetime().optional(),
 	committed: z.boolean(),
+	completedPackages: z.array(PluginPackageNameSchema).optional(),
 	step: z
 		.strictObject({
 			phase: z.enum(['validate', 'download', 'register', 'activate']),

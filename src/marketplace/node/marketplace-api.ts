@@ -580,11 +580,12 @@ export class MarketplaceApi {
 
 	async #applyInstall(
 		current: MarketplaceInstallPlan,
-		{ commit, step: progress }: MarketplaceOperationScope,
+		{ commit, step: progress, completePackage }: MarketplaceOperationScope,
 	): Promise<void> {
 		const signal = this.#scope.signal;
 		const activate: InstalledPlugin[] = [];
 		let activationIssue: MarketplacePluginIssue | undefined;
+		let packagesApplied = false;
 		try {
 			for (const step of current.steps) {
 				this.#assertOpen();
@@ -592,6 +593,7 @@ export class MarketplaceApi {
 					source,
 					package: { name: pluginId, version },
 				} = step;
+				progress({ phase: step.action === 'reuse' ? 'register' : 'download', pluginId });
 				if (step.action === 'reuse') {
 					const reused = await this.#installed(pluginId);
 					if (
@@ -604,6 +606,7 @@ export class MarketplaceApi {
 							commit();
 						}
 					}
+					completePackage(pluginId);
 					continue;
 				}
 				if (source.kind !== 'repository') throw new CodedError('MARKETPLACE_INSTALL_PLAN_CHANGED');
@@ -615,7 +618,6 @@ export class MarketplaceApi {
 				if (previous?.repositoryId && previous.repositoryId !== source.repositoryId)
 					throw new CodedError('MARKETPLACE_INSTALL_PLAN_CHANGED');
 
-				progress({ phase: 'download', pluginId });
 				const directory = await this.#packages.prepare(step, signal);
 				progress({ phase: 'register', pluginId });
 				let saved: InstalledPlugin;
@@ -640,10 +642,12 @@ export class MarketplaceApi {
 				this.#issues.delete(pluginId);
 				if (saved.enabled) activate.push(saved);
 				if (previous) await this.#removePackage(previous.directory, pluginId);
+				completePackage(pluginId);
 			}
+			packagesApplied = true;
 		} finally {
 			if (!signal.aborted && activate.length) {
-				progress({ phase: 'activate', pluginId: current.target.pluginId });
+				if (packagesApplied) progress({ phase: 'activate', pluginId: current.target.pluginId });
 				await this.#start(activate);
 			}
 		}

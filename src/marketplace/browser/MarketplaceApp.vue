@@ -12,7 +12,8 @@
 	} from '../marketplace-http-types.js';
 	import type { MarketplaceDesktopApi } from './marketplace-desktop-api.js';
 	import { CodedError } from '../../utils/error.js';
-	import type { MarketplaceInstallAttempt, MarketplacePlugin } from '../marketplace-types.js';
+	import type { MarketplaceInstallAttempt, MarketplaceOperation, MarketplacePlugin } from '../marketplace-types.js';
+	import type { PluginReadiness, PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import type { MarketplaceInstallPlan, MarketplaceRepositorySource } from '../marketplace-install-types.js';
 	import type { MarketplaceCatalogPlugin, MarketplaceRepository } from '../marketplace-catalog-types.js';
 	import {
@@ -30,6 +31,7 @@
 
 	import MarketplaceDiscover from './MarketplaceDiscover.vue';
 	import MarketplaceInstalledCard from './MarketplaceInstalledCard.vue';
+	import MarketplaceInstallDialog from './MarketplaceInstallDialog.vue';
 	import MarketplacePluginDialog from './MarketplacePluginDialog.vue';
 	import MarketplaceRepositories from './MarketplaceRepositories.vue';
 	import {
@@ -39,12 +41,20 @@
 		sortMarketplacePlugins,
 	} from './marketplace-presentation.js';
 
-	const { installed, loading, api, minimized, log, applications, builtins } = defineProps<{
+	const { installed, loading, api, minimized, log, applications, pluginRuntime, builtins } = defineProps<{
 		installed?: readonly MarketplacePlugin[];
 		loading: boolean;
 		api: MarketplaceDesktopApi;
 		minimized: boolean;
-		applications: readonly { key: string; pluginId: string; label: string; visible: boolean }[];
+		applications: readonly {
+			key: string;
+			id: string;
+			pluginId: string;
+			label: string;
+			visible: boolean;
+			readiness: PluginReadiness;
+		}[];
+		pluginRuntime?: ReadonlyMap<string, PluginRuntimeInfo>;
 		builtins: readonly {
 			key: string;
 			label: string;
@@ -68,6 +78,8 @@
 	const detailOpen = ref(false);
 	const planOpen = ref(false);
 	const plan = shallowRef<MarketplaceInstallPlan>();
+	const installTarget = shallowRef<MarketplaceRepositorySource>();
+	const installOperation = shallowRef<MarketplaceOperation>();
 	const planning = ref(false);
 	const submittingIds = ref(new Set<string>());
 	const dismissing = ref<string>();
@@ -94,6 +106,10 @@
 	const clearOpen = ref(false);
 	const retained = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items']>([]);
 	const operations = api.operations;
+	watch(operations, (items) => {
+		const current = items.find(({ id }) => id === installOperation.value?.id);
+		if (current) installOperation.value = current;
+	});
 	const activeIds = computed(() => {
 		const ids = new Set(submittingIds.value);
 		for (const { change, state } of operations.value)
@@ -101,10 +117,12 @@
 		return ids;
 	});
 	let planRequest: AbortController | undefined;
+	let uninstallRequest: AbortController | undefined;
 	const selected = computed(() => catalog.value?.find(({ id }) => id === selectedId.value));
 	const managing = ref(false);
 	const query = ref('');
 	const refreshing = ref(false);
+	const catalogFailed = ref(false);
 	const scope = new AbortController();
 	let catalogRead: AbortController | undefined;
 	const results = computed(() => {
@@ -132,17 +150,13 @@
 				managedOpen.value = false;
 				builtinOpen.value = false;
 				planOpen.value = false;
-				planRequest?.abort();
 				uninstallOpen.value = false;
 				clearOpen.value = false;
 			}
 		},
 	);
-	watch(detailOpen, (visible) => {
-		if (!visible) {
-			planRequest?.abort();
-			planOpen.value = false;
-		}
+	watch(planOpen, (visible) => {
+		if (!visible) planRequest?.abort();
 	});
 	onScopeDispose(() => scope.abort());
 	void discover(true);
@@ -194,6 +208,7 @@
 		catalogRead = request;
 		const signal = AbortSignal.any([scope.signal, request.signal]);
 		refreshing.value = true;
+		catalogFailed.value = false;
 		try {
 			const [items, sources] = await Promise.allSettled([api.readCatalog(signal), api.readRepositories(signal)]);
 			signal.throwIfAborted();
@@ -201,7 +216,6 @@
 			if (items.status === 'rejected') throw items.reason;
 			catalog.value = sortMarketplacePlugins(items.value);
 
-			// 先显示已有目录，官方仓库联网失败时继续使用缓存。
 			const official = refreshOfficial && repositories.value.find(({ official }) => official);
 			if (!official) return;
 
@@ -210,8 +224,10 @@
 			signal.throwIfAborted();
 			catalog.value = sortMarketplacePlugins(updated);
 		} catch {
-			if (!signal.aborted)
+			if (!signal.aborted) {
+				catalogFailed.value = !catalog.value?.length;
 				log.report({ source: 'marketplace', code: 'MARKETPLACE_CATALOG_READ_FAILED', level: 'warn' });
+			}
 		} finally {
 			if (catalogRead === request) {
 				catalogRead = undefined;
@@ -260,13 +276,18 @@
 		const request = new AbortController();
 		planRequest = request;
 		const signal = AbortSignal.any([request.signal, scope.signal]);
+		installTarget.value = source;
+		installOperation.value = undefined;
+		plan.value = undefined;
+		detailOpen.value = false;
+		managedOpen.value = false;
+		planOpen.value = true;
 		planning.value = true;
 		try {
 			const result = await api.previewInstall(source, signal);
 			signal.throwIfAborted();
-			if (minimized || (!detailOpen.value && !managedOpen.value && !managing.value)) return;
+			if (minimized || !planOpen.value) return;
 			plan.value = result;
-			planOpen.value = true;
 		} catch {
 			if (!signal.aborted)
 				log.report({
@@ -276,8 +297,26 @@
 					userVisible: true,
 				});
 		} finally {
-			if (!scope.signal.aborted && planRequest === request) planning.value = false;
+			if (planRequest === request) {
+				planRequest = undefined;
+				if (!scope.signal.aborted) planning.value = false;
+			}
 		}
+	}
+
+	function openConfiguration(key: string): void {
+		planOpen.value = false;
+		emit('openApplication', key);
+	}
+
+	function finishInstallation(): void {
+		planOpen.value = false;
+		installOperation.value = undefined;
+		installTarget.value = undefined;
+		plan.value = undefined;
+		managing.value = true;
+		query.value = '';
+		void readManagement();
 	}
 
 	function reportFailure(cause: unknown): void {
@@ -301,13 +340,13 @@
 
 		submittingIds.value.add(pluginId);
 		try {
-			await api.submit(command);
+			const operation = await api.submit(command);
 			if (scope.signal.aborted || command.action === 'set-enabled' || command.action === 'reload') return;
 
 			// 等待受理时用户可能已切换目标，只关闭仍属于本次操作的界面。
-			if (command.action === 'install' && plan.value === command.plan) {
-				planOpen.value = false;
-				if (selectedId.value === pluginId) detailOpen.value = false;
+			if (command.action === 'install') {
+				if (plan.value === command.plan) installOperation.value = operation;
+				return;
 			}
 			if (command.action === 'uninstall' && uninstallPlan.value === command.plan) uninstallOpen.value = false;
 			if (command.action === 'clear-data' && clearTarget.value?.pluginId === pluginId) clearOpen.value = false;
@@ -326,8 +365,8 @@
 	async function prepareUninstall(item: MarketplacePlugin): Promise<void> {
 		if (planning.value) return;
 		const request = new AbortController();
-		planRequest?.abort();
-		planRequest = request;
+		uninstallRequest?.abort();
+		uninstallRequest = request;
 		const signal = AbortSignal.any([request.signal, scope.signal]);
 		planning.value = true;
 		try {
@@ -339,14 +378,13 @@
 		} catch (cause) {
 			if (!signal.aborted) reportFailure(cause);
 		} finally {
-			if (!scope.signal.aborted && planRequest === request) planning.value = false;
+			if (!scope.signal.aborted && uninstallRequest === request) planning.value = false;
 		}
 	}
 
 	watch(managedOpen, (open) => {
 		if (!open) {
-			planRequest?.abort();
-			planOpen.value = false;
+			uninstallRequest?.abort();
 			uninstallOpen.value = false;
 		}
 	});
@@ -391,6 +429,9 @@
 						@click="refresh()"
 						><RotateCw :size="17"
 					/></UiButton>
+					<UiButton v-if="installOperation && !planOpen" @click="planOpen = true">
+						{{ t('marketplace.installFlow.resume') }}
+					</UiButton>
 					<UiButton
 						class="marketplace-manage-entry"
 						icon-only
@@ -409,7 +450,8 @@
 				:plugins="catalog ?? []"
 				:installed="installed ?? []"
 				:query="query"
-				:loaded="!!catalog"
+				:refreshing="refreshing"
+				:failed="catalogFailed"
 				@inspect="inspect"
 			/>
 			<template v-else>
@@ -636,11 +678,11 @@
 			</template>
 			<template v-if="managed" #footer>
 				<UiButton
-					tone="danger"
-					:disabled="planning || activeIds.has(managed.pluginId)"
-					@click="prepareUninstall(managed)"
+					v-if="managed.enabled"
+					:disabled="activeIds.has(managed.pluginId)"
+					@click="submit({ action: 'reload', pluginId: managed.pluginId })"
 				>
-					{{ t('marketplace.uninstall') }}
+					{{ t('marketplace.reload') }}
 				</UiButton>
 				<UiButton
 					v-if="updateTarget"
@@ -652,11 +694,11 @@
 					{{ t('marketplace.updateVersion', { version: updateTarget.version }) }}
 				</UiButton>
 				<UiButton
-					v-if="managed.enabled"
-					:disabled="activeIds.has(managed.pluginId)"
-					@click="submit({ action: 'reload', pluginId: managed.pluginId })"
+					tone="danger"
+					:disabled="planning || activeIds.has(managed.pluginId)"
+					@click="prepareUninstall(managed)"
 				>
-					{{ t('marketplace.reload') }}
+					{{ t('marketplace.uninstall') }}
 				</UiButton>
 			</template>
 		</UiDialog>
@@ -701,63 +743,29 @@
 				</UiButton>
 			</template>
 		</UiDialog>
-		<UiDialog v-model:open="planOpen" :title="t('marketplace.previewInstall')" :close-label="t('closeApplication')">
-			<template v-if="plan">
-				<UiSection v-if="plan.blockers.length" :title="t('marketplace.blockers')">
-					<UiList>
-						<UiListItem
-							v-for="(issue, index) in plan.blockers"
-							:key="index"
-							:title="issue.pluginId"
-							:description="t('marketplace.blocker.' + issue.code)"
-						/>
-					</UiList>
-				</UiSection>
-				<UiSection v-if="plan.affected?.length" :title="t('marketplace.affected')">
-					<UiList>
-						<UiListItem v-for="id in plan.affected" :key="id" :title="id" />
-					</UiList>
-				</UiSection>
-				<UiList v-if="plan.steps.length">
-					<UiListItem
-						v-for="step in plan.steps"
-						:key="step.package.name"
-						:title="step.package.name"
-						:description="
-							step.repository
-								? step.package.version + ' · ' + step.repository.label
-								: step.package.version
-						"
-					>
-						<template #actions
-							><UiBadge tone="neutral">{{
-								t('marketplace.planAction.' + step.action)
-							}}</UiBadge></template
-						>
-					</UiListItem>
-				</UiList>
-			</template>
-			<template v-if="plan && plan.steps.length && !plan.blockers.length" #footer>
-				<UiButton
-					tone="primary"
-					:loading="submittingIds.has(plan.target.pluginId)"
-					:disabled="activeIds.has(plan.target.pluginId)"
-					@click="submit({ action: 'install', plan })"
-				>
-					{{
-						t(
-							plan.steps.some((step) => step.action === 'update')
-								? 'marketplace.confirmUpdate'
-								: 'marketplace.confirmInstall',
-						)
-					}}
-				</UiButton>
-			</template>
-		</UiDialog>
+		<MarketplaceInstallDialog
+			v-if="installTarget"
+			v-model:open="planOpen"
+			:plan="plan"
+			:planning="planning"
+			:operation="installOperation"
+			:submitting="submittingIds.has(installTarget.pluginId)"
+			:busy="activeIds.has(installTarget.pluginId)"
+			:installed="installed"
+			:loading-installed="loading"
+			:plugin-runtime="pluginRuntime"
+			:applications="applications"
+			@confirm="plan && submit({ action: 'install', plan })"
+			@retry="preview(installTarget)"
+			@configure="openConfiguration"
+			@finish="finishInstallation"
+		/>
 	</div>
 </template>
 <style scoped>
 	.marketplace-app {
+		display: flex;
+		flex-direction: column;
 		min-height: 100%;
 		container-type: inline-size;
 	}
@@ -790,6 +798,9 @@
 		--ui-button-border: color-mix(in srgb, var(--ui-primary) 15%, var(--ui-border));
 	}
 	.marketplace-content {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
 		padding: 0 28px 34px;
 	}
 	@container (max-width: 699px) {

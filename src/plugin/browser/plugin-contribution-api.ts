@@ -34,6 +34,10 @@ export interface PluginApplicationContribution extends Omit<PluginComponentContr
 	/** 函数形式可使用宿主当前语言。未提供语言时返回默认名称。 */
 	readonly label: MaybeRef<string> | ((locale?: string) => string);
 	readonly component: Component<PluginWindowProps> | Component<PluginComponentProps>;
+	/** 提前读取首个窗口所需的模块。与组件加载器共用请求，随插件实例失效。 */
+	preload?(): Promise<unknown>;
+	/** 应用启动入口与窗口标题共用的图标。 */
+	readonly icon?: Component;
 	readonly multipleWindows?: boolean;
 	readonly tile?: PluginApplicationTileContribution;
 	readonly defaultWindowSize?: { readonly width: number; readonly height: number };

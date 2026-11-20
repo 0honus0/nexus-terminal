@@ -18,7 +18,7 @@ type ComponentContribution = Omit<PluginComponentContribution, 'label'> &
 	Pick<PluginApplicationContribution, 'label'> &
 	Pick<
 		z.infer<typeof ApplicationSchema>,
-		'multipleWindows' | 'defaultWindowSize' | 'scrollMode' | 'scrollbarGutter' | 'tile'
+		'icon' | 'multipleWindows' | 'defaultWindowSize' | 'scrollMode' | 'scrollbarGutter' | 'tile' | 'preload'
 	> & { readonly kind: 'applications' | 'widgets' };
 
 type LoginContribution = AuthLoginContribution & { readonly kind: 'login' };
@@ -45,6 +45,10 @@ const ComponentSchema = z.strictObject({
 });
 
 const ApplicationSchema = ComponentSchema.extend({
+	icon: ComponentSchema.shape.component.optional(),
+	preload: z
+		.custom<NonNullable<PluginApplicationContribution['preload']>>((value) => typeof value === 'function')
+		.optional(),
 	tile: z
 		.strictObject({
 			component: z.custom<PluginApplicationTileContribution['component']>(

@@ -56,6 +56,10 @@ export class App {
 		return this.#desktopPluginsReady.value;
 	}
 
+	get pluginRuntime() {
+		return this.#source.runtime;
+	}
+
 	/** 认证状态决定插件清单来源。登录前后的同一修订可以复用加载器与实例。 */
 	start(): Promise<void> {
 		this.#controller.signal.throwIfAborted();

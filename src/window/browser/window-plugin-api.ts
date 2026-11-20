@@ -1,7 +1,7 @@
 import type { Component, ComputedRef, MaybeRefOrGetter } from 'vue';
 import type { PluginComponentProps } from '../../plugin/browser/plugin-contribution-api.js';
 import type { PluginViewApi } from '../../plugin/browser/plugin-view-api.js';
-import type { UiMenuItem } from '../../ui/browser/ui-component-types.js';
+import type { UiDropdownMenuProps, UiMenuItem } from '../../ui/browser/ui-component-types.js';
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
 import { CodedError } from '../../utils/error.js';
 
@@ -29,6 +29,7 @@ export interface WindowAction {
 	readonly icon?: Component;
 	readonly disabled?: boolean;
 	readonly items?: readonly UiMenuItem[];
+	readonly menuTransition?: UiDropdownMenuProps['transition'];
 }
 
 export interface WindowActionsOptions {

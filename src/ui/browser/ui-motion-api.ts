@@ -89,5 +89,5 @@ export function useUiMotion() {
 	onScopeDispose(() => {
 		for (const finish of [...active.values()]) finish();
 	});
-	return { play };
+	return { play, enabled: settings.enabled };
 }

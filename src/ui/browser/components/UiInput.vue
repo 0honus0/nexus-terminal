@@ -1,8 +1,10 @@
 <script setup lang="ts">
+	import { useId } from 'vue';
 	import type { UiInputProps } from '../ui-component-types.js';
 	defineOptions({ inheritAttrs: false });
 	withDefaults(defineProps<UiInputProps>(), { type: 'text', density: 'default' });
 	const model = defineModel<string>({ default: '' });
+	const inputId = useId();
 </script>
 <template>
 	<div
@@ -15,6 +17,7 @@
 		<span v-if="$slots.leading" class="ui-input__accessory"><slot name="leading" /></span>
 		<input
 			v-bind="{ ...$attrs, ...(invalid ? { 'aria-invalid': true } : {}) }"
+			:id="typeof $attrs.id === 'string' && $attrs.id ? $attrs.id : inputId"
 			v-model="model"
 			:type="type"
 			:disabled="disabled"

@@ -211,6 +211,7 @@
 					}}</span>
 					<input
 						type="file"
+						name="backup-file"
 						accept=".json"
 						:aria-label="t('backup.file')"
 						:disabled="busy"

@@ -37,11 +37,13 @@ describe('form primitives', () => {
 		const component = defineComponent({
 			components: { UiInput, UiField },
 			template:
-				'<div><UiField label="Name" hint="Help" v-slot="field"><UiInput :id="field.id" :aria-describedby="field.describedby" /></UiField><UiField label="Other" v-slot="field"><UiInput :id="field.id" /></UiField></div>',
+				'<div><UiField label="Name" hint="Help" v-slot="field"><UiInput :id="field.id" :aria-describedby="field.describedby" /></UiField><UiField label="Other" v-slot="field"><UiInput :id="field.id" /></UiField><UiInput aria-label="Search" /><UiInput aria-label="Filter" /></div>',
 		});
 		const wrapper = mount(component);
 		const inputs = wrapper.findAll('input');
-		expect(inputs[0]!.attributes('id')).not.toBe(inputs[1]!.attributes('id'));
+		const ids = inputs.map((input) => input.attributes('id'));
+		expect(ids.every(Boolean)).toBe(true);
+		expect(new Set(ids).size).toBe(inputs.length);
 		expect(wrapper.get('label').attributes('for')).toBe(inputs[0]!.attributes('id'));
 		expect(inputs[0]!.attributes('aria-describedby')).toBe(wrapper.get('p').attributes('id'));
 		wrapper.unmount();

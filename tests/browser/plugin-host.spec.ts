@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import type { Locator } from '@playwright/test';
 import { version as hostVersion } from '../../package.json' with { type: 'json' };
 import { marketplaceFrontendBase } from '../../src/marketplace/marketplace-http-types.js';
+import { MarketplacePluginId, type MarketplaceOperation } from '../../src/marketplace/marketplace-types.js';
+import type { PluginRuntimeInfo } from '../../src/plugin/plugin-state-types.js';
 import { expect, test } from './plugin-host-fixture.js';
 
 for (const entryFails of [false, true]) {
@@ -31,6 +34,65 @@ for (const entryFails of [false, true]) {
 	});
 }
 
+const installedPluginsPath = `**/api/plugins/${encodeURIComponent(MarketplacePluginId)}/manager/plugins`;
+
+test('桌面首次渲染时市场卡片已有安装数量和正确尺寸', async ({ page, host: _host }) => {
+	const requested = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	await page.route(installedPluginsPath, async (route) => {
+		requested.resolve();
+		await release.promise;
+		await route.fallback();
+	});
+	await page.addInitScript(() => {
+		const observer = new MutationObserver(() => {
+			const tile = document.querySelector('[data-tile="builtin:marketplace"] .marketplace-tile');
+			if (!tile) return;
+			observer.disconnect();
+			document.documentElement.dataset.firstTileCount = tile.querySelector('strong')?.textContent;
+			document.documentElement.dataset.firstTileHeight = String(tile.getBoundingClientRect().height);
+		});
+		observer.observe(document, { childList: true, subtree: true });
+	});
+
+	await page.goto('/');
+	const loading = page.getByRole('status', { name: 'Preparing your workspace' });
+	const desktop = page.locator('.desktop-shell');
+	try {
+		await requested.promise;
+		await expect(loading).toBeVisible();
+		await expect(desktop).toHaveCount(0);
+	} finally {
+		release.resolve();
+	}
+
+	await expect(loading).toHaveCount(0);
+	const tile = desktop.locator('.marketplace-tile');
+	await expect(tile.locator('strong')).toHaveText('0');
+	await expect(page.locator('html')).toHaveAttribute('data-first-tile-count', '0');
+	const firstHeight = Number(await page.locator('html').getAttribute('data-first-tile-height'));
+	const finalHeight = await tile.evaluate((element) => element.getBoundingClientRect().height);
+	expect(firstHeight).toBeGreaterThan(0);
+	expect(firstHeight).toBeCloseTo(finalHeight, 1);
+});
+
+test('插件数量读取超时后仍显示桌面', async ({ page, host: _host }) => {
+	const release = Promise.withResolvers<void>();
+	await page.route(installedPluginsPath, async (route) => {
+		await release.promise;
+		await route.fallback();
+	});
+	try {
+		await page.goto('/');
+		const loading = page.getByRole('status', { name: 'Preparing your workspace' });
+		await expect(loading).toBeVisible();
+		await expect(loading).toHaveCount(0, { timeout: 10_000 });
+		await expect(page.locator('.marketplace-tile strong')).toHaveText('—');
+	} finally {
+		release.resolve();
+	}
+});
+
 test('首份插件清单超时后仍可打开内置应用', async ({ page, host: _host }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.clock.install();
@@ -45,6 +107,54 @@ test('首份插件清单超时后仍可打开内置应用', async ({ page, host:
 	await expect(loading).toHaveCount(0);
 	await desktop.getByRole('button', { name: 'Settings', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'Settings', exact: true })).toBeVisible();
+});
+
+test('桌面空闲及指向入口时预加载窗口，点击复用并记录使用顺序', async ({ page, host: _host }) => {
+	await page.addInitScript(() => {
+		let next = 0;
+		let loads = 0;
+		const pending = new Map<number, IdleRequestCallback>();
+		window.requestIdleCallback = (callback) => {
+			pending.set(++next, callback);
+			return next;
+		};
+		window.cancelIdleCallback = (id) => {
+			pending.delete(id);
+		};
+		window.addEventListener('nexus:test:idle', () => {
+			for (const [id, callback] of pending) {
+				pending.delete(id);
+				callback({
+					didTimeout: false,
+
+					timeRemaining: () => 20,
+				});
+			}
+		});
+		window.addEventListener('nexus:test:preloaded', () => {
+			document.documentElement.dataset.preloads = String(++loads);
+		});
+	});
+	await page.goto('/');
+	const launcher = page.getByRole('button', { name: 'Counter', exact: true });
+	const windowRegion = page.getByRole('region', { name: 'Counter', exact: true });
+	const html = page.locator('html');
+	await expect(launcher).toBeVisible();
+	await expect(html).not.toHaveAttribute('data-preloads');
+	await page.evaluate(() => window.dispatchEvent(new Event('nexus:test:idle')));
+	await expect(html).toHaveAttribute('data-preloads', '1');
+	await expect(windowRegion).toHaveCount(0);
+	await launcher.click();
+	await expect(windowRegion).toBeVisible();
+	await expect(html).toHaveAttribute('data-preloads', '1');
+	await expect
+		.poll(() => page.evaluate(() => localStorage.getItem('nexus.desktop.recent-applications')))
+		.toBe('["@nexus-terminal/test:applications:counter"]');
+
+	await page.reload();
+	await launcher.hover();
+	await expect(html).toHaveAttribute('data-preloads', '1');
+	await expect(windowRegion).toHaveCount(0);
 });
 
 test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ page, host }) => {
@@ -77,6 +187,10 @@ test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ p
 	await expect(localizedLauncher).toBeVisible();
 	await localizedLauncher.click();
 	const application = page.getByRole('region', { name: '计数器', exact: true });
+	await expect(application.locator('.application-window__identity svg.lucide-square-terminal')).toBeVisible();
+	await page.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
+	const dockEntry = page.getByRole('button', { name: '切换到计数器', exact: true });
+	await expect(dockEntry.locator('svg.lucide-square-terminal')).toBeVisible();
 	await application.getByRole('button', { name: '加一' }).click();
 	await expect(application.getByText('计数：1')).toBeVisible();
 	await application.getByRole('button', { name: '最小化' }).click();
@@ -114,15 +228,45 @@ test('插件 Toast 使用当前语言，停用后撤销该实例的提示', asyn
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	const language = page.getByRole('combobox', { name: 'Language' });
 	await expect(language).toBeVisible();
-	await widget.getByRole('button', { name: 'Increment' }).evaluate((button: HTMLButtonElement) => button.click());
+
+	const increment = () =>
+		widget.getByRole('button', { name: 'Increment' }).evaluate((button: HTMLButtonElement) => button.click());
+
+	await increment();
 	const toast = page.locator('[data-ui="toast"]');
 	await expect(toast.getByText('Saved 1 item(s).')).toBeVisible();
+
+	const toastSize = () =>
+		toast.evaluate((element) => {
+			const body = element.querySelector('.ui-toast__message')!.getBoundingClientRect();
+			return {
+				textWidth: body.width,
+				textHeight: body.height,
+				cardHeight: element.getBoundingClientRect().height,
+			};
+		});
+
+	const single = await toastSize();
+	await increment();
+	await expect(toast.locator('.ui-toast__page [aria-hidden="true"]').last()).toHaveText('1/2');
+	const multiple = await toastSize();
+	for (const key of ['textWidth', 'textHeight', 'cardHeight'] as const)
+		expect(multiple[key]).toBeCloseTo(single[key], 2);
+	const [above, between, below] = await toast.evaluate((element) => {
+		const controls = element.querySelector('.ui-toast__controls')!.getBoundingClientRect();
+		const close = element.querySelector('.ui-toast__close')!.getBoundingClientRect();
+		const counter = element.querySelector('.ui-toast__page')!.getBoundingClientRect();
+		return [close.top - controls.top, counter.top - close.bottom, controls.bottom - counter.bottom];
+	});
+	expect(between).toBeGreaterThan(4);
+	expect(above).toBeCloseTo(between, 1);
+	expect(below).toBeCloseTo(between, 1);
 	await language.click();
 	await page.getByRole('option', { name: '简体中文' }).click();
-	await expect(toast.getByText('已保存 1 项。')).toBeVisible();
+	await expect(toast.getByText('已保存 2 项。')).toBeVisible();
 
 	host.setPluginVersion(null);
-	await expect(toast.getByText('已保存 1 项。')).toHaveCount(0);
+	await expect(toast.getByText('已保存 2 项。')).toHaveCount(0);
 });
 
 test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({ page, host: _host }) => {
@@ -179,7 +323,12 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	await expect(desktop.getByRole('button', { name: 'Remove page 1', exact: true })).toBeDisabled();
 });
 
-test('下拉选择框只淡入，弹层本身没有位移或缩放', async ({ page, host: _host }) => {
+test('下拉选择框和菜单默认淡入，布局菜单沿纵向展开', async ({ page, host: _host }) => {
+	const warnings: string[] = [];
+	page.on('pageerror', (error) => warnings.push(error.stack ?? error.message));
+	page.on('console', (event) => {
+		if (event.type() === 'warning' || event.type() === 'error') warnings.push(event.text());
+	});
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await page.addInitScript(() => {
 		const animate = Element.prototype.animate;
@@ -193,25 +342,66 @@ test('下拉选择框只淡入，弹层本身没有位移或缩放', async ({ pa
 			return animation;
 		};
 	});
-	await page.goto('/');
+
+	async function popupFrames(popup: Locator): Promise<Keyframe[][]> {
+		await expect(popup).toBeVisible();
+		return popup.evaluate((element) => {
+			const popper = element.closest('[data-reka-popper-content-wrapper]');
+			return [element, popper].flatMap(
+				(target) => JSON.parse(target?.getAttribute('data-test-frames') ?? '[]') as Keyframe[][],
+			);
+		});
+	}
+
+	async function expectFade(popup: Locator): Promise<void> {
+		const frames = await popupFrames(popup);
+		expect(frames).toContainEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ opacity: '0' }),
+				expect.objectContaining({ opacity: '1' }),
+			]),
+		);
+		for (const frame of frames.flat()) {
+			expect(frame.transform).toBeUndefined();
+			expect(frame.translate).toBeUndefined();
+			expect(frame.scale).toBeUndefined();
+		}
+	}
+
+	await page.goto('/?host-controls');
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('combobox', { name: 'Language' }).click();
-	const list = page.getByRole('listbox');
-	await expect(list).toBeVisible();
-	const frames = await list.evaluate((element) => {
-		const popper = element.closest('[data-reka-popper-content-wrapper]');
-		return [element, popper].flatMap(
-			(target) => JSON.parse(target?.getAttribute('data-test-frames') ?? '[]') as Keyframe[][],
-		);
-	});
-	expect(frames).toContainEqual(
-		expect.arrayContaining([expect.objectContaining({ opacity: '0' }), expect.objectContaining({ opacity: '1' })]),
+	await expectFade(page.getByRole('listbox'));
+	await page.keyboard.press('Escape');
+	await page
+		.getByRole('region', { name: 'Settings', exact: true })
+		.getByRole('button', { name: 'Close application' })
+		.click();
+	await page.getByRole('button', { name: 'Counter', exact: true }).click();
+	await page.getByRole('button', { name: 'Fixture sort', exact: true }).click();
+	await expectFade(page.locator('[data-ui="dropdown-menu"]'));
+	await page.keyboard.press('Escape');
+	await page.getByRole('button', { name: 'Fixture layout', exact: true }).click();
+	const layoutMenu = page.getByRole('menu', { name: 'Fixture layout' });
+	const layoutFrames = await popupFrames(layoutMenu);
+	expect(layoutFrames.flat()).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ clipPath: 'inset(-16px -16px 100%)' }),
+			expect.objectContaining({ clipPath: 'inset(-16px)' }),
+		]),
 	);
-	for (const frame of frames.flat()) {
+	for (const frame of layoutFrames.flat()) {
 		expect(frame.transform).toBeUndefined();
 		expect(frame.translate).toBeUndefined();
-		expect([undefined, 1]).toContain(frame.scale === undefined ? undefined : Number(frame.scale));
 	}
+	await page.keyboard.press('Escape');
+	const closingFrames = await page.evaluate(() =>
+		[...document.querySelectorAll('[data-reka-popper-content-wrapper]')]
+			.flatMap((element) => JSON.parse(element.getAttribute('data-test-frames') ?? '[]'))
+			.flat(),
+	);
+	expect(closingFrames).toContainEqual(expect.objectContaining({ clipPath: 'inset(100% -16px -16px)' }));
+	expect(warnings).toEqual([]);
 });
 
 test('系统减少动态效果时保留动画偏好，速度控件在动画可用时恢复', async ({ page, host: _host }) => {
@@ -435,17 +625,22 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	const market = page.getByRole('region', { name: '插件市场' });
 	const card = market.getByRole('button', { name: '查看 Remote Tools' });
 	await expect(card.getByText('管理远程文件和进程。')).toBeVisible();
-	await market.getByRole('searchbox').fill('不存在');
+	const marketplaceSearch = market.getByRole('searchbox');
+	await expect(marketplaceSearch).toHaveAttribute('id', /\S/u);
+	await expect(marketplaceSearch).toHaveAccessibleName(/\S/u);
+	await marketplaceSearch.fill('不存在');
 	await expect(card).toHaveCount(0);
-	await market.getByRole('searchbox').fill('远程文件');
+	await marketplaceSearch.fill('远程文件');
 	await card.click();
 	const details = page.getByRole('dialog', { name: '插件详情' });
 	await expect(details.getByText('管理远程文件和进程。')).toBeVisible();
 	await details.getByRole('combobox', { name: '版本与来源' }).click();
 	await page.getByRole('option', { name: '1.1.0 · Second source' }).click();
 	await details.getByRole('button', { name: '预览安装' }).click();
-	await expect(page.getByRole('dialog', { name: '预览安装' }).getByText('1.1.0 · Second source')).toBeVisible();
-	await page.getByRole('dialog', { name: '预览安装' }).getByRole('button', { name: '安装', exact: true }).click();
+	const installation = page.getByRole('dialog', { name: '插件安装' });
+	await expect(installation.getByText('1.1.0 · Second source', { exact: false })).toBeVisible();
+	await installation.getByRole('button', { name: '安装', exact: true }).click();
+	await installation.getByRole('button', { name: '完成', exact: true }).click();
 	await expect(market.getByRole('heading', { name: '已安装插件' })).toBeVisible();
 	await expect(market.getByRole('button', { name: '管理Remote Tools', exact: true })).toBeVisible();
 	await expect(page.locator('[data-ui="toast"]').getByText(`已完成 ${pluginId} 的操作。`)).toBeVisible();
@@ -456,7 +651,16 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(repositoriesSection.getByText('Third source')).toBeVisible();
 });
 
-test('应用窗口通过公开 SDK 登记标签及动作，并通过宿主发送 HTTP 与 WS', async ({ page, host: _host }) => {
+test('普通 HTTP 下应用窗口仍可运行 SDK 任务和宿主 HTTP 与 WS 请求', async ({ page, host: _host }) => {
+	await page.addInitScript(() => {
+		// Chromium 将测试用的回环地址视为安全源，模拟局域网 HTTP 缺失的原生方法。
+		Object.defineProperty(crypto, 'randomUUID', { value: undefined });
+		window.addEventListener(
+			'nexus:test:background',
+			() => document.documentElement.setAttribute('data-background-completed', ''),
+			{ once: true },
+		);
+	});
 	await page.route('**/api/plugins/*/items', (route) => route.fulfill({ body: 'fixture-http' }));
 	await page.route('**/api/plugins/*/conflict', (route) =>
 		route.fulfill({ status: 409, json: { type: 'about:blank', status: 409, code: 'TEST_PLUGIN_CONFLICT' } }),
@@ -466,15 +670,17 @@ test('应用窗口通过公开 SDK 登记标签及动作，并通过宿主发送
 	});
 	await page.goto('/?host-controls');
 	await page.getByRole('button', { name: 'Counter', exact: true }).click();
-	const window = page.getByRole('region', { name: 'Counter', exact: true });
-	await window.getByRole('tab', { name: 'Two' }).click();
-	await expect(window.getByRole('tab', { name: 'Two' })).toHaveAttribute('aria-selected', 'true');
-	await window.getByRole('button', { name: 'Close tab Two' }).click();
-	await expect(window.getByRole('tab', { name: 'Two' })).toHaveCount(0);
-	await window.getByRole('button', { name: 'Probe host' }).click();
-	await expect(window.getByText('fixture-http · fixture-frame · 0,255')).toBeVisible();
-	await window.getByRole('button', { name: 'Close application' }).click();
-	await expect(window).toHaveCount(0);
+	const application = page.getByRole('region', { name: 'Counter', exact: true });
+	await application.getByRole('tab', { name: 'Two' }).click();
+	await expect(application.getByRole('tab', { name: 'Two' })).toHaveAttribute('aria-selected', 'true');
+	await application.getByRole('button', { name: 'Close tab Two' }).click();
+	await expect(application.getByRole('tab', { name: 'Two' })).toHaveCount(0);
+	await application.getByRole('button', { name: 'Probe host' }).click();
+	await expect(application.getByText('fixture-http · fixture-frame · 0,255')).toBeVisible();
+	await expect(application.getByText('TEST_PLUGIN_CONFLICT')).toBeVisible();
+	await expect(page.locator('html')).toHaveAttribute('data-background-completed', '');
+	await application.getByRole('button', { name: 'Close application' }).click();
+	await expect(application).toHaveCount(0);
 });
 
 test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复显示', async ({ page, host: _host }) => {
@@ -532,6 +738,15 @@ test('账户密码表单在宽屏同行，在窄屏排列为三行', async ({ pa
 	const settings = page.getByRole('region', { name: 'Settings', exact: true });
 	const current = settings.getByLabel('Current password', { exact: true });
 	const next = settings.getByLabel('New password', { exact: true });
+	for (const field of [current, next]) await expect(field).toHaveAttribute('id', /\S/u);
+	await expect(current).toHaveAccessibleName('Current password');
+	await expect(next).toHaveAccessibleName('New password');
+	const brokenLabels = await settings
+		.locator('label[for]')
+		.evaluateAll((labels) =>
+			labels.filter((label) => !(label as HTMLLabelElement).control).map((label) => label.textContent),
+		);
+	expect(brokenLabels).toEqual([]);
 	const update = settings.getByRole('button', { name: 'Change password', exact: true });
 	const logout = settings.getByRole('button', { name: 'Sign out', exact: true });
 	await expect(update).toBeVisible();
@@ -669,6 +884,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		await application.getByRole('button', { name: 'Manage Counter', exact: true }).click();
 		await expect(details.getByRole('switch', { name: 'Show on desktop', exact: true })).toBeChecked();
 		await expect(details.getByText('0.0.1-dev.1', { exact: true })).toHaveCSS('font-weight', '400');
+		await expect(details.locator('footer').getByRole('button')).toHaveText(['Reload', 'Uninstall']);
 		await expect(enable).toBeChecked();
 		await enable.click();
 		await firstRequest.promise;
@@ -799,4 +1015,172 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	await page.getByRole('button', { name: 'Manage installed plugins', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Manage Package name', exact: true })).toBeVisible();
+});
+
+test('市场等待远程目录并从依赖解析推进到配置完成', async ({ page, host }) => {
+	const pluginId = '@nexus-terminal/test';
+	const dependency = '@example/support';
+	const version = '1.0.0';
+	const repository = { id: randomUUID(), url: 'https://example.com/catalog.json', label: 'Official', official: true };
+	const target = { kind: 'repository', repositoryId: repository.id, pluginId, version };
+	const manifest = { version, type: 'module', peerDependencies: { 'nexus-terminal': '^1.0.0' } };
+	const pack = {
+		...manifest,
+		name: pluginId,
+		displayName: 'Counter',
+		nexus: { kind: 'application', entry: { frontend: 'index.js' }, dependsOn: { [dependency]: '^1.0.0' } },
+	};
+	const support = {
+		...manifest,
+		name: dependency,
+		displayName: 'Support',
+		nexus: { kind: 'extension', entry: { frontend: 'index.js' } },
+	};
+	const catalogGate = Promise.withResolvers<void>();
+	const planGate = Promise.withResolvers<void>();
+	let catalogReady = false;
+	let installed = false;
+	const runtime: PluginRuntimeInfo = {
+		pluginId,
+		version,
+		runtime: 'running',
+		readiness: { state: 'pending', reason: { code: 'PLUGIN_CONFIGURATION_REQUIRED', applicationId: 'counter' } },
+		issues: [],
+	};
+	let operation: MarketplaceOperation = {
+		id: randomUUID(),
+		change: { action: 'install', pluginId, target: { ...target, kind: 'repository' }, revision: 'a'.repeat(64) },
+		state: 'running',
+		createdAt: new Date().toISOString(),
+		committed: false,
+		step: { phase: 'download', pluginId: dependency },
+	};
+	await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [repository] } }));
+	await page.route('**/api/plugins/*/repositories/*/refresh', async (route) => {
+		await catalogGate.promise;
+		catalogReady = true;
+		await route.fulfill({ status: 204 });
+	});
+	await page.route('**/api/plugins/*/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: catalogReady
+					? [{ id: pluginId, versions: [{ repositoryId: repository.id, package: pack }] }]
+					: [],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/install-plan', async (route) => {
+		await planGate.promise;
+		await route.fulfill({
+			json: {
+				target,
+				steps: [
+					{ package: support, source: { ...target, pluginId: dependency }, action: 'install' },
+					{ package: pack, source: target, action: 'install' },
+				],
+				blockers: [],
+			},
+		});
+	});
+	await page.route('**/api/plugins/*/manager/install', (route) => {
+		operation = { ...operation, observationId: route.request().postDataJSON().observationId };
+		return route.fulfill({ status: 202, json: operation });
+	});
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: installed
+					? [
+							{
+								pluginId: dependency,
+								version,
+								kind: 'extension',
+								hasBackend: false,
+								source: { kind: 'local' },
+								enabled: true,
+								runtime: null,
+								issue: null,
+							},
+							{
+								pluginId,
+								version,
+								kind: 'application',
+								hasBackend: true,
+								source: target,
+								enabled: true,
+								runtime,
+								issue: null,
+							},
+						]
+					: [],
+			},
+		}),
+	);
+
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	try {
+		const loading = market.getByRole('status').filter({ hasText: 'Loading repositories…' });
+		await expect(loading).toBeVisible();
+		await expect(market.locator('.ui-loading-tiles__tile')).toHaveCount(4);
+		const centered = await loading.evaluate((label) => {
+			const content = label.parentElement!.getBoundingClientRect();
+			const region = label.closest('.catalog-placeholder')!.getBoundingClientRect();
+			return {
+				x: content.left + content.width / 2 - (region.left + region.width / 2),
+				y: content.top + content.height / 2 - (region.top + region.height / 2),
+				height: region.height,
+			};
+		});
+		expect(centered.x).toBeCloseTo(0, 0);
+		expect(centered.y).toBeCloseTo(0, 0);
+		expect(centered.height).toBeGreaterThan(132);
+		await expect(market.getByText('No apps to discover yet')).toHaveCount(0);
+	} finally {
+		catalogGate.resolve();
+	}
+	await market.getByRole('button', { name: 'View Counter' }).click();
+	await page.getByRole('button', { name: 'Preview installation' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Plugin installation' });
+	const currentStage = dialog.locator('[aria-current="step"]');
+	try {
+		await expect(currentStage).toHaveText(/Resolve dependencies/u);
+		await expect(dialog.locator('[data-state="running"]')).toBeVisible();
+	} finally {
+		planGate.resolve();
+	}
+
+	await dialog.getByRole('button', { name: 'Install', exact: true }).click();
+	await expect(currentStage).toHaveText(/Install packages/u);
+	const progress = dialog.locator('[data-ui="progress-row"]');
+	await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'running');
+	await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'pending');
+	operation = {
+		...operation,
+		committed: true,
+		step: { phase: 'download', pluginId },
+		completedPackages: [dependency],
+	};
+	host.setOperations([operation]);
+	await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'succeeded');
+	await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'running');
+
+	installed = true;
+	host.setRuntime([runtime]);
+	host.setOperations([{ ...operation, state: 'succeeded', completedPackages: [dependency, pluginId] }]);
+	await expect(currentStage).toHaveText(/Check configuration/u);
+	await dialog.getByRole('button', { name: 'Configure later' }).click();
+	await market.getByRole('button', { name: 'Installation progress' }).click();
+	await dialog.getByRole('button', { name: 'Open configuration' }).click();
+	const configuration = page.getByRole('region', { name: 'Counter', exact: true });
+	await expect(configuration).toBeVisible();
+	host.setRuntime([{ ...runtime, readiness: { state: 'ready' } }]);
+	await configuration.getByRole('button', { name: 'Close application' }).click();
+	await market.getByRole('button', { name: 'Installation progress' }).click();
+	await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
+	await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+	await expect(dialog).toHaveCount(0);
 });

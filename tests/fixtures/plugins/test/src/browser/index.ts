@@ -1,3 +1,4 @@
+import { SquareTerminal } from '@lucide/vue';
 import type { PluginContextApi } from 'nexus-terminal/browser';
 import CounterView from './CounterView.vue';
 
@@ -21,6 +22,11 @@ export function activate(context: PluginContextApi): void {
 				label: (locale) => (locale === 'zh' ? '计数器' : 'Counter'),
 
 				component: CounterView,
+				icon: SquareTerminal,
+
+				async preload() {
+					window.dispatchEvent(new Event('nexus:test:preloaded'));
+				},
 			},
 		],
 		widgets: [{ id: 'counter', label: 'Counter Widget', component: CounterView }],

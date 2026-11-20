@@ -1,4 +1,5 @@
 import { shallowRef } from 'vue';
+import { v4 as uuid } from 'uuid';
 import type { z } from 'zod';
 import { HttpProblemSchema } from '../../http/http-problem-http-types.js';
 import type { LogApi } from '../../log/browser/log-api.js';
@@ -158,7 +159,7 @@ export class MarketplaceDesktopApi {
 	}
 
 	async submit(command: Submission): Promise<MarketplaceOperation> {
-		const observationId = crypto.randomUUID();
+		const observationId = uuid();
 		this.#owned.add(observationId);
 		try {
 			const operation = await this.#send(command, observationId);

@@ -200,6 +200,7 @@ export interface UiDropdownMenuProps {
 	items: readonly UiMenuItem[];
 	disabled?: boolean;
 	align?: 'start' | 'center' | 'end';
+	transition?: 'fade' | 'drop';
 }
 
 /** 通用静态列表项，业务操作放在 actions 插槽，不将整行伪装成按钮。 */
@@ -260,6 +261,14 @@ export interface UiProgressRowProps {
 
 /** Shared transform/opacity presence transition, using host motion preferences. */
 export interface UiTransitionProps {
-	preset?: 'fade' | 'panel';
+	preset?: 'fade' | 'drop' | 'panel' | 'context-menu';
 	appear?: boolean;
+}
+
+export interface UiLoadingTilesProps {
+	/** 已翻译的加载提示。使用 caption 插槽时由调用方提供可访问状态。 */
+	label?: string;
+	icons?: readonly Component[];
+	/** 静态显示方块时关闭动画。宿主的减少动态效果设置始终生效。 */
+	active?: boolean;
 }

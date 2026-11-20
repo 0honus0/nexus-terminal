@@ -16,6 +16,7 @@ type ScheduleOperation = (execute: () => Promise<MarketplaceOperationResult>) =>
 export interface MarketplaceOperationScope {
 	commit(): void;
 	step(step: NonNullable<MarketplaceOperation['step']>): void;
+	completePackage(pluginId: string): void;
 }
 
 /** 内存中保留所有活动操作和最近完成的 100 项，供 HTTP 和状态 WS 查询。 */
@@ -85,6 +86,9 @@ export class MarketplaceOperations {
 				commit: () => update({ committed: true }),
 
 				step: (step) => update({ step }),
+
+				completePackage: (pluginId) =>
+					update({ completedPackages: [...(current.completedPackages ?? []), pluginId] }),
 			});
 		};
 

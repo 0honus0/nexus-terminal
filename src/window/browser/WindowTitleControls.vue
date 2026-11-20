@@ -59,6 +59,7 @@
 			<UiDropdownMenu
 				v-if="action.items"
 				:items="action.items"
+				:transition="action.menuTransition"
 				@select="(id) => chrome.action(registration, action.id, id)"
 			>
 				<UiButton

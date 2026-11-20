@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import type { WindowLauncher } from '../../window/browser/window-plugin-api.js';
-	import { usePreferredDark, usePreferredReducedMotion } from '@vueuse/core';
+	import { useEventListener, usePreferredDark, usePreferredReducedMotion } from '@vueuse/core';
 	import { computed, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { StateClient } from '../../state/browser/state-api.js';
@@ -8,6 +8,7 @@
 	import { LogNotices, type LogApi } from '../../log/browser/log-api.js';
 	import { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
 	import type { PluginContributionList, PluginThemeEntry } from '../../plugin/plugin-api.browser.js';
+	import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import { UiSelect, UiTransition } from '../../ui/browser/ui-base-api.js';
 	import { provideUiMotion } from '../../ui/browser/ui-motion-api.js';
 	import { provideUiThemes } from '../../ui/browser/ui-theme-api.js';
@@ -18,6 +19,7 @@
 		log: LogApi;
 		auth: AuthApi;
 		getState: () => Pick<StateClient, 'subscribe'> | undefined;
+		getPluginRuntime: () => ReadonlyMap<string, PluginRuntimeInfo> | undefined;
 		desktopPluginsReady: () => boolean;
 		preparePlugins: () => void;
 		windowLauncher: Pick<WindowLauncher, 'attach'>;
@@ -40,6 +42,19 @@
 		},
 	});
 	const signedIn = computed(() => !!props.auth.state.value?.account);
+
+	function syncSessionPath(): void {
+		const session = props.auth.state.value;
+		const { pathname, search, hash } = location;
+		if (!session || (pathname !== '/' && pathname !== '/login')) return;
+
+		const target = session.account ? '/' : '/login';
+		if (pathname !== target) history.replaceState(history.state, '', target + search + hash);
+	}
+
+	watch(props.auth.state, syncSessionPath, { immediate: true });
+	useEventListener(window, 'popstate', syncSessionPath);
+
 	const signingOut = ref(false);
 	const previewSpeed = ref<number>();
 	const reducedMotion = usePreferredReducedMotion();
@@ -72,7 +87,7 @@
 
 	const desktop = shallowRef<Component>();
 	const desktopFailed = ref(false);
-	const desktopReady = computed(() => !!desktop.value && props.desktopPluginsReady());
+	const desktopReady = ref(false);
 	let desktopLoad: Promise<void> | undefined;
 
 	function loadDesktop(): Promise<void> {
@@ -94,7 +109,11 @@
 	watch(
 		signedIn,
 		(active, _, onCleanup) => {
-			if (!active || desktop.value) return;
+			if (!active) {
+				desktopReady.value = false;
+				return;
+			}
+			if (desktop.value) return;
 
 			const scope = new AbortController();
 			onCleanup(() => scope.abort());
@@ -190,15 +209,18 @@
 	/>
 	<component
 		:is="desktop"
-		v-if="signedIn && desktopReady"
+		v-if="signedIn && !checkingSession && desktop"
 		v-model:preview-speed="previewSpeed"
+		:plugins-ready="desktopPluginsReady()"
 		:preferences="preferences"
 		:auth="auth"
 		:contributions="contributions"
 		:log="log"
 		:state="getState()"
+		:plugin-runtime="getPluginRuntime()"
 		:signing-out="signingOut"
 		:window-launcher="windowLauncher"
+		@ready="desktopReady = true"
 		@logout="logout"
 	/>
 </template>

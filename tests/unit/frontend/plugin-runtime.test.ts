@@ -117,7 +117,7 @@ test('后端待就绪仍可显示组件，依赖可用后交付服务并回收 V
 	t.after(() => runtime.close());
 	const count = ref(0);
 	const saw: number[] = [];
-	const binding = gate<{ read(): string }>();
+	const binding = gate<{ service: { read(): string }; signal: AbortSignal }>();
 	const disposed = gate();
 	let consumerActivations = 0;
 	const provider = fixture('@test/provider', {
@@ -135,7 +135,7 @@ test('后端待就绪仍可显示组件，依赖可用后交付服务并回收 V
 				context.use({ provider: ['@test/provider', 'service'] }, (scope) => {
 					watch(count, (value) => saw.push(value), { flush: 'sync' });
 					scope.onDispose(() => disposed.resolve());
-					binding.resolve(scope.plugin.provider);
+					binding.resolve({ service: scope.plugin.provider, signal: scope.signal });
 				});
 			},
 		},
@@ -157,16 +157,18 @@ test('后端待就绪仍可显示组件，依赖可用后交付服务并回收 V
 		backend: { runtime: 'running', readiness: { state: 'ready' } },
 	};
 	await runtime.sync([consumer, ready]);
-	const service = await binding.promise;
+	const { service, signal } = await binding.promise;
 	assert.equal(service.read(), 'service');
 	count.value = 1;
 	assert.deepEqual(saw, [1]);
 
-	await runtime.sync([consumer, pending]);
+	const revoked = runtime.sync([consumer, pending]);
+	assert.equal(signal.aborted, true);
+	assert.throws(() => service.read(), { code: 'PLUGIN_SERVICE_EXPIRED' });
+	await revoked;
 	await disposed.promise;
 	count.value = 2;
 	assert.deepEqual(saw, [1]);
-	assert.throws(() => service.read(), { code: 'PLUGIN_SERVICE_EXPIRED' });
 	assert.equal(consumerActivations, 1);
 	assert.equal(runtime.contributions.value.length, 1);
 });

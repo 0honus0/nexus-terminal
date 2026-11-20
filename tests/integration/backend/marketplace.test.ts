@@ -964,7 +964,9 @@ test('从仓库安装并更新实际产物，卸载保留数据，确认清除�
 	outdated.steps[0]!.distribution!.integrity = 'sha512-different';
 	assert.equal((await run('/install', { plan: outdated })).error, 'MARKETPLACE_INSTALL_PLAN_CHANGED');
 	assert.deepEqual(await listInstalledPlugins(origin, cookie), []);
-	assert.equal((await run('/install', { plan })).state, 'succeeded');
+	const installation = await run('/install', { plan });
+	assert.equal(installation.state, 'succeeded');
+	assert.deepEqual(installation.completedPackages, [dependency, pluginId]);
 	assert.equal(
 		(await listInstalledPlugins(origin, cookie)).find((row) => row.pluginId === pluginId)?.runtime?.runtime,
 		'running',

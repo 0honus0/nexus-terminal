@@ -46,9 +46,19 @@
 			},
 		});
 		view.registerActions({
-			items: [{ id: 'probe', label: 'Probe host' }],
+			items: [
+				{ id: 'probe', label: 'Probe host' },
+				{ id: 'sort', label: 'Fixture sort', items: [{ id: 'name', label: 'By name' }] },
+				{
+					id: 'layout',
+					label: 'Fixture layout',
+					menuTransition: 'drop',
+					items: [{ id: 'edit', label: 'Edit layout' }],
+				},
+			],
 
-			async onSelect() {
+			async onSelect(id) {
+				if (id !== 'probe') return;
 				const { http, tasks, ws } = props.context.app;
 				await tasks.run(
 					async (signal) => {
@@ -64,6 +74,9 @@
 					},
 					{ view },
 				);
+				tasks.background('probe', () => {
+					window.dispatchEvent(new Event('nexus:test:background'));
+				});
 
 				const socket = ws.connect('/echo', {
 					signal: view.signal,

@@ -2,7 +2,7 @@
 	import { computed, nextTick, ref, watch } from 'vue';
 	import { useEventListener, usePointerSwipe, useResizeObserver } from '@vueuse/core';
 	import { CircleCheck, CircleAlert, Info, X, ChevronUp, ChevronDown } from '@lucide/vue';
-	import { ToastProvider, ToastRoot, ToastDescription, ToastClose, ToastViewport } from 'reka-ui';
+	import { ToastProvider, ToastRoot, ToastDescription, ToastClose, ToastViewport, VisuallyHidden } from 'reka-ui';
 	import type { UiToastStackProps } from '../ui-component-types.js';
 	import { useUiMotion } from '../ui-motion-api.js';
 
@@ -212,9 +212,8 @@
 							{{ active.message }}
 						</p></ToastDescription
 					>
-					<div v-if="truncated || expanded || items.length > 1" class="ui-toast__footer">
+					<div v-if="truncated || expanded" class="ui-toast__footer">
 						<button
-							v-if="truncated || expanded"
 							class="ui-toast__expand"
 							type="button"
 							:aria-expanded="expanded"
@@ -224,17 +223,17 @@
 							<ChevronUp v-if="expanded" :size="12" aria-hidden="true" />
 							<ChevronDown v-else :size="12" aria-hidden="true" />
 						</button>
-						<div v-if="items.length > 1" class="ui-toast__navigation">
-							<span :aria-label="positionLabel(position, items.length)"
-								><strong>{{ position }}</strong
-								><span aria-hidden="true"> / </span>{{ items.length }}</span
-							>
-						</div>
 					</div>
 				</div>
-				<ToastClose class="ui-toast__close" :aria-label="closeLabel"
-					><X :size="15" aria-hidden="true"
-				/></ToastClose>
+				<div class="ui-toast__controls">
+					<ToastClose class="ui-toast__close" :aria-label="closeLabel"
+						><X :size="15" aria-hidden="true"
+					/></ToastClose>
+					<span v-if="items.length > 1" class="ui-toast__page">
+						<VisuallyHidden>{{ positionLabel(position, items.length) }}</VisuallyHidden>
+						<span aria-hidden="true">{{ position }}/{{ items.length }}</span>
+					</span>
+				</div>
 			</li>
 		</ToastRoot>
 		<ToastViewport
@@ -356,8 +355,6 @@
 	.ui-toast__footer {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 10px;
 		margin-top: 7px;
 	}
 	.ui-toast__close,
@@ -401,28 +398,21 @@
 		outline: 2px solid var(--ui-primary);
 		outline-offset: 2px;
 	}
-	.ui-toast__navigation {
+	.ui-toast__controls {
 		display: flex;
+		flex-direction: column;
+		align-self: stretch;
 		align-items: center;
-		height: 22px;
-		margin-left: auto;
-		padding: 0 9px;
-		border: 1px solid color-mix(in srgb, var(--ui-border) 65%, transparent);
-		border-radius: 20px;
-		background: color-mix(in srgb, var(--ui-text) 3%, transparent);
+		justify-content: space-evenly;
+		margin-block: -6px;
+	}
+	.ui-toast__page {
 		color: var(--ui-muted);
-		font-size: 11px;
+		font-size: 10px;
 		font-variant-numeric: lining-nums tabular-nums;
-		line-height: 16px;
-	}
-	.ui-toast__navigation > span {
-		display: inline-flex;
-		align-items: baseline;
-		white-space: pre;
-	}
-	.ui-toast__navigation strong {
-		font: inherit;
-		font-weight: 600;
+		line-height: 10px;
+		white-space: nowrap;
+		pointer-events: none;
 	}
 	html[data-layout-profile='compact'] .ui-toast-stack {
 		top: max(10px, env(safe-area-inset-top));
@@ -445,8 +435,8 @@
 	html[data-layout-profile='compact'] .ui-toast__message {
 		font-size: 12px;
 	}
-	html[data-layout-profile='compact'] .ui-toast__navigation {
-		height: 19px;
-		padding-inline: 8px;
+	html[data-layout-profile='compact'] .ui-toast__page {
+		font-size: 9px;
+		line-height: 9px;
 	}
 </style>

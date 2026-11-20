@@ -1,8 +1,8 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
-	import { AppWindow, Puzzle, ArrowUpRight, Check } from '@lucide/vue';
+	import { AppWindow, Puzzle, ArrowUpRight, Check, Boxes, PackageOpen } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
-	import { UiEmptyState, vSelectableAction } from '../../ui/browser/ui-components-api.js';
+	import { UiEmptyState, UiLoadingTiles, vSelectableAction } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
 	import type { MarketplacePlugin } from '../marketplace-types.js';
 	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
@@ -10,33 +10,37 @@
 		plugins: readonly MarketplaceCatalogPlugin[];
 		installed: readonly MarketplacePlugin[];
 		query: string;
-		loaded: boolean;
+		refreshing: boolean;
+		failed: boolean;
 	}>();
 	const emit = defineEmits<{ inspect: [pluginId: string] }>();
 	const { t, n, locale } = useI18n({ useScope: 'global' });
+	const loadingIcons = [AppWindow, PackageOpen, Boxes, Puzzle];
 	const groups = computed(() =>
-		(['application', 'extension'] as const).map((kind) => ({
-			kind,
-			plugins: props.plugins.flatMap((plugin) => {
-				const pack = plugin.versions[0]?.package;
-				if (pack?.nexus.kind !== kind) return [];
+		(['application', 'extension'] as const)
+			.map((kind) => ({
+				kind,
+				plugins: props.plugins.flatMap((plugin) => {
+					const pack = plugin.versions[0]?.package;
+					if (pack?.nexus.kind !== kind) return [];
 
-				const name = marketplacePackageName(pack, locale.value);
-				const search = [
-					plugin.id,
-					name,
-					pack.displayName,
-					pack.description,
-					...Object.values(pack.nexus.i18n ?? {}).flatMap(({ description, displayName }) => [
-						description,
-						displayName,
-					]),
-				]
-					.join(' ')
-					.toLowerCase();
-				return search.includes(props.query.trim().toLowerCase()) ? [{ plugin, pack, name }] : [];
-			}),
-		})),
+					const name = marketplacePackageName(pack, locale.value);
+					const search = [
+						plugin.id,
+						name,
+						pack.displayName,
+						pack.description,
+						...Object.values(pack.nexus.i18n ?? {}).flatMap(({ description, displayName }) => [
+							description,
+							displayName,
+						]),
+					]
+						.join(' ')
+						.toLowerCase();
+					return search.includes(props.query.trim().toLowerCase()) ? [{ plugin, pack, name }] : [];
+				}),
+			}))
+			.filter(({ plugins }) => !props.refreshing || plugins.length),
 	);
 </script>
 
@@ -51,67 +55,91 @@
 				<AppWindow :size="40" :stroke-width="1.3" /><Puzzle :size="26" :stroke-width="1.4" />
 			</div>
 		</div>
-		<section v-for="group in groups" :key="group.kind" class="catalog-section" :data-kind="group.kind">
-			<header class="catalog-heading">
-				<div>
-					<h2>
-						{{ t(group.kind === 'application' ? 'applications' : 'marketplace.extensions')
-						}}<span>{{ n(group.plugins.length) }}</span>
-					</h2>
-					<p>{{ t(`marketplace.${group.kind}Hint`) }}</p>
-				</div>
-			</header>
-			<div class="catalog-grid">
-				<button
-					v-selectable-action
-					v-for="{ plugin, pack, name } in group.plugins"
-					:key="plugin.id"
-					type="button"
-					class="catalog-card"
-					:aria-label="t('marketplace.viewPlugin', { name: name })"
-					@click="emit('inspect', plugin.id)"
-				>
-					<div class="catalog-card__art" aria-hidden="true">
-						<component
-							:is="group.kind === 'application' ? AppWindow : Puzzle"
-							:size="group.kind === 'application' ? 30 : 24"
-							:stroke-width="1.5"
-						/><span v-if="group.kind === 'application'">{{ name.slice(0, 1) }}</span>
+		<div v-if="refreshing && !plugins.length" class="catalog-placeholder">
+			<UiLoadingTiles class="catalog-loading" :icons="loadingIcons" :label="t('marketplace.loadingCatalog')" />
+		</div>
+		<UiEmptyState v-else-if="failed" :icon="Puzzle" :title="t('marketplace.catalogUnavailable')" />
+		<template v-else>
+			<section v-for="group in groups" :key="group.kind" class="catalog-section" :data-kind="group.kind">
+				<header class="catalog-heading">
+					<div>
+						<h2>
+							{{ t(group.kind === 'application' ? 'applications' : 'marketplace.extensions')
+							}}<span>{{ n(group.plugins.length) }}</span>
+						</h2>
+						<p>{{ t(`marketplace.${group.kind}Hint`) }}</p>
 					</div>
-					<div class="catalog-card__body" data-ui-selection="text">
-						<div class="catalog-card__title">
-							<h3>{{ name }}</h3>
-							<ArrowUpRight :size="15" aria-hidden="true" />
+				</header>
+				<div class="catalog-grid">
+					<button
+						v-selectable-action
+						v-for="{ plugin, pack, name } in group.plugins"
+						:key="plugin.id"
+						type="button"
+						class="catalog-card"
+						:aria-label="t('marketplace.viewPlugin', { name: name })"
+						@click="emit('inspect', plugin.id)"
+					>
+						<div class="catalog-card__art" aria-hidden="true">
+							<component
+								:is="group.kind === 'application' ? AppWindow : Puzzle"
+								:size="group.kind === 'application' ? 30 : 24"
+								:stroke-width="1.5"
+							/><span v-if="group.kind === 'application'">{{ name.slice(0, 1) }}</span>
 						</div>
-						<p>
-							{{ marketplaceDescription(pack, locale) ?? t(`marketplace.${group.kind}Hint`) }}
-						</p>
-						<footer>
-							<span class="catalog-card__package">{{ plugin.id }}</span><span
-								v-if="installed.some((item) => item.pluginId === plugin.id)"
-								class="catalog-card__installed"
-								><Check :size="12" />{{ t('marketplace.installed') }}</span
-							><span v-else>v{{ pack.version }}</span>
-						</footer>
-					</div>
-				</button>
-			</div>
-			<UiEmptyState
-				v-if="loaded && !group.plugins.length"
-				:icon="group.kind === 'application' ? AppWindow : Puzzle"
-				:title="
-					t(
-						query.trim()
-							? 'logViewer.noMatches'
-							: `marketplace.empty${group.kind === 'application' ? 'Applications' : 'Extensions'}`,
-					)
-				"
-			/>
-		</section>
+						<div class="catalog-card__body" data-ui-selection="text">
+							<div class="catalog-card__title">
+								<h3>{{ name }}</h3>
+								<ArrowUpRight :size="15" aria-hidden="true" />
+							</div>
+							<p>
+								{{ marketplaceDescription(pack, locale) ?? t(`marketplace.${group.kind}Hint`) }}
+							</p>
+							<footer>
+								<span class="catalog-card__package">{{ plugin.id }}</span><span
+									v-if="installed.some((item) => item.pluginId === plugin.id)"
+									class="catalog-card__installed"
+									><Check :size="12" />{{ t('marketplace.installed') }}</span
+								><span v-else>v{{ pack.version }}</span>
+							</footer>
+						</div>
+					</button>
+				</div>
+				<UiEmptyState
+					v-if="!group.plugins.length"
+					:icon="group.kind === 'application' ? AppWindow : Puzzle"
+					:title="
+						t(
+							query.trim()
+								? 'logViewer.noMatches'
+								: `marketplace.empty${group.kind === 'application' ? 'Applications' : 'Extensions'}`,
+						)
+					"
+				/>
+			</section>
+		</template>
 	</div>
 </template>
 
 <style scoped>
+	.market-discover {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+	}
+	.catalog-placeholder {
+		flex: 1;
+		min-height: 160px;
+		display: grid;
+		place-items: center;
+	}
+	.catalog-loading {
+		--ui-loading-tile-size: 40px;
+		--ui-loading-tile-gap: 9px;
+		--ui-loading-tile-radius: 12px;
+		--ui-loading-icon-size: 20px;
+		--ui-loading-caption-size: 12px;
+	}
 	.market-hero {
 		position: relative;
 		display: flex;

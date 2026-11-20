@@ -1,3 +1,4 @@
+import { v4 as uuid } from 'uuid';
 import type { LogApi } from '../../log/browser/log-api.js';
 import type { PluginViewApi } from '../../plugin/browser/plugin-view-api.js';
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
@@ -64,7 +65,7 @@ export class TaskService {
 			const active = AbortSignal.any([signal, ...(external ? [external] : []), ...(view ? [view.signal] : [])]);
 			active.throwIfAborted();
 			const start = performance.now();
-			const task = Object.freeze({ id: crypto.randomUUID(), name, mode, startedAt: Date.now() });
+			const task = Object.freeze({ id: uuid(), name, mode, startedAt: Date.now() });
 			let outcome: PluginTaskEvent['outcome'] = 'failed';
 			const pending = Promise.resolve().then(async () => {
 				active.throwIfAborted();

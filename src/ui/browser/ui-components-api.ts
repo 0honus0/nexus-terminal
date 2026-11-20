@@ -45,3 +45,5 @@ export { default as UiToolbar } from './components/UiToolbar.vue';
 export { default as UiProgress } from './components/UiProgress.vue';
 
 export { default as UiProgressRow } from './components/UiProgressRow.vue';
+
+export { default as UiLoadingTiles } from './components/UiLoadingTiles.vue';

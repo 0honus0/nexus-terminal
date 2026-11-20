@@ -263,6 +263,7 @@
 					type="text"
 					name="username"
 					autocomplete="username"
+					:aria-label="t('auth.username')"
 					:value="auth.state.value?.account?.username"
 					readonly
 					tabindex="-1"

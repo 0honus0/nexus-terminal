@@ -30,7 +30,7 @@
 	<ContextMenuRoot v-model:open="open" :modal="false">
 		<ContextMenuTrigger ref="trigger" as-child :disabled="disabled"><slot /></ContextMenuTrigger>
 		<ContextMenuPortal>
-			<UiTransition
+			<UiTransition preset="context-menu"
 				><ContextMenuContent
 					v-if="open"
 					force-mount

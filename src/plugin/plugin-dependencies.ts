@@ -272,12 +272,19 @@ export class PluginDependencies {
 	}
 
 	#invalidateBindings(): void {
+		const invalidated: ServiceBinding[] = [];
 		for (const owner of this.stopOrder()) {
 			for (const use of owner.uses) {
 				if (use.failed && !this.#resolve(owner, use)) use.failed = undefined;
-				if (use.binding && !this.#isCurrent(owner, use, use.binding)) use.binding.invalid = true;
+				const binding = use.binding;
+				if (!binding || binding.invalid || this.#isCurrent(owner, use, binding)) continue;
+				binding.invalid = true;
+				invalidated.push(binding);
 			}
 		}
+		// Notify consumers before their next render can read an expired proxy.
+		// Setup settlement and cleanup still follow the ordered drain.
+		for (const binding of invalidated) binding.scope.abort();
 	}
 
 	async #drainInvalid(

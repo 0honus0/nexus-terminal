@@ -1,3 +1,4 @@
+import { shallowRef } from 'vue';
 import type { LogApi } from '../../log/browser/log-api.js';
 import type { BrowserPluginTarget, PluginBackendState } from '../../plugin/plugin-api.browser.js';
 import {
@@ -37,7 +38,8 @@ export class MarketplaceFrontendSource {
 	readonly #log: FrontendSourceOptions['log'];
 	readonly #loadEntry: FrontendSourceOptions['loadEntry'];
 	#installed: readonly MarketplaceFrontend[] = [];
-	#runtime = new Map<string, PluginBackendState & Pick<PluginRuntimeInfo, 'version'>>();
+	readonly #runtime = shallowRef<ReadonlyMap<string, PluginRuntimeInfo>>();
+	#preloginRuntime = new Map<string, PluginBackendState & Pick<PluginRuntimeInfo, 'version'>>();
 	#loaders = new Map<string, EntryLoader>();
 
 	constructor({ log, sync, loadEntry }: FrontendSourceOptions) {
@@ -46,7 +48,13 @@ export class MarketplaceFrontendSource {
 		this.#loadEntry = loadEntry;
 	}
 
+	get runtime(): ReadonlyMap<string, PluginRuntimeInfo> | undefined {
+		return this.#runtime.value;
+	}
+
 	connect(state: Pick<StateClient, 'subscribe'>, onInitialSync: () => void): void {
+		this.#runtime.value = undefined;
+		this.#preloginRuntime.clear();
 		let confirmed = false;
 		let ready = false;
 		let revision = 0;
@@ -71,18 +79,18 @@ export class MarketplaceFrontendSource {
 			unconfirmed: (reason) => {
 				confirmed = reason === 'unavailable';
 				if (confirmed) this.#installed = [];
-				this.#runtime.clear();
+				this.#runtime.value = undefined;
 				void sync();
 			},
 		});
 		state.subscribe(PluginRuntimeStateTopic, PluginRuntimeListSchema, {
 			updated: (value) => {
-				this.#runtime = new Map(value.map((entry) => [entry.pluginId, entry]));
+				this.#runtime.value = new Map(value.map((entry) => [entry.pluginId, entry]));
 				void sync();
 			},
 
 			unconfirmed: () => {
-				this.#runtime.clear();
+				this.#runtime.value = undefined;
 				void sync();
 			},
 		});
@@ -98,7 +106,7 @@ export class MarketplaceFrontendSource {
 		const { items } = MarketplacePreloginSchema.parse(await response.json());
 		signal.throwIfAborted();
 		this.#installed = items;
-		this.#runtime = new Map(
+		this.#preloginRuntime = new Map(
 			items.flatMap(({ pluginId, version, backend }) => (backend ? [[pluginId, { ...backend, version }]] : [])),
 		);
 		await this.#reconcile();
@@ -107,7 +115,8 @@ export class MarketplaceFrontendSource {
 	/** 撤销会话后移除所有已交付的入口。短暂断网仍保留页面和组件实例。 */
 	reset(): Promise<void> {
 		this.#installed = [];
-		this.#runtime.clear();
+		this.#runtime.value = undefined;
+		this.#preloginRuntime.clear();
 		return this.#reconcile();
 	}
 
@@ -115,7 +124,7 @@ export class MarketplaceFrontendSource {
 		const loaders = new Map<string, EntryLoader>();
 		const targets: BrowserPluginTarget[] = [];
 		for (const { pluginId, version, dependsOn, entryURL, hasBackend } of this.#installed) {
-			const backend = this.#runtime.get(pluginId);
+			const backend = (this.#runtime.value ?? this.#preloginRuntime).get(pluginId);
 			if (entryURL) {
 				const url = URL.parse(entryURL, location.origin);
 				const prefix = `${marketplaceFrontendBase}/${encodeURIComponent(pluginId)}/`;

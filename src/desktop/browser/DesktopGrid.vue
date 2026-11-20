@@ -2,7 +2,7 @@
 	import { GridStack, type GridItemHTMLElement } from 'gridstack';
 	import 'gridstack/dist/gridstack.min.css';
 	import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-	import { useElementSize } from '@vueuse/core';
+	import { useRafFn, useResizeObserver } from '@vueuse/core';
 	import type { DesktopPage, DesktopTile } from './desktop-api.js';
 
 	const { page, columns, rows, editing } = defineProps<{
@@ -14,10 +14,15 @@
 	const emit = defineEmits<{ layout: [tiles: DesktopTile[]] }>();
 	const canvas = ref<HTMLElement>();
 	const root = ref<HTMLElement>();
-	const { height } = useElementSize(canvas);
 	let grid: GridStack | undefined;
+	let availableHeight = 0;
 
 	const cellHeight = (available: number) => (available || 108) / Math.max(1, rows, Math.floor(available / 108));
+
+	const { resume: resizeGrid } = useRafFn(() => grid?.cellHeight(cellHeight(availableHeight)), {
+		immediate: false,
+		once: true,
+	});
 
 	function sync(): void {
 		if (!grid || !root.value) return;
@@ -80,7 +85,7 @@
 	defineExpose({ resize });
 
 	onMounted(() => {
-		if (!root.value) return;
+		if (!root.value || !canvas.value) return;
 		grid =
 			GridStack.init(
 				{
@@ -89,7 +94,7 @@
 					mode: 'float',
 					animate: false,
 					staticGrid: !editing,
-					cellHeight: cellHeight(height.value),
+					cellHeight: cellHeight(canvas.value.getBoundingClientRect().height),
 					margin: 9,
 					minRow: rows,
 					maxRow: rows,
@@ -107,7 +112,10 @@
 		() => editing,
 		(value) => grid?.setStatic(!value),
 	);
-	watch(height, (value) => grid?.cellHeight(cellHeight(value)));
+	useResizeObserver(canvas, ([entry]) => {
+		availableHeight = entry.contentRect.height;
+		resizeGrid();
+	});
 	onBeforeUnmount(() => {
 		grid?.destroy(false);
 		grid = undefined;

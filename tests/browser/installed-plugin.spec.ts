@@ -175,6 +175,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		});
 		await page.goto(origin);
 		await page.getByRole('textbox', { name: 'Username' }).fill('owner');
+		await expect(page).toHaveURL(origin + '/login');
 		await page.getByLabel('Password', { exact: true }).fill('test-password');
 		expect(importRequests).toBe(0);
 		await page.getByRole('button', { name: 'Create account', exact: true }).click();
@@ -184,9 +185,17 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		releaseImports();
 		const result = await firstResponse;
 		await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
+		await expect(page).toHaveURL(origin + '/');
 		expect(result.status()).toBe(200);
 		const firstURL = result.url();
-		expect((await anonymous.get(firstURL)).status()).toBe(401);
+		const etag = result.headers()['etag'];
+		expect(etag).toBeTruthy();
+		expect(result.headers()['cache-control']).toBe('private, no-cache');
+		const conditional = { headers: { 'if-none-match': etag! } };
+		const cached = await page.request.get(firstURL, conditional);
+		expect(cached.status()).toBe(304);
+		expect((await cached.body()).length).toBe(0);
+		expect((await anonymous.get(firstURL, conditional)).status()).toBe(401);
 		expect((await page.request.head(firstURL)).headers()['content-type']).toMatch(/javascript/u);
 		expect((await page.request.get(new URL('styles/demo.css', firstURL).href)).headers()['content-type']).toMatch(
 			/^text\/css/u,
@@ -200,7 +209,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		const reloaded = await reloadResponse;
 		expect(reloaded.status()).toBe(200);
 		expect(reloaded.url()).not.toBe(firstURL);
-		expect((await page.request.get(firstURL)).status()).toBe(404);
+		expect((await page.request.get(firstURL, conditional)).status()).toBe(404);
 
 		const widget = page.getByRole('region', { name: 'Counter Widget' });
 		await widget.getByRole('button', { name: 'Increment' }).click();
@@ -516,11 +525,13 @@ test('匿名阶段只加载就绪的登录插件和依赖，登录复用实例�
 		await expect(toast.getByText('用户名或密码不正确。', { exact: true })).toBeVisible();
 		await login.click();
 		await page.getByRole('button', { name: '设置', exact: true }).click();
+		await expect(page).toHaveURL(origin + '/');
 		await expect(page.getByRole('button', { name: '退出登录' })).toBeVisible();
 		await expect(page.locator('html')).toHaveAttribute('data-login-activations', '1');
 
 		await page.getByRole('button', { name: '退出登录' }).click();
 		await expect(login).toBeVisible();
+		await expect(page).toHaveURL(origin + '/login');
 		await expect(page.locator('html')).toHaveAttribute('data-login-activations', '2');
 
 		expect((await operator.post(`/api/plugins/${encodeURIComponent(provider)}/pause`, { data: {} })).status()).toBe(

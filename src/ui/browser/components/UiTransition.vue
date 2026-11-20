@@ -5,6 +5,23 @@
 	const { play } = useUiMotion();
 	const hidden = new WeakMap<HTMLElement, string | null>();
 
+	function frames(leaving = false): Keyframe[] {
+		if (props.preset === 'drop') {
+			const visible = { opacity: 1, clipPath: 'inset(-16px)' };
+			return leaving
+				? [visible, { opacity: 0, clipPath: 'inset(100% -16px -16px)' }]
+				: [{ opacity: 0, clipPath: 'inset(-16px -16px 100%)' }, visible];
+		}
+		const entering: Keyframe[] =
+			props.preset === 'panel'
+				? [
+						{ opacity: 0, scale: '.98' },
+						{ opacity: 1, scale: '1' },
+					]
+				: [{ opacity: 0 }, { opacity: 1 }];
+		return leaving ? entering.reverse() : entering;
+	}
+
 	function enter(target: Element, done: () => void) {
 		const element = target as HTMLElement;
 		element.inert = false;
@@ -14,15 +31,7 @@
 			else element.setAttribute('aria-hidden', previous!);
 			hidden.delete(element);
 		}
-		play(
-			element,
-			[
-				{ opacity: 0, scale: props.preset === 'fade' ? '1' : '.98' },
-				{ opacity: 1, scale: '1' },
-			],
-			200,
-			done,
-		);
+		play(element, frames(), props.preset === 'context-menu' ? 90 : 200, done);
 	}
 
 	function leave(target: Element, done: () => void) {
@@ -31,15 +40,7 @@
 		element.inert = true;
 		if (!hidden.has(element)) hidden.set(element, element.getAttribute('aria-hidden'));
 		element.setAttribute('aria-hidden', 'true');
-		play(
-			element,
-			[
-				{ opacity: 1, scale: '1' },
-				{ opacity: 0, scale: props.preset === 'fade' ? '1' : '.98' },
-			],
-			140,
-			done,
-		);
+		play(element, frames(true), props.preset === 'context-menu' ? 60 : 140, done);
 	}
 </script>
 

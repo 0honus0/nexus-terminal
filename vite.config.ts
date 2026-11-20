@@ -32,7 +32,17 @@ const proxy = { '/api': backendProxy(process.env.BACKEND_URL ?? 'http://127.0.0.
 export default defineConfig({
 	root: fileURLToPath(new URL('./src/app/browser', import.meta.url)),
 	publicDir: false,
-	plugins: [vue()],
+	plugins: [
+		vue(),
+		{
+			name: 'nexus:watch-source',
+
+			configureServer({ watcher }) {
+				// Vue 的仅类型依赖可能在 Vite 根目录之外，源码变化也要让组件重新编译。
+				watcher.add(fileURLToPath(new URL('./src', import.meta.url)));
+			},
+		},
+	],
 	resolve: {
 		dedupe: ['vue'],
 	},

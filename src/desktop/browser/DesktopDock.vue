@@ -12,7 +12,7 @@
 		pins: readonly string[];
 		applications: ReadonlyMap<string, DesktopApplication>;
 	}>();
-	const emit = defineEmits<{ add: [] }>();
+	const emit = defineEmits<{ add: []; prepare: [key: string]; open: [key: string, event: MouseEvent] }>();
 	const editing = defineModel<boolean>('editing', { required: true });
 	const { t } = useI18n({ useScope: 'global' });
 	const root = ref<HTMLElement>();
@@ -54,11 +54,6 @@
 		if (active.value) {
 			for (const item of running.value) item.minimized = true;
 		} else editing.value = !editing.value;
-	}
-
-	function toggle(key: string, event: MouseEvent): void {
-		const app = applications.get(key);
-		if (app) windows.toggle(app, event.currentTarget instanceof HTMLElement ? event.currentTarget : undefined);
 	}
 </script>
 
@@ -110,7 +105,9 @@
 				icon-only
 				:aria-label="t('desktop.openWindow', { title: applications.get(key)?.label() })"
 				:title="applications.get(key)?.label()"
-				@click="(event: MouseEvent) => toggle(key, event)"
+				@pointerenter="(event: PointerEvent) => event.pointerType !== 'touch' && emit('prepare', key)"
+				@focus="emit('prepare', key)"
+				@click="(event: MouseEvent) => emit('open', key, event)"
 			>
 				<component :is="applications.get(key)?.icon ?? Package" :size="22" :stroke-width="1.7" />
 				<span

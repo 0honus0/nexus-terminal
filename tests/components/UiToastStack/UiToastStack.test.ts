@@ -147,6 +147,8 @@ it('preserves native scrolling of expanded messages instead of changing the sele
 it('does not show an expand action for a message that fits', async () => {
 	await render();
 	expect(card().querySelector('[aria-expanded]')).toBeNull();
+	expect(card().querySelector('.ui-toast__footer')).toBeNull();
+	expect(card().querySelector('.ui-toast__controls .ui-toast__page')?.textContent).toContain('1 of 2');
 });
 
 it('pauses expiry when expanding a notification through a touch-style click', async () => {

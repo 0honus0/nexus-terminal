@@ -16,20 +16,24 @@
 	} from '../../marketplace/browser/marketplace-desktop-api.js';
 	import type { MarketplacePlugin } from '../../marketplace/marketplace-types.js';
 	import { resolveApplicationLabel, type PluginContributionList } from '../../plugin/plugin-api.browser.js';
+	import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import { SettingsApp, SettingsTile } from '../../settings/browser/settings-api.js';
 	import type { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
 	import type { AuthApi } from '../../auth/browser/auth-api.js';
 
-	const { contributions, log, signingOut, state, preferences, auth, windowLauncher } = defineProps<{
-		contributions: PluginContributionList;
-		log: LogApi;
-		signingOut: boolean;
-		state?: Pick<StateClient, 'subscribe'>;
-		preferences: SettingsPreferencesApi;
-		auth: AuthApi;
-		windowLauncher: Pick<WindowLauncher, 'attach'>;
-	}>();
-	const emit = defineEmits<{ logout: [] }>();
+	const { contributions, log, signingOut, state, pluginRuntime, pluginsReady, preferences, auth, windowLauncher } =
+		defineProps<{
+			contributions: PluginContributionList;
+			log: LogApi;
+			signingOut: boolean;
+			state?: Pick<StateClient, 'subscribe'>;
+			pluginRuntime?: ReadonlyMap<string, PluginRuntimeInfo>;
+			pluginsReady: boolean;
+			preferences: SettingsPreferencesApi;
+			auth: AuthApi;
+			windowLauncher: Pick<WindowLauncher, 'attach'>;
+		}>();
+	const emit = defineEmits<{ ready: []; logout: [] }>();
 	const previewSpeed = defineModel<number>('previewSpeed');
 	const settings = preferences.value;
 	const { t, locale } = useI18n({ useScope: 'global' });
@@ -101,9 +105,11 @@
 				? [
 						{
 							key: entry.key,
+							id: entry.id,
 							pluginId: entry.context.self.id,
 							label: resolveApplicationLabel(entry.label, locale.value),
 							visible: desktop.isTileVisible(entry.key),
+							readiness: entry.context.self.readiness.value,
 						},
 					]
 				: [],
@@ -124,8 +130,18 @@
 	const marketplace = new MarketplaceDesktopApi(request.signal, log);
 	const installed = shallowRef<readonly MarketplacePlugin[]>();
 	const loading = ref(false);
+	const initialReadSettled = ref(false);
+	const initialReadDeadline = AbortSignal.timeout(5_000);
+	const ready = computed(() => pluginsReady && initialReadSettled.value);
 	let installedRead: AbortController | undefined;
 
+	watch(
+		ready,
+		(value) => {
+			if (value) emit('ready');
+		},
+		{ flush: 'post' },
+	);
 	onScopeDispose(() => request.abort());
 	watch(
 		() => state,
@@ -159,8 +175,9 @@
 		loading.value = true;
 
 		try {
-			const items = await marketplace.readInstalled(signal);
-			if (!signal.aborted) installed.value = items;
+			const readSignal = initialReadSettled.value ? signal : AbortSignal.any([signal, initialReadDeadline]);
+			const items = await marketplace.readInstalled(readSignal);
+			if (!readSignal.aborted) installed.value = items;
 		} catch {
 			if (!signal.aborted)
 				log.report({ source: 'marketplace', level: 'warn', code: 'MARKETPLACE_PLUGINS_READ_FAILED' });
@@ -168,6 +185,7 @@
 			if (installedRead === read) {
 				installedRead = undefined;
 				loading.value = false;
+				if (!request.signal.aborted) initialReadSettled.value = true;
 			}
 		}
 	}
@@ -175,6 +193,7 @@
 
 <template>
 	<DesktopShell
+		v-if="ready"
 		:desktop="desktop"
 		:builtins="builtins"
 		:contributions="contributions"
@@ -218,6 +237,7 @@
 				:loading="loading"
 				:api="marketplace"
 				:applications="marketplaceApplications"
+				:plugin-runtime="pluginRuntime"
 				:builtins="marketplaceBuiltins"
 				@open-application="openApplication"
 				@show-application="showApplication"

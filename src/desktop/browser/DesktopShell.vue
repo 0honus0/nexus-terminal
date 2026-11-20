@@ -33,6 +33,7 @@
 	import DesktopGrid from './DesktopGrid.vue';
 	import DesktopDock from './DesktopDock.vue';
 	import { useDesktopNavigation } from './desktop-navigation.js';
+	import { useDesktopPreload } from './desktop-preload.js';
 
 	const { contributions, log, builtins, desktop, escapeAction, windowLauncher } = defineProps<{
 		contributions: PluginContributionList;
@@ -70,7 +71,7 @@
 
 									label: () => resolveApplicationLabel(plugin.label, locale.value),
 
-									icon: Package,
+									icon: plugin.icon ?? Package,
 									multipleWindows: plugin.multipleWindows,
 									size: plugin.defaultWindowSize,
 									scrollMode: plugin.scrollMode,
@@ -85,6 +86,10 @@
 		() => new Map(plugins.value.filter(({ kind }) => kind === 'widgets').map((entry) => [entry.key, entry])),
 	);
 	const page = computed(() => desktop.page(profile.value));
+	const preloads = useDesktopPreload(
+		() => applications.value,
+		() => [...desktop.pins.value, ...page.value.tiles.map(({ key }) => key)],
+	);
 	const pages = computed(() => desktop.get(profile.value).pages);
 	const numberedPages = computed(() => profile.value === 'wide' || editing.value);
 	const sizingTile = computed(() => page.value.tiles.find((tile) => tile.key === sizingKey.value));
@@ -130,8 +135,13 @@
 	});
 
 	function open(key: string, event?: MouseEvent): void {
+		if (!editing.value) toggleApplication(key, event);
+	}
+
+	function toggleApplication(key: string, event?: MouseEvent): void {
 		const application = applications.value.get(key);
-		if (editing.value || !application) return;
+		if (!application) return;
+		preloads.opened(key);
 		const launcher = event?.currentTarget ?? document.activeElement;
 		windows.toggle(application, launcher instanceof HTMLElement ? launcher : undefined);
 	}
@@ -139,6 +149,7 @@
 	function openApplication(key: string): boolean {
 		const application = applications.value.get(key);
 		if (!application || application.plugin?.lifetime.signal.aborted) return false;
+		preloads.opened(key);
 		windows.open(application);
 		return true;
 	}
@@ -160,8 +171,7 @@
 	function contextAction(tile: DesktopTile, action: string): void {
 		if (action === 'pin') desktop.togglePin(tile.key);
 		else {
-			const app = applications.value.get(tile.key);
-			if (app) windows.open(app);
+			openApplication(tile.key);
 		}
 	}
 
@@ -208,7 +218,15 @@
 								:disabled="editing"
 								@select="(action) => contextAction(tile, action)"
 							>
-								<div class="desktop-tile__content" :inert="editing">
+								<div
+									class="desktop-tile__content"
+									:inert="editing"
+									@pointerenter="
+										(event: PointerEvent) =>
+											!editing && event.pointerType !== 'touch' && preloads.prepare(tile.key)
+									"
+									@focusin="!editing && preloads.prepare(tile.key)"
+								>
 									<slot
 										v-if="!applications.get(tile.key)?.plugin && (tile.w > 1 || tile.h > 1)"
 										name="tile"
@@ -407,6 +425,8 @@
 			:pins="desktop.pins.value"
 			:applications="applications"
 			@add="adding = true"
+			@prepare="preloads.prepare"
+			@open="toggleApplication"
 		/>
 
 		<UiDialog v-model:open="adding" :title="t('desktop.addTile')" :close-label="t('closeApplication')">

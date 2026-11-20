@@ -286,19 +286,31 @@ export class MarketplaceFrontends {
 
 			// 已验证路径后以文件句柄完成 stat 和读取，停用时中断仍在发送的资源。
 			await using handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-			const info = await handle.stat();
+			const info = await handle.stat({ bigint: true });
 			signal.throwIfAborted();
 			if (!info.isFile()) throw new HttpFailure(404, 'MARKETPLACE_FRONTEND_NOT_FOUND');
-			await context.reply({
-				headers: {
-					'content-type': mime,
-					'content-length': info.size,
-					'cache-control': 'private, no-store',
-					// 作为文档直接访问的资源（例如 SVG）处于沙箱；ESM/CSS 按正常子资源加载。
-					'content-security-policy': "sandbox; default-src 'none'",
-				},
-				body: context.method === 'HEAD' ? undefined : handle.createReadStream({ autoClose: false, signal }),
-			});
+			const fingerprint = createHash('sha256')
+				.update(
+					[revision, asset.join('/'), info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].join(':'),
+				)
+				.digest('hex');
+			const etag = `W/"${fingerprint}"`;
+			const headers = {
+				'content-type': mime,
+				'cache-control': 'private, no-cache',
+				'content-security-policy': "sandbox; default-src 'none'",
+				etag,
+			};
+			// 缓存只能在当前会话通过路由鉴权且文件仍可交付时复用。
+			const validators = context.headers['if-none-match']?.split(',') ?? [];
+			if (validators.some((tag) => tag.trim() === '*' || tag.trim().replace(/^W\//u, '') === etag.slice(2))) {
+				await context.reply({ status: 304, headers });
+			} else {
+				await context.reply({
+					headers: { ...headers, 'content-length': String(info.size) },
+					body: context.method === 'HEAD' ? undefined : handle.createReadStream({ autoClose: false, signal }),
+				});
+			}
 		} catch (cause) {
 			context.signal.throwIfAborted();
 			const code = (cause as NodeJS.ErrnoException | undefined)?.code;
