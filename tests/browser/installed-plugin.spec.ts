@@ -273,13 +273,14 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 				.theme,
 		).toBe('light');
 		await preview.getByRole('button', { name: 'Restore', exact: true }).click();
-		await expect(preview.getByRole('status')).toHaveText('Restore complete.');
+		await expect(preview).toHaveCount(0);
+		await expect(toast.getByText('Restore complete.', { exact: true })).toBeVisible();
+		await expect(backup.getByRole('status')).toHaveCount(0);
 		await expect(html).toHaveAttribute('data-ui-mode', 'dark');
 		expect(
 			SettingsSnapshotSchema.parse(await (await page.request.get(origin + settingsBase)).json()).preferences
 				.theme,
 		).toBe('dark');
-		await preview.getByRole('button', { name: 'Close application' }).click();
 		await backup.getByRole('button', { name: 'Close application' }).click();
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const themeSource = settings.getByRole('combobox', { name: 'Theme source' });

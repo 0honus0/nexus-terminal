@@ -293,6 +293,25 @@ test('插件 Toast 使用当前语言，停用后撤销该实例的提示', asyn
 });
 
 test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page, host: _host }) => {
+	await page.route(installedPluginsPath, (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						pluginId: '@nexus-terminal/test',
+						version: '1.0.0',
+						kind: 'application',
+						hasBackend: false,
+						source: { kind: 'local' },
+						enabled: true,
+						runtime: null,
+						issue: null,
+					},
+				],
+			},
+		}),
+	);
+
 	for (const width of [1440, 390]) {
 		await page.setViewportSize({ width, height: 900 });
 		await page.goto('/');
@@ -330,7 +349,7 @@ test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({
 	const canvas = page.locator('.desktop-canvas');
 	const tile = canvas.locator('[data-tile="builtin:log"] .application-tile');
 	await expect(tile).toHaveCount(1);
-	await expect.poll(async () => (await tile.boundingBox())!.height).toBeGreaterThanOrEqual(90);
+	await expect.poll(async () => (await tile.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(90);
 	await expect.poll(() => canvas.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(100);
 	await canvas.hover();
 	await page.mouse.wheel(0, 500);
@@ -338,8 +357,8 @@ test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({
 	await expect(tile).toBeInViewport();
 	for (const width of [720, 1440, 2560, 390]) {
 		await page.setViewportSize({ width, height: 900 });
-		await expect.poll(async () => (await tile.boundingBox())!.height).toBeGreaterThanOrEqual(90);
-		await expect.poll(async () => (await tile.boundingBox())!.height).toBeLessThanOrEqual(114);
+		await expect.poll(async () => (await tile.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(90);
+		await expect.poll(async () => (await tile.boundingBox())?.height ?? Infinity).toBeLessThanOrEqual(114);
 		await expect(canvas.locator('[data-tile="builtin:log"]')).toHaveAttribute('gs-y', '4');
 	}
 });
