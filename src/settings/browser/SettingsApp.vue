@@ -117,14 +117,8 @@
 	<div class="settings-app">
 		<header class="app-page-heading">
 			<h1>{{ t('settings') }}</h1>
-			<p>{{ t('desktop.settingsHint') }}</p>
 		</header>
-		<UiSection
-			class="settings-section"
-			:title="t('desktop.appearance.title')"
-			:description="t('desktop.appearanceHint')"
-			:icon="Palette"
-		>
+		<UiSection class="settings-section" :title="t('desktop.appearance.title')" :icon="Palette">
 			<UiSelect
 				:model-value="state.themeId || 'builtin'"
 				:options="themeOptions"
@@ -153,9 +147,7 @@
 		<UiSection class="settings-section" :title="t('desktop.animationTitle')" :icon="Sparkles">
 			<UiFormRow
 				:label="t('desktop.motionEffects')"
-				:description="
-					t(reducedMotion === 'reduce' ? 'desktop.systemReducedMotion' : 'desktop.motionEffectsHint')
-				"
+				:description="reducedMotion === 'reduce' ? t('desktop.systemReducedMotion') : undefined"
 				v-slot="field"
 			>
 				<UiSwitch
@@ -193,7 +185,6 @@
 			<UiFormRow
 				class="settings-compact-control"
 				:label="t('desktop.escapeAction')"
-				:description="t('desktop.escapeActionHint')"
 				:icon="Keyboard"
 				v-slot="field"
 			>
@@ -215,13 +206,7 @@
 			</UiFormRow>
 		</UiSection>
 		<UiSection class="settings-section">
-			<UiFormRow
-				class="settings-compact-control"
-				:label="t('language')"
-				:description="t('desktop.languageHint')"
-				:icon="Globe"
-				v-slot="field"
-			>
+			<UiFormRow class="settings-compact-control" :label="t('language')" :icon="Globe" v-slot="field">
 				<UiSelect
 					:id="field.id"
 					:aria-describedby="field.describedby"
@@ -319,12 +304,6 @@
 		font-size: 25px;
 		font-weight: 600;
 		letter-spacing: -0.7px;
-	}
-	.app-page-heading p {
-		margin: 0;
-		color: var(--ui-muted);
-		font-size: 12px;
-		line-height: 1.8;
 	}
 
 	.settings-app {

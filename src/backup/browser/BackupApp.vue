@@ -164,7 +164,6 @@
 			<span class="nexus-backup__symbol"><Archive :size="28" /></span>
 			<div>
 				<h1>{{ t('backup.title') }}</h1>
-				<p>{{ t('backup.description') }}</p>
 			</div>
 		</header>
 		<div class="nexus-backup__sections">
@@ -172,15 +171,13 @@
 				appearance="panel"
 				:title="t('backup.tile.export')"
 				:aria-label="t('backup.tile.export')"
-				:description="t('backup.exportHint')"
 				:icon="Download"
 			>
-				<UiField :label="t('auth.password')" :hint="t('backup.passwordHint')" v-slot="field">
+				<UiField :label="t('auth.password')" v-slot="field">
 					<div class="nexus-backup__form-row">
 						<UiInput
 							:id="field.id"
 							v-model="password"
-							:aria-describedby="field.describedby"
 							type="password"
 							autocomplete="new-password"
 							:disabled="busy"
@@ -202,7 +199,6 @@
 				appearance="panel"
 				:title="t('backup.tile.import')"
 				:aria-label="t('backup.tile.import')"
-				:description="t('backup.tile.restoreHint')"
 				:icon="Upload"
 			>
 				<label class="nexus-backup__file" :data-disabled="busy || undefined">
@@ -249,11 +245,7 @@
 		>
 			<template v-if="plan">
 				<p>{{ t('backup.restoreWarning') }}</p>
-				<UiSection
-					v-if="plan.preview.installs.length"
-					:title="t('backup.installPlugins')"
-					:description="t('backup.installHint')"
-				>
+				<UiSection v-if="plan.preview.installs.length" :title="t('backup.installPlugins')">
 					<UiList>
 						<UiListItem
 							v-for="{ pluginId, version, repository } in plan.preview.installs"

@@ -54,7 +54,6 @@
 		<div class="market-hero">
 			<div>
 				<h1>{{ t('marketplace.heading') }}</h1>
-				<p>{{ t('marketplace.intro') }}</p>
 			</div>
 			<div class="market-hero__art" aria-hidden="true">
 				<AppWindow :size="40" :stroke-width="1.3" /><Puzzle :size="26" :stroke-width="1.4" />
@@ -72,7 +71,6 @@
 							{{ t(group.kind === 'application' ? 'applications' : 'marketplace.extensions')
 							}}<span>{{ n(group.plugins.length) }}</span>
 						</h2>
-						<p>{{ t(`marketplace.${group.kind}Hint`) }}</p>
 					</div>
 				</header>
 				<div class="catalog-grid">
@@ -97,8 +95,8 @@
 								<h3>{{ name }}</h3>
 								<ArrowUpRight :size="15" aria-hidden="true" />
 							</div>
-							<p>
-								{{ marketplaceDescription(pack, locale) ?? t(`marketplace.${group.kind}Hint`) }}
+							<p v-if="marketplaceDescription(pack, locale)">
+								{{ marketplaceDescription(pack, locale) }}
 							</p>
 							<footer>
 								<span class="catalog-card__package">{{ plugin.id }}</span>
@@ -166,15 +164,9 @@
 		font-size: clamp(21px, 3cqi, 29px);
 		font-weight: 620;
 		letter-spacing: -0.8px;
-		margin: 0 0 9px;
-	}
-	.market-hero p,
-	.catalog-heading p {
 		margin: 0;
-		color: var(--ui-muted);
-		font-size: 12px;
-		line-height: 1.7;
 	}
+
 	.market-hero__art {
 		display: flex;
 		align-items: center;

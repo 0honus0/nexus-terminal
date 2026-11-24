@@ -309,6 +309,7 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	const window = page.getByRole('region', { name: 'Settings', exact: true });
 	await desktop.getByRole('button', { name: 'Settings', exact: true }).click();
 	await expect(window.locator('[data-theme-option]')).toHaveCount(3);
+	await expect(window.locator('.app-page-heading p, .ui-section__heading p')).toHaveCount(0);
 	const slider = window.getByRole('slider', { name: 'Animation speed' });
 	await slider.press('ArrowRight');
 	await expect(slider).toHaveAttribute('aria-valuenow', '1.3');
@@ -322,6 +323,8 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	const backup = page.getByRole('region', { name: 'Backup and Restore', exact: true });
 	await desktop.getByRole('button', { name: 'Backup and Restore', exact: true }).click();
 	await expect(backup.locator('.nexus-backup__sections')).toBeVisible();
+	await expect(backup.locator('.nexus-backup__intro p, .ui-section__heading p, .ui-field p')).toHaveCount(0);
+	await expect(desktop.locator('.backup-tile__caption')).toHaveCount(0);
 	await expect(backup.getByLabel('Choose a backup file')).toHaveAttribute('accept', '.json');
 	await backup.getByRole('button', { name: 'Close application' }).click();
 

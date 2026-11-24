@@ -26,7 +26,7 @@
 		</span>
 		<span class="backup-tile__summary">
 			<strong>{{ t(wide ? 'backup.tile.restore' : 'backup.tile.save') }}</strong>
-			<span class="backup-tile__caption">{{ t(wide ? 'backup.tile.restoreHint' : 'backup.tile.saveHint') }}</span>
+
 			<span v-if="expanded" class="backup-tile__features">
 				<span><ArrowDownToLine :size="14" aria-hidden="true" />{{ t('backup.tile.export') }}</span>
 				<span><RotateCcw :size="14" aria-hidden="true" />{{ t('backup.tile.import') }}</span>
@@ -38,7 +38,7 @@
 <style scoped>
 	.backup-tile {
 		--_ink: var(--ui-backup-tile-text, light-dark(#354f76, #e1eafa));
-		--_muted: var(--ui-backup-tile-muted, light-dark(#647b9c, #a4b6d0));
+
 		--_art: var(--ui-backup-tile-art, light-dark(#91add3, #6989b6));
 		background: var(--ui-backup-tile-background, light-dark(#e2ebf8, #253449));
 		color: var(--_ink);
@@ -87,11 +87,7 @@
 		line-height: 1.25;
 		letter-spacing: -0.035em;
 	}
-	.backup-tile__caption {
-		color: var(--_muted);
-		font-size: clamp(10px, 5cqi, 12px);
-		line-height: 1.4;
-	}
+
 	.backup-tile__features {
 		display: flex;
 		flex-wrap: wrap;

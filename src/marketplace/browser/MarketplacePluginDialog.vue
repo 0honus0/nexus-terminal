@@ -106,10 +106,12 @@
 				<h2>{{ marketplacePackageName(displayPackage, locale) }}</h2>
 				<small data-ui-selection="text">{{ plugin.id }}</small>
 			</div>
-			<p class="catalog-detail__description" data-ui-selection="text">
-				{{
-					marketplaceDescription(displayPackage, locale) ?? t(`marketplace.${displayPackage.nexus.kind}Hint`)
-				}}
+			<p
+				v-if="marketplaceDescription(displayPackage, locale)"
+				class="catalog-detail__description"
+				data-ui-selection="text"
+			>
+				{{ marketplaceDescription(displayPackage, locale) }}
 			</p>
 			<div class="catalog-detail__version">
 				<span>{{ t('marketplace.versionSource') }}</span>
