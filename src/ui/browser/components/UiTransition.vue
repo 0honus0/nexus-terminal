@@ -31,6 +31,10 @@
 			else element.setAttribute('aria-hidden', previous!);
 			hidden.delete(element);
 		}
+		if (props.preset === 'none') {
+			done();
+			return;
+		}
 		play(element, frames(), props.preset === 'context-menu' ? 90 : 200, done);
 	}
 
@@ -40,6 +44,10 @@
 		element.inert = true;
 		if (!hidden.has(element)) hidden.set(element, element.getAttribute('aria-hidden'));
 		element.setAttribute('aria-hidden', 'true');
+		if (props.preset === 'none') {
+			done();
+			return;
+		}
 		play(element, frames(true), props.preset === 'context-menu' ? 60 : 140, done);
 	}
 </script>

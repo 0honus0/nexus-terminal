@@ -377,7 +377,7 @@ test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩�
 	await expect(tile).toHaveAttribute('gs-w', String(width + 1));
 });
 
-test('选择框定位后纵向淡入，普通菜单淡入，布局菜单纵向展开', async ({ page, host: _host }) => {
+test('选择框保留淡入，下拉菜单默认直接展开，兼容旧布局菜单及显式淡入', async ({ page, host: _host }) => {
 	const warnings: string[] = [];
 	page.on('pageerror', (error) => warnings.push(error.stack ?? error.message));
 	page.on('console', (event) => {
@@ -449,29 +449,23 @@ test('选择框定位后纵向淡入，普通菜单淡入，布局菜单纵向�
 		.getByRole('button', { name: 'Close application' })
 		.click();
 	await page.getByRole('button', { name: 'Counter', exact: true }).click();
-	await page.getByRole('button', { name: 'Fixture sort', exact: true }).click();
-	await expectFade(page.locator('[data-ui="dropdown-menu"]'));
-	await page.keyboard.press('Escape');
-	await page.getByRole('button', { name: 'Fixture layout', exact: true }).click();
-	const layoutMenu = page.getByRole('menu', { name: 'Fixture layout' });
-	const layoutFrames = await popupFrames(layoutMenu);
-	expect(layoutFrames.flat()).toEqual(
-		expect.arrayContaining([
-			expect.objectContaining({ clipPath: 'inset(-16px -16px 100%)' }),
-			expect.objectContaining({ clipPath: 'inset(-16px)' }),
-		]),
-	);
-	for (const frame of layoutFrames.flat()) {
-		expect(frame.transform).toBeUndefined();
-		expect(frame.translate).toBeUndefined();
+	for (const name of ['Fixture sort', 'Fixture layout']) {
+		const trigger = page.getByRole('button', { name, exact: true });
+		await trigger.click();
+		const menu = page.getByRole('menu', { name });
+		expect(await popupFrames(menu)).toEqual([]);
+		await expect(menu).toHaveCSS('clip-path', 'none');
+		await page.keyboard.press('Escape');
+		await expect(menu).toHaveCount(0);
+		await expect(trigger).toBeFocused();
 	}
+	const fade = page.getByRole('button', { name: 'Fixture fade layout', exact: true });
+	await fade.click();
+	const fadeMenu = page.getByRole('menu', { name: 'Fixture fade layout' });
+	await expectFade(fadeMenu);
 	await page.keyboard.press('Escape');
-	const closingFrames = await page.evaluate(() =>
-		[...document.querySelectorAll('[data-reka-popper-content-wrapper]')]
-			.flatMap((element) => JSON.parse(element.getAttribute('data-test-frames') ?? '[]'))
-			.flat(),
-	);
-	expect(closingFrames).toContainEqual(expect.objectContaining({ clipPath: 'inset(100% -16px -16px)' }));
+	await expect(fadeMenu).toHaveCount(0);
+	await expect(fade).toBeFocused();
 	expect(warnings).toEqual([]);
 });
 

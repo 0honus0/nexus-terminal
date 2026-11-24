@@ -200,7 +200,8 @@ export interface UiDropdownMenuProps {
 	items: readonly UiMenuItem[];
 	disabled?: boolean;
 	align?: 'start' | 'center' | 'end';
-	transition?: 'fade' | 'drop';
+	/** 默认直接展开；旧 drop 模式同样直接展开，显式 fade 仍可使用。 */
+	transition?: 'none' | 'fade' | 'drop';
 }
 
 /** 通用静态列表项，业务操作放在 actions 插槽，不将整行伪装成按钮。 */
@@ -261,7 +262,7 @@ export interface UiProgressRowProps {
 
 /** Shared transform/opacity presence transition, using host motion preferences. */
 export interface UiTransitionProps {
-	preset?: 'fade' | 'drop' | 'panel' | 'context-menu';
+	preset?: 'none' | 'fade' | 'drop' | 'panel' | 'context-menu';
 	appear?: boolean;
 }
 

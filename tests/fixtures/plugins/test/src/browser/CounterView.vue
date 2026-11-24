@@ -55,6 +55,12 @@
 					menuTransition: 'drop',
 					items: [{ id: 'edit', label: 'Edit layout' }],
 				},
+				{
+					id: 'fade-layout',
+					label: 'Fixture fade layout',
+					menuTransition: 'fade',
+					items: [{ id: 'edit', label: 'Edit layout' }],
+				},
 			],
 
 			async onSelect(id) {

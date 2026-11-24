@@ -13,7 +13,7 @@
 	import type { UiDropdownMenuProps } from '../ui-component-types.js';
 	import { useTransientOverlay } from '../ui-overlay.js';
 	import '../ui-menu.css';
-	withDefaults(defineProps<UiDropdownMenuProps>(), { align: 'end', transition: 'fade' });
+	withDefaults(defineProps<UiDropdownMenuProps>(), { align: 'end', transition: 'none' });
 	const emit = defineEmits<{ select: [id: string] }>();
 	defineSlots<{ default: () => VNodeChild }>();
 	const open = defineModel<boolean>('open', { default: false });
@@ -26,7 +26,7 @@
 	<DropdownMenuRoot v-model:open="open" :modal="false">
 		<DropdownMenuTrigger ref="trigger" as-child :disabled="disabled || !items.length"><slot /></DropdownMenuTrigger>
 		<DropdownMenuPortal>
-			<UiTransition :preset="transition"
+			<UiTransition :preset="transition === 'fade' ? 'fade' : 'none'"
 				><DropdownMenuContent
 					v-if="open"
 					force-mount
