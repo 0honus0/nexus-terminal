@@ -103,6 +103,19 @@
 		})),
 	);
 
+	const request = new AbortController();
+	const marketplace = new MarketplaceDesktopApi(request.signal, log);
+	const installed = shallowRef<readonly MarketplacePlugin[]>();
+	const pluginIcons = computed(
+		() =>
+			new Map(
+				installed.value?.flatMap(({ pluginId, icon }) => {
+					const component = resolvePluginIcon(icon);
+					return component ? [[pluginId, component] as const] : [];
+				}),
+			),
+	);
+
 	const marketplaceApplications = computed(() =>
 		contributions.value.flatMap((entry) =>
 			entry.kind === 'applications'
@@ -112,7 +125,7 @@
 							id: entry.id,
 							pluginId: entry.context.self.id,
 							label: resolveApplicationLabel(entry.label, locale.value),
-							icon: entry.icon,
+							icon: pluginIcons.value.get(entry.context.self.id) ?? entry.icon,
 							visible: desktop.isTileVisible(entry.key),
 							readiness: entry.context.self.readiness.value,
 						},
@@ -131,18 +144,6 @@
 		if (application) desktop.setTileVisible(key, application.label, visible);
 	}
 
-	const request = new AbortController();
-	const marketplace = new MarketplaceDesktopApi(request.signal, log);
-	const installed = shallowRef<readonly MarketplacePlugin[]>();
-	const pluginIcons = computed(
-		() =>
-			new Map(
-				installed.value?.flatMap(({ pluginId, icon }) => {
-					const component = resolvePluginIcon(icon);
-					return component ? [[pluginId, component] as const] : [];
-				}),
-			),
-	);
 	const loading = ref(false);
 	const initialReadSettled = ref(false);
 	const initialReadDeadline = AbortSignal.timeout(5_000);
