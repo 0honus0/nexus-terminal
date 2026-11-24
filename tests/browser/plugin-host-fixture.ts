@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { test as base, type WebSocketRoute } from '@playwright/test';
+import { chromium, test as base, type WebSocketRoute } from '@playwright/test';
 import { marketplaceFrontendBase } from '../../src/marketplace/marketplace-http-types.js';
 import {
 	MarketplaceFrontendsTopic,
@@ -21,7 +21,24 @@ interface HostFixture {
 	setRuntime(runtime: PluginRuntimeInfo[]): void;
 }
 
-export const test = base.extend<{ host: HostFixture }>({
+const cdp = process.env.NEXUS_TEST_CDP;
+const runner = cdp
+	? base.extend({
+			browser: [
+				async ({}, use) => {
+					const browser = await chromium.connectOverCDP(cdp);
+					try {
+						await use(browser);
+					} finally {
+						await browser.close();
+					}
+				},
+				{ scope: 'worker' },
+			],
+		})
+	: base;
+
+export const test = runner.extend<{ host: HostFixture }>({
 	async host({ page }, use) {
 		const market = '/api/plugins/' + encodeURIComponent(MarketplacePluginId);
 		const entry = marketplaceFrontendBase + '/' + encodeURIComponent(manifest.name);

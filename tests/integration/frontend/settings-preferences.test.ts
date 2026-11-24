@@ -153,6 +153,29 @@ describe('浏览器偏好', () => {
 		expect(preferences.value.value.theme).toBe('dark');
 	});
 
+	it('退出后修改登录页语言，再登录时重新确认同一版本的服务端偏好', async () => {
+		const persisted = {
+			revision: 5,
+			preferences: { ...defaultSettings, locale: 'zh' as const, theme: 'dark' as const },
+		};
+		const fetch = vi.fn<typeof globalThis.fetch>(async () => Response.json(persisted));
+		vi.stubGlobal('fetch', fetch);
+		const { preferences } = session();
+		try {
+			preferences.connect();
+			await vi.waitFor(() => expect(preferences.value.value.locale).toBe('zh'));
+			preferences.disconnect();
+			preferences.update({ locale: 'en' });
+			expect(preferences.value.value.locale).toBe('en');
+			preferences.connect();
+			await vi.waitFor(() => expect(preferences.value.value.locale).toBe('zh'));
+			expect(preferences.value.value.theme).toBe('dark');
+			expect(fetch.mock.calls.map(([, options]) => options?.method ?? 'GET')).toEqual(['GET', 'GET']);
+		} finally {
+			preferences.disconnect();
+		}
+	});
+
 	it('保存时使用提交当时的偏好值，调用方随后修改对象不会改变请求', async () => {
 		const sent = Promise.withResolvers<string>();
 		const fetch = vi.fn<typeof globalThis.fetch>(async (_input, options) => {

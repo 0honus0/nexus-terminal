@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { mergeConfig } from 'vite';
 import host from '../vite.config.js';
 
-export default mergeConfig(host, {
+const config = mergeConfig(host, {
 	resolve: {
 		alias: [
 			{
@@ -16,3 +16,6 @@ export default mergeConfig(host, {
 		],
 	},
 });
+
+// Mocked browser fixtures must never forward unhandled requests to the running development backend.
+export default { ...config, server: { ...config.server, proxy: {} } };

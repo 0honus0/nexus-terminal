@@ -85,6 +85,49 @@ test('单 owner 会话重启后可用，改密撤销旧会话，退出撤销当�
 	}
 });
 
+test('认证限流在解析请求体前执行，不阻断会话状态和注销', { timeout: 15000 }, async () => {
+	const dataDirectory = await mkdtemp(join(tmpdir(), 'nexus-auth-rate-'));
+	const app = new App({ dataDirectory, logLevel: 'fatal' });
+	try {
+		await app.initialize();
+		const origin = app.services.get('http').origin;
+		const initialized = await auth(origin, 'initialize', {
+			body: { username: 'fixture', password: 'fixture password' },
+		});
+		assert.equal(initialized.status, 201);
+		const cookie = sessionCookie(initialized);
+		await initialized.arrayBuffer();
+		const invalid = await auth(origin, 'login', { body: { username: 'fixture', password: 'incorrect' } });
+		assert.equal(invalid.status, 401);
+		assert.equal((await invalid.json()).code, 'AUTH_INVALID_CREDENTIALS');
+		for (let attempt = 0; attempt < 8; attempt++) {
+			const response = await auth(origin, 'login', { body: {} });
+			assert.equal(response.status, 400);
+			await response.arrayBuffer();
+		}
+		const limited = await fetch(origin + '/api/auth/login', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: '{malformed',
+		});
+		assert.equal(limited.status, 429);
+		assert.equal((await limited.json()).code, 'AUTH_RATE_LIMITED');
+		assert.ok(limited.headers.get('ratelimit'));
+		assert.deepEqual((await (await auth(origin, 'state', { cookie })).json()).account, {
+			id: 'owner',
+			username: 'fixture',
+		});
+		assert.equal((await auth(origin, 'logout', { method: 'POST', cookie })).status, 204);
+		assert.equal((await (await auth(origin, 'state', { cookie })).json()).account, null);
+	} finally {
+		try {
+			await app.close();
+		} finally {
+			await rm(dataDirectory, { recursive: true, force: true });
+		}
+	}
+});
+
 test('登录扩展按实例和就绪状态登记，登录沿用宿主会话', { timeout: 15000 }, async (t) => {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-auth-method-'));
 	const host = new PluginTestHost({ dataDirectory: join(directory, 'data'), logLevel: 'fatal' });

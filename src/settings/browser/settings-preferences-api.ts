@@ -42,6 +42,9 @@ export class SettingsPreferencesApi {
 		this.#unsubscribe?.();
 		this.#unsubscribe = undefined;
 		this.#patches.value = [];
+		// 登录页允许临时调整语言，不能把上一登录会话的修订号当作本次服务端确认。
+		const { preferences } = this.#confirmed.value;
+		this.#confirmed.value = { revision: 0, preferences };
 	}
 
 	update(input: Patch): void {

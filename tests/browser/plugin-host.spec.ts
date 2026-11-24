@@ -426,7 +426,10 @@ test('桌面编辑控件使用当前应用名称，语言切换不修改保存�
 	const counter = desktop.locator('[data-tile="@nexus-terminal/test:applications:counter"]');
 	await expect(counter.getByRole('button', { name: 'Counter', exact: true })).toBeVisible();
 	const settings = desktop.locator('[data-tile="builtin:settings"]');
-	const layout = await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'));
+
+	const readLayout = () => page.evaluate(() => JSON.parse(localStorage.getItem('nexus.desktop.pages') ?? 'null'));
+
+	const layout = await readLayout();
 	expect(layout).not.toBeNull();
 
 	await settings.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -440,7 +443,7 @@ test('桌面编辑控件使用当前应用名称，语言切换不修改保存�
 	await expect(counter.getByRole('button', { name: '调整计数器大小', exact: true })).toBeVisible();
 	await expect(settings.getByRole('button', { name: '移动设置', exact: true })).toBeVisible();
 	await expect(settings.getByRole('button', { name: '调整设置大小', exact: true })).toBeVisible();
-	expect(await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'))).toBe(layout);
+	expect(await readLayout()).toEqual(layout);
 
 	// Reload still uses the saved English fallback labels, not a rewritten layout.
 	await page.reload();
@@ -448,7 +451,59 @@ test('桌面编辑控件使用当前应用名称，语言切换不修改保存�
 	await desktop.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
 	await desktop.getByRole('button', { name: '编辑桌面' }).click();
 	await expect(counter.getByRole('button', { name: '移动计数器', exact: true })).toBeVisible();
-	expect(await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'))).toBe(layout);
+	expect(await readLayout()).toEqual(layout);
+});
+
+test('窗口尺寸、最大化、最小化和分档恢复不丢失应用状态', async ({ page, host: _host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.goto('/');
+	const launcher = page.getByRole('button', { name: 'Counter', exact: true });
+	await launcher.click();
+	const window = page.getByRole('region', { name: 'Counter', exact: true });
+	await window.getByRole('button', { name: 'Increment', exact: true }).click();
+	await expect(window.getByText('Count: 1')).toBeVisible();
+	const initial = (await window.boundingBox())!;
+	const handle = window.getByRole('button', { name: 'Resize Counter', exact: true });
+	await handle.press('ArrowRight');
+	await handle.press('Shift+ArrowDown');
+	await expect.poll(async () => (await window.boundingBox())?.width).toBe(initial.width + 16);
+	await expect.poll(async () => (await window.boundingBox())?.height).toBe(initial.height + 48);
+	const resized = (await window.boundingBox())!;
+
+	const readBounds = () => page.evaluate(() => JSON.parse(localStorage.getItem('nexus.windows.bounds') ?? 'null'));
+
+	await expect.poll(readBounds).not.toBeNull();
+	const saved = await readBounds();
+
+	await window.getByRole('button', { name: 'Maximize', exact: true }).click();
+	await expect(window).toHaveClass(/is-maximized/u);
+	await expect.poll(async () => (await window.boundingBox())?.width).toBe(1440);
+	await expect(handle).toHaveCount(0);
+	await window.getByRole('button', { name: 'Restore window', exact: true }).click();
+	await expect.poll(() => window.boundingBox()).toEqual(resized);
+
+	await window.getByRole('button', { name: 'Minimize', exact: true }).click();
+	await expect(window).toBeHidden();
+	await launcher.click();
+	await expect(window.getByText('Count: 1')).toBeVisible();
+	await expect.poll(() => window.boundingBox()).toEqual(resized);
+	await page.setViewportSize({ width: 390, height: 600 });
+	await expect(window).toHaveClass(/is-compact/u);
+	await expect.poll(async () => (await window.boundingBox())?.width).toBe(390);
+	await expect(handle).toHaveCount(0);
+	await expect(window.getByText('Count: 1')).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await expect.poll(() => window.boundingBox()).toEqual(resized);
+	expect(await readBounds()).toEqual(saved);
+
+	await window.getByRole('button', { name: 'Close application', exact: true }).click();
+	await expect(window).toHaveCount(0);
+	await page.reload();
+	await launcher.click();
+	await expect.poll(() => window.boundingBox()).toEqual(resized);
+	await expect(window.getByText('Count: 0')).toBeVisible();
+	expect(await readBounds()).toEqual(saved);
 });
 
 test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩放', async ({ page, host: _host }) => {
@@ -1263,7 +1318,10 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	expect(await relativeStatusTop()).toBeCloseTo(initialStatusTop, 0);
 
 	await expect(market.getByRole('heading', { name: 'Operations', exact: true })).toHaveCount(0);
-	await market.getByRole('button', { name: 'Close application' }).click();
+	// The notification stack may overlap the title bar and intentionally pauses
+	// while hovered. Close using the accessible keyboard action instead.
+	await market.getByRole('button', { name: 'Close application' }).press('Enter');
+	await expect(market).toHaveCount(0);
 	await page.getByRole('button', { name: 'Logs', exact: true }).click();
 	const logs = page.getByRole('region', { name: 'Logs', exact: true });
 	const success = logs.locator('details').filter({ hasText: 'Completed the operation for @nexus-terminal/test.' });
