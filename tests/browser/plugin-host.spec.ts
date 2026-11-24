@@ -420,6 +420,37 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	await expect(desktop.getByRole('button', { name: 'Remove page 1', exact: true })).toBeDisabled();
 });
 
+test('桌面编辑控件使用当前应用名称，语言切换不修改保存的格位', async ({ page, host: _host }) => {
+	await page.goto('/');
+	const desktop = page.locator('.desktop-shell');
+	const counter = desktop.locator('[data-tile="@nexus-terminal/test:applications:counter"]');
+	await expect(counter.getByRole('button', { name: 'Counter', exact: true })).toBeVisible();
+	const settings = desktop.locator('[data-tile="builtin:settings"]');
+	const layout = await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'));
+	expect(layout).not.toBeNull();
+
+	await settings.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('combobox', { name: 'Language' }).click();
+	await page.getByRole('option', { name: '简体中文' }).click();
+	await page.getByRole('region', { name: '设置', exact: true }).getByRole('button', { name: '关闭应用' }).click();
+
+	await desktop.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
+	await desktop.getByRole('button', { name: '编辑桌面' }).click();
+	await expect(counter.getByRole('button', { name: '移动计数器', exact: true })).toBeVisible();
+	await expect(counter.getByRole('button', { name: '调整计数器大小', exact: true })).toBeVisible();
+	await expect(settings.getByRole('button', { name: '移动设置', exact: true })).toBeVisible();
+	await expect(settings.getByRole('button', { name: '调整设置大小', exact: true })).toBeVisible();
+	expect(await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'))).toBe(layout);
+
+	// Reload still uses the saved English fallback labels, not a rewritten layout.
+	await page.reload();
+	await expect(counter.getByRole('button', { name: '计数器', exact: true })).toBeVisible();
+	await desktop.locator('.dock-reveal').evaluate((button: HTMLElement) => button.click());
+	await desktop.getByRole('button', { name: '编辑桌面' }).click();
+	await expect(counter.getByRole('button', { name: '移动计数器', exact: true })).toBeVisible();
+	expect(await page.evaluate(() => localStorage.getItem('nexus.desktop.pages'))).toBe(layout);
+});
+
 test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩放', async ({ page, host: _host }) => {
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');

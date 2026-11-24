@@ -154,6 +154,13 @@
 		return windows.open(application);
 	}
 
+	function tileLabel(tile: DesktopTile): string {
+		const application = applications.value.get(tile.key);
+		if (application) return application.label();
+		const widget = widgets.value.get(tile.key);
+		return widget ? toValue(widget.label) : tile.label;
+	}
+
 	function tileEntry(tile: DesktopTile): PluginComponentEntry | undefined {
 		const entry = applications.value.get(tile.key)?.plugin;
 		if (!entry?.tile) return;
@@ -291,7 +298,7 @@
 								v-show="editing"
 								class="desktop-tile__move"
 								type="button"
-								:aria-label="t('desktop.move', { title: tile.label })"
+								:aria-label="t('desktop.move', { title: tileLabel(tile) })"
 								@keydown="nudge"
 							/>
 							<span v-show="editing" class="desktop-tile__resize" aria-hidden="true">
@@ -301,7 +308,7 @@
 								<button
 									class="desktop-tile__size"
 									type="button"
-									:aria-label="t('desktop.resize', { title: tile.label })"
+									:aria-label="t('desktop.resize', { title: tileLabel(tile) })"
 									@click="sizingKey = tile.key"
 								>
 									{{ tile.w }} × {{ tile.h }}
@@ -310,7 +317,7 @@
 									v-if="!applications.has(tile.key)"
 									class="desktop-tile__remove"
 									type="button"
-									:aria-label="t('desktop.removeTile', { title: tile.label })"
+									:aria-label="t('desktop.removeTile', { title: tileLabel(tile) })"
 									@click="desktop.remove(profile, tile.key)"
 								>
 									<X :size="16" />
