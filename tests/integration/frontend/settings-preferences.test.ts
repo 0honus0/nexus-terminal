@@ -54,6 +54,71 @@ describe('浏览器偏好', () => {
 		expect(unsubscribe).toHaveBeenCalledOnce();
 	});
 
+	it('首次登录持久化浏览器语言，并接收恢复后的语言', async () => {
+		let current = snapshot(0, 'system');
+		const initialized = Promise.withResolvers<void>();
+		const fetch = vi.fn<typeof globalThis.fetch>(async (_input, options) => {
+			if (options?.method === 'POST') {
+				expect(JSON.parse(String(options.body))).toEqual({ locale: 'zh' });
+				current = { revision: 1, preferences: { ...defaultSettings, locale: 'zh' } };
+				initialized.resolve();
+			}
+			return Response.json(current);
+		});
+		vi.stubGlobal('fetch', fetch);
+		const preferences = new SettingsPreferencesApi({ locale: 'zh', log: { report: vi.fn() } });
+		let observer!: PluginStateObserver<SettingsSnapshot>;
+		preferences.connect({
+			subscribe(_topic, _schema, next) {
+				observer = next as PluginStateObserver<SettingsSnapshot>;
+				return () => {};
+			},
+		});
+		try {
+			await initialized.promise;
+			await vi.waitFor(() => expect(preferences.value.value.locale).toBe('zh'));
+			observer.updated({ revision: 2, preferences: { ...defaultSettings, locale: 'en' } });
+			expect(preferences.value.value.locale).toBe('en');
+			await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+			expect(fetch.mock.calls.map(([, options]) => options?.method ?? 'GET')).toEqual(['GET', 'POST']);
+		} finally {
+			preferences.disconnect();
+		}
+	});
+
+	it('迟到的首次语言初始化响应不会覆盖已经恢复的偏好', async () => {
+		const entered = Promise.withResolvers<void>();
+		const initialize = Promise.withResolvers<Response>();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn<typeof globalThis.fetch>(async (_input, options) => {
+				if (options?.method === 'POST') {
+					entered.resolve();
+					return initialize.promise;
+				}
+				return Response.json(snapshot(0, 'system'));
+			}),
+		);
+		const preferences = new SettingsPreferencesApi({ locale: 'zh', log: { report: vi.fn() } });
+		let observer!: PluginStateObserver<SettingsSnapshot>;
+		preferences.connect({
+			subscribe(_topic, _schema, next) {
+				observer = next as PluginStateObserver<SettingsSnapshot>;
+				return () => {};
+			},
+		});
+		try {
+			await entered.promise;
+			observer.updated(snapshot(3, 'dark'));
+			initialize.resolve(Response.json({ revision: 1, preferences: { ...defaultSettings, locale: 'zh' } }));
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(preferences.value.value.locale).toBe('en');
+			expect(preferences.value.value.theme).toBe('dark');
+		} finally {
+			preferences.disconnect();
+		}
+	});
+
 	it('保存响应丢失时读取已提交结果，避免重放写入和错误通知', async () => {
 		let current = snapshot(1, 'system');
 		const verified = Promise.withResolvers<void>();

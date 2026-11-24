@@ -54,6 +54,7 @@ export type {
 	WindowAction,
 	WindowActionsOptions,
 	WindowTab,
+	WindowTabStatus,
 	WindowTabsOptions,
 } from '../../window/browser/window-plugin-api.js';
 

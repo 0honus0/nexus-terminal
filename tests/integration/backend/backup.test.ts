@@ -121,6 +121,14 @@ test('备份已停用插件，跨宿主重加密密文，恢复完成后重新�
 	const from = await setup(source, 'source data');
 	const to = await setup(target, 'target data');
 
+	const initialized = SettingsSnapshotSchema.parse(await (await from.call(settingsBase, { locale: 'zh' })).json());
+	assert.equal(initialized.revision, 1);
+	assert.equal(initialized.preferences.locale, 'zh');
+	const lateInitializer = SettingsSnapshotSchema.parse(
+		await (await from.call(settingsBase, { locale: 'en' })).json(),
+	);
+	assert.deepEqual(lateInitializer, initialized);
+
 	const updated = await from.call(
 		settingsBase,
 		{ animationSpeed: 1.9, motionEffects: false, theme: 'dark' },
@@ -223,6 +231,9 @@ test('备份已停用插件，跨宿主重加密密文，恢复完成后重新�
 	assert.equal(settingsAfter.preferences.animationSpeed, 1.9);
 	assert.equal(settingsAfter.preferences.motionEffects, false);
 	assert.equal(settingsAfter.preferences.theme, 'dark');
+	assert.equal(settingsAfter.preferences.locale, 'zh');
+	const late = SettingsSnapshotSchema.parse(await (await to.call(settingsBase, { locale: 'en' })).json());
+	assert.deepEqual(late, settingsAfter);
 });
 
 test('恢复普通外键时允许前向引用，无效引用回滚，并拦截触发器和级联副作用', async (t) => {

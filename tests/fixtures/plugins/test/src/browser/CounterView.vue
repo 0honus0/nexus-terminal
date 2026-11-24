@@ -1,5 +1,10 @@
 <script setup lang="ts">
-	import { PluginHttpError, type PluginComponentProps, type PluginWindowApi } from 'nexus-terminal/browser';
+	import {
+		PluginHttpError,
+		type PluginComponentProps,
+		type PluginWindowApi,
+		type WindowTab,
+	} from 'nexus-terminal/browser';
 	import { UiButton } from 'nexus-terminal/browser/ui';
 	import { ref } from 'vue';
 	import { useI18n } from 'vue-i18n';
@@ -12,9 +17,9 @@
 
 	const hostControls = new URLSearchParams(location.search).has('host-controls') && 'registerTabs' in props.view;
 	const active = ref('one');
-	const tabs = ref([
+	const tabs = ref<WindowTab[]>([
 		{ id: 'one', label: 'One' },
-		{ id: 'two', label: 'Two', closable: true },
+		{ id: 'two', label: 'Two', closable: true, status: { tone: 'info', label: 'Marked for suspend' } },
 	]);
 	const result = ref('');
 	const itemCount = ref<number>();

@@ -60,7 +60,7 @@ export class SettingsStorage {
 		return this.#database.withClient((client) => this.#read(client.$extendTables<Tables>()));
 	}
 
-	update(input: Partial<SettingsPreferences>, signal: AbortSignal): Promise<SettingsSnapshot> {
+	update(input: Partial<SettingsPreferences>, signal: AbortSignal, onlyInitial = false): Promise<SettingsSnapshot> {
 		signal.throwIfAborted();
 		return this.#database.withClient((client) =>
 			client
@@ -68,7 +68,7 @@ export class SettingsStorage {
 				.transaction()
 				.execute(async (db) => {
 					const stored = await this.#read(db);
-					if (!Object.keys(input).length) return stored;
+					if ((onlyInitial && stored.revision !== 0) || !Object.keys(input).length) return stored;
 
 					const revision = stored.revision + 1;
 					const preferences = { ...stored.preferences, ...input };

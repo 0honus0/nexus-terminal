@@ -161,6 +161,7 @@ test('登录扩展按实例和就绪状态登记，登录沿用宿主会话', { 
 					],
 				});
 				hooks.registration = registration;
+				hooks.readAccount = (signal) => authMethods.getAccount(signal);
 				hooks.setReady = (ready) => self.readiness.set(ready
 					? { state: 'ready' }
 					: { state: 'pending', reason: { code: 'PLUGIN_CONFIGURATION_REQUIRED' } });
@@ -171,6 +172,7 @@ test('登录扩展按实例和就绪状态登记，登录沿用宿主会话', { 
 	const { hooks } = (await import(hooksURL)) as {
 		hooks: {
 			registration: { baseURL: string; dispose(): Promise<void> };
+			readAccount(signal: AbortSignal): Promise<unknown>;
 			setReady(ready: boolean): void;
 			pauseAfterLogin(): Promise<void>;
 		};
@@ -205,10 +207,13 @@ test('登录扩展按实例和就绪状态登记，登录沿用宿主会话', { 
 	hooks.setReady(true);
 	assert.deepEqual((await readState()).methods[1], { pluginId, id: 'example', label: 'auth.example', baseURL });
 	assert.equal((await verify('valid')).status, 409);
+	assert.equal(await hooks.readAccount(new AbortController().signal), null);
 
 	const initialized = await auth(origin, 'initialize', { body: { username: 'test', password: 'test password' } });
 	assert.equal(initialized.status, 201);
 	await initialized.arrayBuffer();
+	assert.deepEqual(await hooks.readAccount(new AbortController().signal), { id: 'owner', username: 'test' });
+	await assert.rejects(hooks.readAccount(AbortSignal.abort()), { name: 'AbortError' });
 	assert.equal((await verify('invalid')).status, 401);
 	const verified = await verify('valid');
 	assert.equal(verified.status, 201);

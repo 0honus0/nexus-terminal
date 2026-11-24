@@ -2,7 +2,12 @@ import { z } from 'zod';
 import type { BackupDataApi } from '../../backup/node/backup-data-api.js';
 import hostPackage from '../../../package.json' with { type: 'json' };
 import type { BuiltinPlugin, PluginContextApi } from '../../plugin/plugin-api.node.js';
-import { SettingsPatchSchema, SettingsSnapshotSchema, settingsPath } from '../settings-http-types.js';
+import {
+	SettingsInitialLocaleSchema,
+	SettingsPatchSchema,
+	SettingsSnapshotSchema,
+	settingsPath,
+} from '../settings-http-types.js';
 import { SettingsPluginId, SettingsTopic, type SettingsSnapshot } from '../settings-types.js';
 import { SettingsStorage, backup, migrations, settingsTable } from './settings-storage.js';
 
@@ -59,6 +64,19 @@ export class SettingsPlugin implements BuiltinPlugin {
 				output: SettingsSnapshotSchema,
 
 				handler: () => current,
+			},
+			{
+				method: 'post',
+				path: settingsPath,
+				input: SettingsInitialLocaleSchema,
+				output: SettingsSnapshotSchema,
+				status: 200,
+
+				handler: async (input: z.infer<typeof SettingsInitialLocaleSchema>, signal) => {
+					const saved = await storage.update(input, signal, true);
+					publish(saved);
+					return saved;
+				},
 			},
 			{
 				method: 'patch',

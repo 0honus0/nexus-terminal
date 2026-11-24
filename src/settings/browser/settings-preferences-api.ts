@@ -98,7 +98,24 @@ export class SettingsPreferencesApi {
 			await response.body?.cancel();
 			throw new Error('SETTINGS_READ_FAILED');
 		}
-		this.#accept(SettingsSnapshotSchema.parse(await response.json()), signal);
+		const snapshot = SettingsSnapshotSchema.parse(await response.json());
+		signal.throwIfAborted();
+		if (snapshot.revision === 0 && this.#confirmed.value.revision === 0) {
+			// Persist the effective first-login locale, but never overwrite saved/restored preferences.
+			const initialized = await fetch(settingsBase, {
+				method: 'POST',
+				signal,
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ locale: this.#confirmed.value.preferences.locale }),
+			});
+			if (!initialized.ok) {
+				await initialized.body?.cancel();
+				throw new Error('SETTINGS_SAVE_FAILED');
+			}
+			this.#accept(SettingsSnapshotSchema.parse(await initialized.json()), signal);
+			return;
+		}
+		this.#accept(snapshot, signal);
 	}
 
 	#accept(next: SettingsSnapshot, signal: AbortSignal): void {

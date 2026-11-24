@@ -5,7 +5,7 @@ import type { HttpJsonRouteRegistration, HttpRoute } from '../../http/node/http-
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
 import type { PluginReadiness } from '../../plugin/plugin-state-types.js';
 import { CodedError } from '../../utils/error.js';
-import type { AuthMethod } from '../auth-http-types.js';
+import type { AuthAccount, AuthMethod } from '../auth-http-types.js';
 
 /** 当前登录请求可用的协议数据与响应能力。 */
 export interface AuthMethodContextApi {
@@ -44,6 +44,9 @@ export interface AuthMethodRegistrationApi {
 }
 
 export interface AuthMethodApi {
+	/** 读取本体账号的公开标识及用户名，不返回密码、凭据或会话。 */
+	getAccount(signal: AbortSignal): Promise<AuthAccount | null>;
+
 	/** id 在当前插件内唯一。label 是由登录页翻译的文案标识。 */
 	register<const Routes extends readonly AuthMethodRouteRegistration[]>(method: {
 		readonly id: string;
@@ -64,6 +67,7 @@ interface RegisteredAuthMethod {
 
 interface AuthMethodServices {
 	readonly cookieName: string;
+	getAccount(): Promise<AuthAccount | null>;
 	getHttp(): Pick<HttpApi, 'register'> | undefined;
 	completeLogin(request: Request, signal: AbortSignal, assertCurrent: () => void): Promise<void>;
 	destroySession(request: Request): Promise<void>;
@@ -71,9 +75,11 @@ interface AuthMethodServices {
 
 class PluginAuthMethods implements AuthMethodApi {
 	readonly register: AuthMethodApi['register'];
+	readonly getAccount: AuthMethodApi['getAccount'];
 
-	constructor(register: AuthMethodApi['register']) {
+	constructor(register: AuthMethodApi['register'], getAccount: AuthMethodApi['getAccount']) {
 		this.register = register;
+		this.getAccount = getAccount;
 	}
 }
 
@@ -96,7 +102,16 @@ export class AuthMethods {
 
 	/** 运行时交付真实插件身份及就绪状态，插件只能在自己的命名空间登记。 */
 	bind(pluginId: string, scope: PluginScopeApi, readiness: RegisteredAuthMethod['readiness']): AuthMethodApi {
-		return new PluginAuthMethods((method) => this.#registerMethod(pluginId, scope, readiness, method));
+		return new PluginAuthMethods(
+			(method) => this.#registerMethod(pluginId, scope, readiness, method),
+			async (signal) => {
+				const active = AbortSignal.any([scope.signal, signal]);
+				active.throwIfAborted();
+				const account = await this.#services.getAccount();
+				active.throwIfAborted();
+				return account;
+			},
+		);
 	}
 
 	#registerMethod(

@@ -5,9 +5,17 @@ import type { UiDropdownMenuProps, UiMenuItem } from '../../ui/browser/ui-compon
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
 import { CodedError } from '../../utils/error.js';
 
+/** 可选语义状态，颜色由宿主主题决定，文本由插件国际化。 */
+export interface WindowTabStatus {
+	readonly tone: 'neutral' | 'success' | 'warning' | 'info' | 'danger';
+	readonly label: string;
+	readonly busy?: boolean;
+}
+
 export interface WindowTab {
 	readonly id: string;
 	readonly label: string;
+	readonly status?: WindowTabStatus;
 	readonly disabled?: boolean;
 	readonly closable?: boolean;
 	readonly menu?: readonly UiMenuItem[];

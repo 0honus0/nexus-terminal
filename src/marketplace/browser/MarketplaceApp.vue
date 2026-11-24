@@ -620,7 +620,7 @@
 		<UiDialog
 			v-model:open="builtinOpen"
 			:title="managedBuiltin?.label ?? ''"
-			size="sm"
+			size="md"
 			:close-label="t('closeApplication')"
 		>
 			<div v-if="managedBuiltin" class="marketplace-managed-summary">
@@ -660,6 +660,7 @@
 		<UiDialog
 			v-model:open="managedOpen"
 			:title="t('marketplace.manageInstalled')"
+			size="md"
 			:close-label="t('closeApplication')"
 		>
 			<template v-if="managed">

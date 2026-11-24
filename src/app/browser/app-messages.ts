@@ -135,7 +135,7 @@ export const appMessages = {
 			inspect: 'Preview restore',
 			restoreWarning: 'Confirming replaces the listed data. The affected plugins pause during restore.',
 			rows: '{pluginId} · {count} rows',
-			status: { restoring: 'Restoring…', succeeded: 'Restore complete.', failed: 'Restore failed.' },
+			status: { restoring: 'Restoring…' },
 			tile: {
 				title: 'Backup and Restore',
 				save: 'Backup',
@@ -397,7 +397,7 @@ export const appMessages = {
 			inspect: '预览恢复',
 			restoreWarning: '确认后将替换所列数据，恢复期间暂停涉及的插件。',
 			rows: '{pluginId} · {count} 行',
-			status: { restoring: '正在恢复…', succeeded: '恢复完成。', failed: '恢复失败。' },
+			status: { restoring: '正在恢复…' },
 			tile: {
 				title: '备份与恢复',
 				save: '备份',

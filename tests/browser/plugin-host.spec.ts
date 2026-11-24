@@ -292,6 +292,58 @@ test('插件 Toast 使用当前语言，停用后撤销该实例的提示', asyn
 	await expect(toast.getByText('已保存 2 项。')).toHaveCount(0);
 });
 
+test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page, host: _host }) => {
+	for (const width of [1440, 390]) {
+		await page.setViewportSize({ width, height: 900 });
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+		const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+		await market.getByRole('button', { name: 'Manage installed plugins' }).click();
+		for (const [name, title] of [
+			['Settings', 'Settings'],
+			['Counter', 'Manage installed plugin'],
+		]) {
+			await market.getByRole('button', { name: 'Manage ' + name, exact: true }).click();
+			const dialog = page.getByRole('dialog', { name: title, exact: true });
+			await expect(dialog).toHaveAttribute('data-size', 'md');
+			await expect(dialog).toHaveCSS('width', Math.min(560, width - 32) + 'px');
+			await dialog.getByRole('button', { name: 'Close application' }).click();
+			await expect(dialog).toHaveCount(0);
+		}
+	}
+});
+
+test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({ page, host: _host }) => {
+	const saved = Object.fromEntries(
+		['compact', 'medium', 'wide'].map((profile) => [
+			profile,
+			{
+				pages: [{ id: 'home', tiles: [{ key: 'builtin:log', label: 'Logs', x: 0, y: 4, w: 1, h: 1 }] }],
+				hidden: ['builtin:marketplace', 'builtin:settings', 'builtin:backup'],
+				current: 'home',
+			},
+		]),
+	);
+	await page.addInitScript((value) => localStorage.setItem('nexus.desktop.pages', JSON.stringify(value)), saved);
+	await page.setViewportSize({ width: 390, height: 340 });
+	await page.goto('/');
+	const canvas = page.locator('.desktop-canvas');
+	const tile = canvas.locator('[data-tile="builtin:log"] .application-tile');
+	await expect(tile).toHaveCount(1);
+	await expect.poll(async () => (await tile.boundingBox())!.height).toBeGreaterThanOrEqual(90);
+	await expect.poll(() => canvas.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(100);
+	await canvas.hover();
+	await page.mouse.wheel(0, 500);
+	await expect.poll(() => canvas.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+	await expect(tile).toBeInViewport();
+	for (const width of [720, 1440, 2560, 390]) {
+		await page.setViewportSize({ width, height: 900 });
+		await expect.poll(async () => (await tile.boundingBox())!.height).toBeGreaterThanOrEqual(90);
+		await expect.poll(async () => (await tile.boundingBox())!.height).toBeLessThanOrEqual(114);
+		await expect(canvas.locator('[data-tile="builtin:log"]')).toHaveAttribute('gs-y', '4');
+	}
+});
+
 test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({ page, host: _host }) => {
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');
@@ -904,6 +956,13 @@ test('普通 HTTP 下应用窗口仍可运行 SDK 任务和宿主 HTTP 与 WS �
 	const application = page.getByRole('region', { name: 'Counter', exact: true });
 	await application.getByRole('tab', { name: 'Two' }).click();
 	await expect(application.getByRole('tab', { name: 'Two' })).toHaveAttribute('aria-selected', 'true');
+	await expect(application.getByRole('tab', { name: 'Two' })).toHaveAttribute(
+		'aria-description',
+		'Marked for suspend',
+	);
+	await expect(application.locator(".window-tab[data-tone='info']")).toHaveCount(1);
+	await expect(application.locator('.window-tabs__list')).toHaveCSS('flex-wrap', 'nowrap');
+
 	await application.getByRole('button', { name: 'Close tab Two' }).click();
 	await expect(application.getByRole('tab', { name: 'Two' })).toHaveCount(0);
 	await application.getByRole('button', { name: 'Probe host' }).click();

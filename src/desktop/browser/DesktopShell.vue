@@ -259,6 +259,7 @@
 										class="application-tile"
 										:style="{ '--app-accent': applications.get(tile.key)?.color }"
 										:label="applications.get(tile.key)!.label()"
+										:title="applications.get(tile.key)!.label()"
 										@click="(event: MouseEvent) => open(tile.key, event)"
 									>
 										<span class="application-tile__icon"
@@ -530,15 +531,17 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
+		gap: clamp(3px, 7cqmin, 8px);
+		padding: 4px;
 	}
 	.application-tile__icon {
 		display: grid;
 		place-items: center;
 		--_accent: var(--app-accent, var(--ui-primary));
-		width: 64px;
-		height: 64px;
-		border-radius: 21px;
+		width: clamp(26px, 54cqmin, 64px);
+		aspect-ratio: 1;
+		flex: none;
+		border-radius: clamp(9px, 18cqmin, 21px);
 		color: #fff;
 		background: linear-gradient(
 			145deg,
@@ -556,24 +559,27 @@
 		filter: brightness(1.06);
 	}
 	[data-profile='compact'] .application-tile__icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 16px;
+		width: clamp(26px, 54cqmin, 48px);
+		border-radius: clamp(9px, 18cqmin, 16px);
 	}
-	[data-profile='compact'] .application-tile__icon svg {
-		width: 23px;
-		height: 23px;
+	.application-tile__icon svg {
+		width: 48%;
+		height: 48%;
 	}
 	.application-tile strong {
 		max-width: 100%;
-		font-size: 14px;
+		font-size: clamp(11px, 13cqi, 14px);
 		font-weight: 450;
 		text-align: center;
 		line-height: 1.3;
 		overflow-wrap: anywhere;
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		overflow: hidden;
 	}
 	[data-profile='compact'] .application-tile strong {
-		font-size: 12px;
+		font-size: clamp(11px, 13cqi, 12px);
 	}
 	.desktop-widget {
 		width: 100%;

@@ -41,18 +41,30 @@
 	const dialog = ref(false);
 	const busy = computed(() => !!loading.value || job.value?.state === 'restoring');
 
-	function accept(next: typeof job.value): void {
+	let notifiedJob: string | undefined;
+
+	function notifyFinished(next: NonNullable<typeof job.value>): void {
+		if (next.state === 'restoring' || notifiedJob === next.id) return;
+		notifiedJob = next.id;
+		log.report({
+			source: 'backup',
+			level: next.state === 'succeeded' ? 'info' : 'error',
+			code: next.state === 'succeeded' ? 'BACKUP_RESTORED' : (next.error ?? 'BACKUP_RESTORE_FAILED'),
+			userVisible: true,
+		});
+	}
+
+	function accept(next: typeof job.value, accepted = false): void {
 		if (lifetime.signal.aborted || !next) return;
-		if (job.value?.id === next.id && job.value.state !== 'restoring') return;
-		const finished = job.value?.id === next.id && job.value.state === 'restoring' && next.state !== 'restoring';
+		const same = job.value?.id === next.id;
+		if (same && job.value!.state !== 'restoring') {
+			// A fast restore can finish through the state topic before its HTTP response arrives.
+			if (accepted) notifyFinished(job.value!);
+			return;
+		}
+		const finished = same && next.state !== 'restoring';
 		job.value = next;
-		if (finished)
-			log.report({
-				source: 'backup',
-				level: next.state === 'succeeded' ? 'info' : 'error',
-				code: next.state === 'succeeded' ? 'BACKUP_RESTORED' : (next.error ?? 'BACKUP_RESTORE_FAILED'),
-				userVisible: true,
-			});
+		if (finished || accepted) notifyFinished(next);
 	}
 
 	async function readStatus(): Promise<void> {
@@ -150,7 +162,9 @@
 			if (!selection) return;
 			accept(
 				await api.restore(selection.archive, restorePassword.value, selection.preview.token, lifetime.signal),
+				true,
 			);
+			dialog.value = false;
 			restorePassword.value = '';
 			plan.value = undefined;
 			void readStatus();
@@ -234,7 +248,7 @@
 				</UiField>
 			</UiSection>
 		</div>
-		<p v-if="job" role="status">{{ t('backup.status.' + job.state) }}</p>
+		<p v-if="job?.state === 'restoring'" role="status">{{ t('backup.status.restoring') }}</p>
 		<UiDialog
 			v-model:open="dialog"
 			class="backup-dialog"
@@ -263,7 +277,6 @@
 						:description="t('backup.rows', { pluginId: entry.pluginId, count: entry.rows })"
 				/></UiList>
 			</template>
-			<p v-else-if="job" role="status">{{ t('backup.status.' + job.state) }}</p>
 			<template v-if="plan" #footer>
 				<UiButton tone="danger" :loading="loading === 'restore'" @click="restore">{{
 					t('backup.tile.restore')

@@ -17,7 +17,8 @@
 	let grid: GridStack | undefined;
 	let availableHeight = 0;
 
-	const cellHeight = (available: number) => (available || 108) / Math.max(1, rows, Math.floor(available / 108));
+	// Keep cards legible when zoom or a short viewport leaves fewer visible rows.
+	const cellHeight = (available: number) => Math.max(108, Math.min(132, Math.floor(available / Math.max(1, rows))));
 
 	const { resume: resizeGrid } = useRafFn(() => grid?.cellHeight(cellHeight(availableHeight)), {
 		immediate: false,
@@ -142,6 +143,7 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden auto;
+		overscroll-behavior-y: contain;
 	}
 	.desktop-grid {
 		isolation: isolate;

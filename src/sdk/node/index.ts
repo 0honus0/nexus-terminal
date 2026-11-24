@@ -38,6 +38,8 @@ export {
 
 export type { PluginDatabaseApi } from '../../database/node/database-plugin-api.js';
 
+export type { AuthAccount } from '../../auth/auth-http-types.js';
+
 export type {
 	AuthMethodApi,
 	AuthMethodContextApi,

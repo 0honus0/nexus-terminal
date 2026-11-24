@@ -76,6 +76,11 @@ export class AuthApi {
 		this.#methods = new AuthMethods({
 			cookieName,
 
+			getAccount: async () => {
+				const owner = await this.#storage.getOwner();
+				return owner ? { id: owner.id, username: owner.username } : null;
+			},
+
 			getHttp: () => (this.#session ? this.#http : undefined),
 
 			completeLogin: (request, signal, assertCurrent) =>
