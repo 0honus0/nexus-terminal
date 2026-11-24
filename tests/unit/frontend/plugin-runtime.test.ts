@@ -1,7 +1,7 @@
 import { WindowLauncher } from '../../../src/window/browser/window-plugin-api.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nextTick, ref, shallowRef, watch } from 'vue';
+import { effectScope, nextTick, ref, shallowRef, watch } from 'vue';
 import { z } from 'zod';
 import { PluginScope } from '../../../src/plugin/plugin-api.js';
 import type { StateClient } from '../../../src/state/browser/state-api.js';
@@ -317,6 +317,57 @@ test('宿主状态主题在同一插件内复用订阅，并随视图和连接�
 	assert.deepEqual(cloned, [3]);
 	assert.deepEqual(payload, { count: 3 });
 	await scopes.close();
+	assert.equal(releases, 2);
+});
+
+test('首个状态订阅视图卸载后，其他视图继续接收共享主题', async (t) => {
+	const plugin = new PluginScope(() => {});
+	const tile = effectScope();
+	const window = effectScope();
+	t.after(async () => {
+		tile.stop();
+		window.stop();
+		await plugin.close();
+	});
+	const tileLifetime = new AbortController();
+	const windowLifetime = new AbortController();
+	let publish: ((value: unknown) => void) | undefined;
+	let subscriptions = 0;
+	let releases = 0;
+	const client = {
+		subscribe(_topic, schema, observer) {
+			subscriptions++;
+			publish = (value) => observer.updated(schema.parse(value));
+			return () => {
+				publish = undefined;
+				releases++;
+			};
+		},
+	} satisfies Pick<StateClient, 'subscribe'>;
+	const current = shallowRef<Pick<StateClient, 'subscribe'> | undefined>(client);
+	const state = new StateClientService(() => current.value, { report() {} }).bind('@test/consumer', plugin);
+	const observed: number[] = [];
+	tile.run(() => state.subscribe('items', z.number(), { updated() {} }, tileLifetime.signal));
+	window.run(() =>
+		state.subscribe('items', z.number(), { updated: (value) => observed.push(value) }, windowLifetime.signal),
+	);
+	publish?.(1);
+	tileLifetime.abort();
+	tile.stop();
+	assert.equal(subscriptions, 1);
+	assert.equal(releases, 0);
+	publish?.(2);
+	assert.deepEqual(observed, [1, 2]);
+	current.value = undefined;
+	await nextTick();
+	assert.equal(releases, 1);
+	current.value = client;
+	await nextTick();
+	assert.equal(subscriptions, 2);
+	publish?.(3);
+	assert.deepEqual(observed, [1, 2, 3]);
+	windowLifetime.abort();
+	window.stop();
 	assert.equal(releases, 2);
 });
 

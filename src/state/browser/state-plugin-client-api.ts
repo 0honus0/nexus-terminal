@@ -1,4 +1,4 @@
-import { watch } from 'vue';
+import { effectScope, watch } from 'vue';
 import { z } from 'zod';
 import type { LogApi } from '../../log/browser/log-api.js';
 import type { PluginScopeApi } from '../../plugin/plugin-api.js';
@@ -49,11 +49,13 @@ export class StateClientService {
 				const identity = StateTopicSchema.parse({ pluginId, name });
 				let topic = topics.get(name);
 				if (!topic) {
+					// 共享主题的生命周期属于所有订阅者，而非首次调用的组件。
+					const topicScope = effectScope(true);
 					const listeners = new Set<(status: Status) => void>();
 					const entry: Topic = {
 						listeners,
 
-						close: () => stop(),
+						close: () => topicScope.stop(),
 					};
 
 					function publish(status: Status): void {
@@ -61,21 +63,23 @@ export class StateClientService {
 						for (const listener of [...listeners]) listener(status);
 					}
 
-					const stop = watch(
-						service.#client,
-						(client, _, onCleanup) => {
-							if (scope.signal.aborted) return;
-							publish({ reason: 'disconnected' });
-							if (client)
-								onCleanup(
-									client.subscribe(identity, z.unknown(), {
-										updated: (value) => publish({ value }),
+					topicScope.run(() =>
+						watch(
+							service.#client,
+							(client, _, onCleanup) => {
+								if (scope.signal.aborted) return;
+								publish({ reason: 'disconnected' });
+								if (client)
+									onCleanup(
+										client.subscribe(identity, z.unknown(), {
+											updated: (value) => publish({ value }),
 
-										unconfirmed: (reason) => publish({ reason }),
-									}),
-								);
-						},
-						{ immediate: true },
+											unconfirmed: (reason) => publish({ reason }),
+										}),
+									);
+							},
+							{ immediate: true },
+						),
 					);
 					topics.set(name, entry);
 					topic = entry;
