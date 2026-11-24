@@ -550,10 +550,10 @@
 			inset 0 1px 1px #ffffff70,
 			inset 0 -1px 1px #0000000c,
 			0 6px 14px color-mix(in srgb, var(--_accent) 20%, transparent);
-		transition: transform var(--ui-motion-duration) ease;
+		transition: filter var(--ui-motion-duration) ease;
 	}
 	.application-tile:hover .application-tile__icon {
-		transform: translateY(-3px);
+		filter: brightness(1.06);
 	}
 	[data-profile='compact'] .application-tile__icon {
 		width: 48px;

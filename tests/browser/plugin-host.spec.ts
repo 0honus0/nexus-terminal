@@ -157,6 +157,29 @@ test('桌面空闲及指向入口时预加载窗口，点击复用并记录使�
 	await expect(windowRegion).toHaveCount(0);
 });
 
+test('桌面应用图标悬浮时保持原位且不越过卡片边界', async ({ page, host: _host }) => {
+	for (const viewport of [
+		{ width: 1440, height: 768 },
+		{ width: 650, height: 550 },
+	]) {
+		await page.setViewportSize(viewport);
+		await page.goto('/');
+		const tile = page.getByRole('button', { name: 'Counter', exact: true });
+		const icon = tile.locator('.application-tile__icon');
+		await expect(icon).toBeVisible();
+		await page.mouse.move(0, 0);
+		const before = (await icon.boundingBox())!;
+		await tile.hover();
+		await expect(icon).toHaveCSS('filter', 'brightness(1.06)');
+		await expect(icon).toHaveCSS('transform', 'none');
+		const after = (await icon.boundingBox())!;
+		const bounds = (await tile.boundingBox())!;
+		expect(after.y).toBeCloseTo(before.y, 1);
+		expect(after.y).toBeGreaterThanOrEqual(bounds.y - 0.1);
+		expect(after.y + after.height).toBeLessThanOrEqual(bounds.y + bounds.height + 0.1);
+	}
+});
+
 test('Vue 贡献随插件启停，关闭应用只清理当前视图', async ({ page, host }) => {
 	const errors: string[] = [];
 	page.on('pageerror', (error) => errors.push(error.message));
