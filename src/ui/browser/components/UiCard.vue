@@ -19,7 +19,11 @@
 				><slot name="icon"><component :is="icon" :size="23" /></slot
 			></span>
 			<span class="ui-card__body" data-ui-selection="text">
-				<strong :title="title">{{ title }}</strong>
+				<span v-if="$slots['title-end']" class="ui-card__title-line">
+					<strong :title="title">{{ title }}</strong>
+					<span class="ui-card__title-end"><slot name="title-end" /></span>
+				</span>
+				<strong v-else :title="title">{{ title }}</strong>
 				<span v-if="description" class="ui-card__description" :title="description">{{ description }}</span>
 				<span v-if="$slots.tags" class="ui-card__tags"><slot name="tags" /></span>
 			</span>
@@ -116,6 +120,20 @@
 		flex-direction: column;
 		min-width: 0;
 		gap: 4px;
+	}
+	.ui-card__title-line {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+	}
+	.ui-card__title-line strong {
+		min-width: 0;
+	}
+	.ui-card__title-end {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
 	}
 	.ui-card__body strong {
 		font-size: 14px;
