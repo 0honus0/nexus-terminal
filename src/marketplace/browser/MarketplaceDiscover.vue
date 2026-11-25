@@ -45,7 +45,7 @@
 						: [];
 				}),
 			}))
-			.filter(({ plugins }) => !props.refreshing || plugins.length),
+			.filter(({ plugins }) => (!props.refreshing && !props.query.trim()) || plugins.length),
 	);
 </script>
 
@@ -64,6 +64,11 @@
 		</div>
 		<UiEmptyState v-else-if="failed" :icon="Puzzle" :title="t('marketplace.catalogUnavailable')" />
 		<template v-else>
+			<UiEmptyState
+				v-if="query.trim() && !groups.length"
+				:icon="Puzzle"
+				:title="t('marketplace.noMatchingPlugins')"
+			/>
 			<section v-for="group in groups" :key="group.kind" class="catalog-section" :data-kind="group.kind">
 				<header class="catalog-heading">
 					<div>
@@ -115,13 +120,7 @@
 				<UiEmptyState
 					v-if="!group.plugins.length"
 					:icon="group.kind === 'application' ? AppWindow : Puzzle"
-					:title="
-						t(
-							query.trim()
-								? 'logViewer.noMatches'
-								: `marketplace.empty${group.kind === 'application' ? 'Applications' : 'Extensions'}`,
-						)
-					"
+					:title="t(`marketplace.empty${group.kind === 'application' ? 'Applications' : 'Extensions'}`)"
 				/>
 			</section>
 		</template>

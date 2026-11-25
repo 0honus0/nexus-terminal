@@ -55,10 +55,17 @@
 				<UiButton
 					v-if="openable"
 					density="compact"
-					:aria-label="t('marketplace.openNamedApplication', { name })"
+					:aria-label="
+						t(
+							status === 'configuration'
+								? 'marketplace.configureNamedApplication'
+								: 'marketplace.openNamedApplication',
+							{ name },
+						)
+					"
 					@click="$emit('open')"
 				>
-					{{ t('marketplace.open') }}
+					{{ t(status === 'configuration' ? 'marketplace.configureApplication' : 'marketplace.open') }}
 				</UiButton>
 			</div>
 		</template>

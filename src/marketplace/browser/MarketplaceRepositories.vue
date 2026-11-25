@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { computed, onScopeDispose, ref, useId, watch } from 'vue';
+	import { onScopeDispose, ref, useId, watch } from 'vue';
 	import { Globe, Pencil, Plus, RotateCw, ShieldCheck, Trash2 } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
 	import type { LogApi } from '../../log/browser/log-api.js';
@@ -19,10 +19,9 @@
 	} from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceDesktopApi } from './marketplace-desktop-api.js';
 
-	const { api, repositories, query, minimized, log } = defineProps<{
+	const { api, repositories, minimized, log } = defineProps<{
 		api: MarketplaceDesktopApi;
 		repositories: readonly MarketplaceRepository[];
-		query: string;
 		minimized: boolean;
 		log: Pick<LogApi, 'report'>;
 	}>();
@@ -34,9 +33,6 @@
 	const pending = ref<string>();
 	const formId = useId();
 	let disposed = false;
-	const results = computed(() =>
-		repositories.filter((item) => `${item.label} ${item.url}`.toLowerCase().includes(query.trim().toLowerCase())),
-	);
 
 	onScopeDispose(() => {
 		disposed = true;
@@ -141,9 +137,9 @@
 				</template>
 			</UiToolbar>
 		</form>
-		<UiList v-if="results.length">
+		<UiList v-if="repositories.length">
 			<UiListItem
-				v-for="repo in results"
+				v-for="repo in repositories"
 				:key="repo.id"
 				:title="repo.label"
 				:description="repo.url"
@@ -182,7 +178,7 @@
 				</template>
 			</UiListItem>
 		</UiList>
-		<p v-else-if="query.trim()">{{ t('logViewer.noMatches') }}</p>
+		<p v-else>{{ t('marketplace.noRepositories') }}</p>
 	</UiSection>
 	<UiDialog
 		:open="!!editing"

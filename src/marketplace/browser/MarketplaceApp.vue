@@ -495,7 +495,7 @@
 					<UiEmptyState
 						v-if="results?.length === 0 && !builtinResults.length"
 						:icon="Package"
-						:title="t(query ? 'logViewer.noMatches' : 'marketplaceTile.empty')"
+						:title="t(query.trim() ? 'marketplace.noMatchingPlugins' : 'marketplaceTile.empty')"
 					/>
 					<template v-for="group in installedGroups" :key="group.kind ?? 'unknown'">
 						<section
@@ -544,7 +544,6 @@
 				<MarketplaceRepositories
 					:api="api"
 					:repositories="repositories"
-					:query="query"
 					:minimized="minimized"
 					:log="log"
 					@changed="discover"

@@ -1019,6 +1019,8 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(marketplaceSearch).toHaveAccessibleName(/\S/u);
 	await marketplaceSearch.fill('不存在');
 	await expect(card).toHaveCount(0);
+	await expect(market.getByText('没有匹配的插件', { exact: true })).toHaveCount(1);
+	await expect(market.getByText('没有匹配的日志')).toHaveCount(0);
 	await marketplaceSearch.fill('远程文件');
 	await card.click();
 	const details = page.getByRole('dialog', { name: '插件详情' });
@@ -1431,217 +1433,250 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 	await expect(page.getByRole('button', { name: 'Manage Package name', exact: true })).toBeVisible();
 });
 
-test('市场等待远程目录并从依赖解析推进到配置完成', async ({ page, host }) => {
-	await page.emulateMedia({ reducedMotion: 'reduce' });
-	const pluginId = '@nexus-terminal/test';
-	const dependency = '@example/support';
-	const version = '1.0.0';
-	const repository = { id: randomUUID(), url: 'https://example.com/catalog.json', label: 'Official', official: true };
-	const target = { kind: 'repository', repositoryId: repository.id, pluginId, version };
-	const manifest = { version, type: 'module', peerDependencies: { 'nexus-terminal': '^1.0.0' } };
-	const pack = {
-		...manifest,
-		name: pluginId,
-		displayName: 'Counter',
-		nexus: { kind: 'application', entry: { frontend: 'index.js' }, dependsOn: { [dependency]: '^1.0.0' } },
-	};
-	const support = {
-		...manifest,
-		name: dependency,
-		displayName: 'Support',
-		nexus: { kind: 'extension', entry: { frontend: 'index.js' } },
-	};
-	const catalogGate = Promise.withResolvers<void>();
-	const planGate = Promise.withResolvers<void>();
-	let catalogReady = false;
-	let installed = false;
-	const runtime: PluginRuntimeInfo = {
-		pluginId,
-		version,
-		runtime: 'running',
-		readiness: { state: 'pending', reason: { code: 'PLUGIN_CONFIGURATION_REQUIRED', applicationId: 'counter' } },
-		issues: [],
-	};
-	let operation: MarketplaceOperation = {
-		id: randomUUID(),
-		change: { action: 'install', pluginId, target: { ...target, kind: 'repository' }, revision: 'a'.repeat(64) },
-		state: 'running',
-		createdAt: new Date().toISOString(),
-		committed: false,
-		step: { phase: 'download', pluginId: dependency },
-	};
-	await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [repository] } }));
-	await page.route('**/api/plugins/*/repositories/*/refresh', async (route) => {
-		await catalogGate.promise;
-		catalogReady = true;
-		await route.fulfill({ status: 204 });
-	});
-	await page.route('**/api/plugins/*/plugins', (route) =>
-		route.fulfill({
-			json: {
-				items: catalogReady
-					? [{ id: pluginId, versions: [{ repositoryId: repository.id, package: pack }] }]
-					: [],
+for (const later of [false, true]) {
+	test(`市场等待远程目录并从依赖解析推进到配置完成（稍后配置：${later}）`, async ({ page, host }) => {
+		await page.emulateMedia({ reducedMotion: 'reduce' });
+		const pluginId = '@nexus-terminal/test';
+		const dependency = '@example/support';
+		const version = '1.0.0';
+		const repository = {
+			id: randomUUID(),
+			url: 'https://example.com/catalog.json',
+			label: 'Official',
+			official: true,
+		};
+		const target = { kind: 'repository', repositoryId: repository.id, pluginId, version };
+		const manifest = { version, type: 'module', peerDependencies: { 'nexus-terminal': '^1.0.0' } };
+		const pack = {
+			...manifest,
+			name: pluginId,
+			displayName: 'Counter',
+			nexus: { kind: 'application', entry: { frontend: 'index.js' }, dependsOn: { [dependency]: '^1.0.0' } },
+		};
+		const support = {
+			...manifest,
+			name: dependency,
+			displayName: 'Support',
+			nexus: { kind: 'extension', entry: { frontend: 'index.js' } },
+		};
+		const catalogGate = Promise.withResolvers<void>();
+		const planGate = Promise.withResolvers<void>();
+		let catalogReady = false;
+		let installed = false;
+		const runtime: PluginRuntimeInfo = {
+			pluginId,
+			version,
+			runtime: 'running',
+			readiness: {
+				state: 'pending',
+				reason: { code: 'PLUGIN_CONFIGURATION_REQUIRED', applicationId: 'counter' },
 			},
-		}),
-	);
-	await page.route('**/api/plugins/*/manager/install-plan', async (route) => {
-		await planGate.promise;
-		await route.fulfill({
-			json: {
-				target,
-				steps: [
-					{ package: support, source: { ...target, pluginId: dependency }, action: 'install' },
-					{ package: pack, source: target, action: 'install' },
-				],
-				blockers: [],
-				affected: Array.from({ length: 8 }, (_, index) => `@example/affected-${index}`),
+			issues: [],
+		};
+		let operation: MarketplaceOperation = {
+			id: randomUUID(),
+			change: {
+				action: 'install',
+				pluginId,
+				target: { ...target, kind: 'repository' },
+				revision: 'a'.repeat(64),
 			},
+			state: 'running',
+			createdAt: new Date().toISOString(),
+			committed: false,
+			step: { phase: 'download', pluginId: dependency },
+		};
+		await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [repository] } }));
+		await page.route('**/api/plugins/*/repositories/*/refresh', async (route) => {
+			await catalogGate.promise;
+			catalogReady = true;
+			await route.fulfill({ status: 204 });
 		});
-	});
-	await page.route('**/api/plugins/*/manager/install', (route) => {
-		operation = { ...operation, observationId: route.request().postDataJSON().observationId };
-		return route.fulfill({ status: 202, json: operation });
-	});
-	await page.route('**/api/plugins/*/manager/plugins', (route) =>
-		route.fulfill({
-			json: {
-				items: installed
-					? [
-							{
-								pluginId: dependency,
-								version,
-								kind: 'extension',
-								hasBackend: false,
-								source: { kind: 'local' },
-								enabled: true,
-								runtime: null,
-								issue: null,
-							},
-							{
-								pluginId,
-								version,
-								kind: 'application',
-								hasBackend: true,
-								source: target,
-								enabled: true,
-								runtime,
-								issue: null,
-							},
-						]
-					: [],
-			},
-		}),
-	);
-
-	await page.goto('/');
-	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
-	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
-	try {
-		const loading = market.getByRole('status').filter({ hasText: 'Loading repositories…' });
-		await expect(loading).toBeVisible();
-		await expect(market.locator('.ui-loading-tiles__tile')).toHaveCount(4);
-		const centered = await loading.evaluate((label) => {
-			const content = label.parentElement!.getBoundingClientRect();
-			const region = label.closest('.catalog-placeholder')!.getBoundingClientRect();
-			return {
-				x: content.left + content.width / 2 - (region.left + region.width / 2),
-				y: content.top + content.height / 2 - (region.top + region.height / 2),
-				height: region.height,
-			};
+		await page.route('**/api/plugins/*/plugins', (route) =>
+			route.fulfill({
+				json: {
+					items: catalogReady
+						? [{ id: pluginId, versions: [{ repositoryId: repository.id, package: pack }] }]
+						: [],
+				},
+			}),
+		);
+		await page.route('**/api/plugins/*/manager/install-plan', async (route) => {
+			await planGate.promise;
+			await route.fulfill({
+				json: {
+					target,
+					steps: [
+						{ package: support, source: { ...target, pluginId: dependency }, action: 'install' },
+						{ package: pack, source: target, action: 'install' },
+					],
+					blockers: [],
+					affected: Array.from({ length: 8 }, (_, index) => `@example/affected-${index}`),
+				},
+			});
 		});
-		expect(centered.x).toBeCloseTo(0, 0);
-		expect(centered.y).toBeCloseTo(0, 0);
-		expect(centered.height).toBeGreaterThan(132);
-		await expect(market.getByText('No apps to discover yet')).toHaveCount(0);
-	} finally {
-		catalogGate.resolve();
-	}
-	await market.getByRole('button', { name: 'View Counter' }).click();
-	await page.getByRole('button', { name: 'Preview installation' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Plugin installation' });
-	const currentStage = dialog.locator('[aria-current="step"]');
-
-	const layout = () =>
-		dialog.evaluate((element) =>
-			[element, ...element.querySelectorAll('.install-stages, .ui-dialog__footer')].map((part) => {
-				const { x, y, width, height } = part.getBoundingClientRect();
-				return { x, y, width, height };
+		await page.route('**/api/plugins/*/manager/install', (route) => {
+			operation = { ...operation, observationId: route.request().postDataJSON().observationId };
+			return route.fulfill({ status: 202, json: operation });
+		});
+		await page.route('**/api/plugins/*/manager/plugins', (route) =>
+			route.fulfill({
+				json: {
+					items: installed
+						? [
+								{
+									pluginId: dependency,
+									version,
+									kind: 'extension',
+									hasBackend: false,
+									source: { kind: 'local' },
+									enabled: true,
+									runtime: null,
+									issue: null,
+								},
+								{
+									pluginId,
+									version,
+									kind: 'application',
+									hasBackend: true,
+									source: target,
+									enabled: true,
+									runtime,
+									issue: null,
+								},
+							]
+						: [],
+				},
 			}),
 		);
 
-	let initialLayout: Awaited<ReturnType<typeof layout>>;
-	try {
-		await expect(currentStage).toHaveText(/Resolve dependencies/u);
-		await expect(dialog.locator('[data-state="running"]')).toBeVisible();
-		initialLayout = await layout();
-	} finally {
-		planGate.resolve();
-	}
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+		const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+		try {
+			const loading = market.getByRole('status').filter({ hasText: 'Loading repositories…' });
+			await expect(loading).toBeVisible();
+			await expect(market.locator('.ui-loading-tiles__tile')).toHaveCount(4);
+			const centered = await loading.evaluate((label) => {
+				const content = label.parentElement!.getBoundingClientRect();
+				const region = label.closest('.catalog-placeholder')!.getBoundingClientRect();
+				return {
+					x: content.left + content.width / 2 - (region.left + region.width / 2),
+					y: content.top + content.height / 2 - (region.top + region.height / 2),
+					height: region.height,
+				};
+			});
+			expect(centered.x).toBeCloseTo(0, 0);
+			expect(centered.y).toBeCloseTo(0, 0);
+			expect(centered.height).toBeGreaterThan(132);
+			await expect(market.getByText('No apps to discover yet')).toHaveCount(0);
+		} finally {
+			catalogGate.resolve();
+		}
+		await market.getByRole('button', { name: 'View Counter' }).click();
+		await page.getByRole('button', { name: 'Preview installation' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Plugin installation' });
+		const currentStage = dialog.locator('[aria-current="step"]');
 
-	const confirm = dialog.getByRole('button', { name: 'Install', exact: true });
-	await expect(confirm).toBeVisible();
-	expect(await layout()).toEqual(initialLayout);
-	await dialog.getByText('@example/affected-7', { exact: true }).scrollIntoViewIfNeeded();
-	const stageBody = dialog.locator('.install-stage-body');
-	expect(await stageBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-	expect(await layout()).toEqual(initialLayout);
-	const viewport = page.viewportSize()!;
-	await page.setViewportSize({ ...viewport, height: 360 });
-	await expect(dialog).toBeInViewport({ ratio: 1 });
-	await expect(confirm).toBeInViewport({ ratio: 1 });
-	await page.setViewportSize(viewport);
-	expect(await layout()).toEqual(initialLayout);
-	await confirm.click();
-	await expect(currentStage).toHaveText(/Install packages/u);
-	expect(await stageBody.evaluate((element) => element.scrollTop)).toBe(0);
-	expect(await layout()).toEqual(initialLayout);
-	const progress = dialog.locator('[data-ui="progress-row"]');
-	await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'running');
-	await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'pending');
-	operation = {
-		...operation,
-		committed: true,
-		step: { phase: 'download', pluginId },
-		completedPackages: [dependency],
-	};
-	host.setOperations([operation]);
-	await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'succeeded');
-	await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'running');
+		const layout = () =>
+			dialog.evaluate((element) =>
+				[element, ...element.querySelectorAll('.install-stages, .ui-dialog__footer')].map((part) => {
+					const { x, y, width, height } = part.getBoundingClientRect();
+					return { x, y, width, height };
+				}),
+			);
 
-	installed = true;
-	host.setRuntime([runtime]);
-	host.setOperations([{ ...operation, state: 'succeeded', completedPackages: [dependency, pluginId] }]);
-	await expect(currentStage).toHaveText(/Check configuration/u);
-	const openConfiguration = dialog.getByRole('button', { name: 'Open configuration' });
-	await expect(dialog.getByRole('button', { name: 'Configure later' })).toBeVisible();
-	expect(await layout()).toEqual(initialLayout);
-	await openConfiguration.click();
-	const configuration = page.getByRole('region', { name: 'Counter', exact: true });
-	await expect(configuration).toBeVisible();
-	await expect(dialog).toBeHidden();
-	await expect(market.getByRole('button', { name: 'Installation progress' })).toHaveCount(0);
-	await configuration.getByRole('button', { name: 'Close application' }).click();
-	await expect(currentStage).toHaveText(/Check configuration/u);
-	await expect(openConfiguration).toBeVisible();
-	await openConfiguration.click();
-	await expect(configuration).toBeVisible();
-	host.setRuntime([{ ...runtime, readiness: { state: 'ready' } }]);
-	await configuration.getByRole('button', { name: 'Close application' }).click();
-	await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
-	expect(await layout()).toEqual(initialLayout);
-	await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
-	await dialog.getByRole('button', { name: 'Done', exact: true }).click();
-	await expect(dialog).toHaveCount(0);
+		let initialLayout: Awaited<ReturnType<typeof layout>>;
+		try {
+			await expect(currentStage).toHaveText(/Resolve dependencies/u);
+			await expect(dialog.locator('[data-state="running"]')).toBeVisible();
+			initialLayout = await layout();
+		} finally {
+			planGate.resolve();
+		}
 
-	// The installed-list response still reports the earlier pending runtime.
-	const card = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
-	await expect(card.getByRole('status')).toHaveText('Available');
-	await card.getByRole('button', { name: 'Manage Counter' }).click();
-	const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
-	await expect(details.getByText('Available', { exact: true })).toBeVisible();
-	host.setRuntime([runtime]);
-	await expect(details.getByText('Needs setup', { exact: true })).toBeVisible();
-	await details.getByRole('button', { name: 'Close application' }).click();
-	await expect(card.getByRole('status')).toHaveText('Needs setup');
-});
+		const confirm = dialog.getByRole('button', { name: 'Install', exact: true });
+		await expect(confirm).toBeVisible();
+		expect(await layout()).toEqual(initialLayout);
+		await dialog.getByText('@example/affected-7', { exact: true }).scrollIntoViewIfNeeded();
+		const stageBody = dialog.locator('.install-stage-body');
+		expect(await stageBody.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+		expect(await layout()).toEqual(initialLayout);
+		const viewport = page.viewportSize()!;
+		await page.setViewportSize({ ...viewport, height: 360 });
+		await expect(dialog).toBeInViewport({ ratio: 1 });
+		await expect(confirm).toBeInViewport({ ratio: 1 });
+		await page.setViewportSize(viewport);
+		expect(await layout()).toEqual(initialLayout);
+		await confirm.click();
+		await expect(currentStage).toHaveText(/Install packages/u);
+		expect(await stageBody.evaluate((element) => element.scrollTop)).toBe(0);
+		expect(await layout()).toEqual(initialLayout);
+		const progress = dialog.locator('[data-ui="progress-row"]');
+		await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'running');
+		await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'pending');
+		operation = {
+			...operation,
+			committed: true,
+			step: { phase: 'download', pluginId },
+			completedPackages: [dependency],
+		};
+		host.setOperations([operation]);
+		await expect(progress.filter({ hasText: 'Support' })).toHaveAttribute('data-state', 'succeeded');
+		await expect(progress.filter({ hasText: 'Counter' })).toHaveAttribute('data-state', 'running');
+
+		installed = true;
+		host.setRuntime([runtime]);
+		host.setOperations([{ ...operation, state: 'succeeded', completedPackages: [dependency, pluginId] }]);
+		await expect(currentStage).toHaveText(/Check configuration/u);
+		const openConfiguration = dialog.getByRole('button', { name: 'Open configuration' });
+		await expect(dialog.getByRole('button', { name: 'Configure later' })).toBeVisible();
+		expect(await layout()).toEqual(initialLayout);
+		await openConfiguration.click();
+		const configuration = page.getByRole('region', { name: 'Counter', exact: true });
+		await expect(configuration).toBeVisible();
+		await expect(dialog).toBeHidden();
+		await expect(market.getByRole('button', { name: 'Installation progress' })).toHaveCount(0);
+		await configuration.getByRole('button', { name: 'Close application' }).click();
+		await expect(currentStage).toHaveText(/Check configuration/u);
+		await expect(openConfiguration).toBeVisible();
+		if (later) {
+			await dialog.getByRole('button', { name: 'Configure later' }).click();
+			await expect(dialog).toHaveCount(0);
+			const pendingCard = market
+				.locator('article')
+				.filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
+			await expect(pendingCard.getByRole('status')).toHaveText('Needs setup');
+			await market.getByRole('searchbox').fill('nothing-matches-this');
+			await expect(market.getByText('No matching plugins', { exact: true })).toHaveCount(1);
+			await expect(
+				market.getByRole('region', { name: 'Repositories' }).getByText('Official', { exact: true }),
+			).toBeVisible();
+			await market.getByRole('searchbox').fill('');
+			await pendingCard.getByRole('button', { name: 'Configure Counter', exact: true }).click();
+			await expect(configuration).toBeVisible();
+			return;
+		}
+		await openConfiguration.click();
+		await expect(configuration).toBeVisible();
+		host.setRuntime([{ ...runtime, readiness: { state: 'ready' } }]);
+		await configuration.getByRole('button', { name: 'Close application' }).click();
+		await expect(dialog.getByRole('button', { name: 'Done', exact: true })).toBeVisible();
+		expect(await layout()).toEqual(initialLayout);
+		await expect(dialog.getByRole('button', { name: 'Configure later' })).toHaveCount(0);
+		await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+		await expect(dialog).toHaveCount(0);
+
+		// The installed-list response still reports the earlier pending runtime.
+		const card = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
+		await expect(card.getByRole('status')).toHaveText('Available');
+		await card.getByRole('button', { name: 'Manage Counter' }).click();
+		const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+		await expect(details.getByText('Available', { exact: true })).toBeVisible();
+		host.setRuntime([runtime]);
+		await expect(details.getByText('Needs setup', { exact: true })).toBeVisible();
+		await details.getByRole('button', { name: 'Close application' }).click();
+		await expect(card.getByRole('status')).toHaveText('Needs setup');
+		await expect(card.getByRole('button', { name: 'Configure Counter', exact: true })).toBeVisible();
+	});
+}

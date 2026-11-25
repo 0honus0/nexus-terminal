@@ -253,7 +253,7 @@
 			<UiButton
 				v-else-if="stage === 'configure'"
 				:tone="configured ? 'primary' : 'neutral'"
-				@click="configured ? emit('finish') : (open = false)"
+				@click="emit('finish')"
 			>
 				{{ t(configured ? 'marketplace.installFlow.done' : 'marketplace.installFlow.later') }}
 			</UiButton>
