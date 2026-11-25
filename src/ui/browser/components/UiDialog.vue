@@ -44,7 +44,7 @@
 				? translate('desktop.resize', { title: props.title })
 				: 'Resize ' + props.title),
 	);
-	const emit = defineEmits<{ storageError: [cause: unknown] }>();
+	const emit = defineEmits<{ storageError: [cause: unknown]; closeAutoFocus: [event: Event] }>();
 	const element = shallowRef<HTMLElement>();
 	const geometry = useDialogGeometry(props, open, element, (cause) => emit('storageError', cause));
 	defineSlots<{
@@ -79,6 +79,7 @@
 					v-if="open"
 					force-mount
 					as-child
+					@close-auto-focus="emit('closeAutoFocus', $event)"
 					@escape-key-down="
 						(event) => (props.closeDisabled || !props.closeOnEscape) && event.preventDefault()
 					"

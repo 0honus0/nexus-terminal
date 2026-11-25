@@ -100,6 +100,7 @@
 	let managementRead: AbortController | undefined;
 	const managedId = ref<string>();
 	const managedOpen = ref(false);
+	let managedFocusId: string | undefined;
 	const managed = computed(() => installed?.find(({ pluginId }) => pluginId === managedId.value));
 	const managedStatus = computed(() => (managed.value ? installedStatus(managed.value) : 'unavailable'));
 	const managedEntries = computed(() => applications.filter(({ pluginId }) => pluginId === managedId.value));
@@ -282,13 +283,28 @@
 		query.value = pluginId;
 		emit('refresh');
 		inspectInstalled(pluginId);
+		managedFocusId = pluginId;
 		void readManagement();
 		void api.readOperations().catch(() => undefined);
 	}
 
 	function inspectInstalled(pluginId: string): void {
+		managedFocusId = undefined;
 		managedId.value = pluginId;
 		managedOpen.value = true;
+	}
+
+	function restoreManagedFocus(event: Event): void {
+		if (!managedFocusId || managedOpen.value) return;
+		const id = managedFocusId;
+		managedFocusId = undefined;
+		if (minimized || !managing.value || scope.signal.aborted) return;
+		const button = root.value?.querySelector<HTMLButtonElement>(
+			`[data-marketplace-plugin="${CSS.escape(id)}"] > .ui-card__main`,
+		);
+		if (!button?.isConnected || button.disabled) return;
+		event.preventDefault();
+		button.focus();
 	}
 
 	async function preview(source: MarketplaceRepositorySource): Promise<void> {
@@ -525,6 +541,7 @@
 								<MarketplaceInstalledCard
 									v-for="{ item, name, entries, status, update } in group.items"
 									:key="item.pluginId"
+									:data-marketplace-plugin="item.pluginId"
 									:name="name"
 									:icon="resolvePluginIcon(item.icon) ?? entries[0]?.icon"
 									:kind="item.kind"
@@ -658,6 +675,7 @@
 		</UiDialog>
 		<UiDialog
 			v-model:open="managedOpen"
+			@close-auto-focus="restoreManagedFocus"
 			:title="t('marketplace.manageInstalled')"
 			size="md"
 			:close-label="t('closeApplication')"

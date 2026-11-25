@@ -405,6 +405,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await expect(speed).toHaveAttribute('data-disabled', '');
 		await page.getByRole('combobox', { name: 'Language' }).click();
 		await page.getByRole('option', { name: '简体中文' }).click();
+		await expect(page.getByRole('switch', { name: '动态效果', exact: true })).not.toBeChecked();
 		await page.getByRole('region', { name: '设置', exact: true }).getByRole('button', { name: '关闭应用' }).click();
 		await expect(widget.getByText('计数：1')).toBeVisible();
 		await expect
@@ -902,6 +903,19 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 		.filter({ has: page.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }) });
 	await expect(card).toContainText('1.0.0');
 	await expect(card.getByRole('status')).toHaveText('Available');
+	await manage.click();
+	await listing.focus();
+	await listing.press('Enter');
+	const discoveryDetail = page.getByRole('dialog', { name: 'Plugin details', exact: true });
+	await discoveryDetail
+		.getByRole('button', { name: 'Manage installed plugin', exact: true })
+		.click({ timeout: 5000 });
+	const management = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	await expect(management).toBeVisible();
+	await management.getByRole('button', { name: 'Close application', exact: true }).click();
+	await expect(management).toHaveCount(0);
+	await expect(card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true })).toBeFocused();
+	await market.getByRole('searchbox', { name: 'Search plugins' }).fill('');
 	expect(downloads).toHaveLength(2);
 	const table = pluginTablePrefix(id) + 'records';
 	const database = app.services.get('database');

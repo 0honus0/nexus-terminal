@@ -153,6 +153,7 @@
 				<UiSwitch
 					:id="field.id"
 					:aria-describedby="field.describedby"
+					:aria-label="t('desktop.motionEffects')"
 					:model-value="state.motionEffects"
 					@update:model-value="(motionEffects) => preferences.update({ motionEffects })"
 				/>
