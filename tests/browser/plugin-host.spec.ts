@@ -326,6 +326,8 @@ test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page,
 			const dialog = page.getByRole('dialog', { name: title, exact: true });
 			await expect(dialog).toHaveAttribute('data-size', 'md');
 			await expect(dialog).toHaveCSS('width', Math.min(560, width - 32) + 'px');
+			if (width === 1440)
+				await expect(dialog.getByRole('button', { name: 'Resize ' + title, exact: true })).toBeVisible();
 			await dialog.getByRole('button', { name: 'Close application' }).click();
 			await expect(dialog).toHaveCount(0);
 		}

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import type { UiDialogProps } from '../ui-component-types.js';
-	import { shallowRef, watch, type VNodeChild } from 'vue';
+	import { computed, getCurrentInstance, shallowRef, watch, type VNodeChild } from 'vue';
 	import { dismissTransientOverlay } from '../ui-overlay.js';
 	import { useDialogGeometry } from '../ui-dialog-geometry.js';
 	import {
@@ -36,6 +36,14 @@
 		gutter: 'symmetric',
 		resizable: true,
 	});
+	const translate = getCurrentInstance()?.appContext.config.globalProperties.$t;
+	const resizeLabel = computed(
+		() =>
+			props.resizeLabel ??
+			(typeof translate === 'function'
+				? translate('desktop.resize', { title: props.title })
+				: 'Resize ' + props.title),
+	);
 	const emit = defineEmits<{ storageError: [cause: unknown] }>();
 	const element = shallowRef<HTMLElement>();
 	const geometry = useDialogGeometry(props, open, element, (cause) => emit('storageError', cause));
@@ -129,7 +137,7 @@
 						<UiResizeHandle
 							v-if="geometry.enabled.value && props.resizable"
 							edges
-							:label="props.resizeLabel ?? props.title"
+							:label="resizeLabel"
 							@resize="geometry.resizeBy"
 						/>
 					</div> </DialogContent

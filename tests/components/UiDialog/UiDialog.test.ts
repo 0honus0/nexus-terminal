@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, type Plugin } from 'vue';
+import { createI18n } from 'vue-i18n';
 import UiDialog from '../../../src/ui/browser/components/UiDialog.vue';
 
 const wrappers: VueWrapper[] = [];
@@ -20,9 +21,10 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-async function render(props: Partial<InstanceType<typeof UiDialog>['$props']> = {}) {
+async function render(props: Partial<InstanceType<typeof UiDialog>['$props']> = {}, i18n?: Plugin) {
 	const wrapper = mount(UiDialog, {
 		attachTo: document.body,
+		global: { plugins: i18n ? [i18n] : [] },
 		props: { open: true, title: 'Repository', closeLabel: 'Close', ...props },
 		slots: { default: '<input aria-label="Name" />', footer: '<button>Save</button>' },
 	});
@@ -78,6 +80,27 @@ it('enables resize by default without fixing natural dimensions and supports opt
 	await flushPromises();
 	expect(dialog().hasAttribute('data-geometry')).toBe(false);
 	expect(dialog().style.width).toBe('');
+});
+
+it('distinguishes the resize handle from a destructive action and localizes its name', async () => {
+	const i18n = createI18n({
+		legacy: false,
+		locale: 'en',
+		messages: {
+			en: { desktop: { resize: 'Resize {title}' } },
+			zh: { desktop: { resize: '调整{title}大小' } },
+		},
+	});
+	const wrapper = await render({ title: 'Delete' }, i18n);
+
+	const handle = () => dialog().querySelector('[data-ui="resize-handle"]');
+
+	expect(handle()?.getAttribute('aria-label')).toBe('Resize Delete');
+	i18n.global.locale.value = 'zh';
+	await wrapper.setProps({ title: '删除' });
+	expect(handle()?.getAttribute('aria-label')).toBe('调整删除大小');
+	await wrapper.setProps({ resizeLabel: 'Custom size label' });
+	expect(handle()?.getAttribute('aria-label')).toBe('Custom size label');
 });
 
 it('measures current content on the first resize and does not persist untouched dialogs', async () => {
