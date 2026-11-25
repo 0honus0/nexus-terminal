@@ -16,7 +16,11 @@ import { build, preview } from 'vite';
 import { App } from '../../src/app/node/app.js';
 import { BackupFileSchema, backupBase } from '../../src/backup/backup-http-types.js';
 import { MarketplaceStorage } from '../../src/marketplace/node/marketplace-storage.js';
-import { MarketplacePreloginSchema, marketplacePreloginPath } from '../../src/marketplace/marketplace-http-types.js';
+import {
+	MarketplacePluginListSchema,
+	MarketplacePreloginSchema,
+	marketplacePreloginPath,
+} from '../../src/marketplace/marketplace-http-types.js';
 import {
 	MarketplaceFrontendsTopic,
 	MarketplaceOperationSchema,
@@ -802,11 +806,16 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	let catalog: unknown = [];
 	const artifacts = new Map<string, Buffer>();
 	const downloads: string[] = [];
+	const rejectedDownloads: string[] = [];
+	let rejectedPath: string | undefined;
 	const repository = createServer((request, response) => {
 		const path = request.url ?? '';
 		if (path === '/catalog.json') {
 			response.setHeader('content-type', 'application/json');
 			response.end(JSON.stringify(catalog));
+		} else if (path === rejectedPath) {
+			rejectedDownloads.push(path);
+			response.writeHead(404).end();
 		} else if (artifacts.has(path)) {
 			downloads.push(path);
 			response.end(artifacts.get(path));
@@ -930,9 +939,90 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 		{ id, versions: [first, second] },
 	];
 	await repositories.getByRole('button', { name: 'Refresh 127.0.0.1', exact: true }).click();
-	await card.getByRole('button', { name: 'Update Lifecycle Fixture to 2.0.0', exact: true }).click();
+	const update = card.getByRole('button', { name: 'Update Lifecycle Fixture to 2.0.0', exact: true });
+	const updatePath = '/' + encodeURIComponent(id) + '-2.0.0.tgz';
+	rejectedPath = updatePath;
+	await update.click();
 	await plan.getByRole('button', { name: 'Update', exact: true }).click();
-	await plan.getByRole('button', { name: 'Done', exact: true }).click({ timeout: 15000 });
+	await expect(plan.getByText('The plugin package could not be downloaded.', { exact: true })).toBeVisible();
+	expect(rejectedDownloads).toEqual([updatePath]);
+	expect(downloads).toHaveLength(2);
+	const failedInstallations = await page.request.get(origin + marketplace + '/plugins');
+	expect(failedInstallations.ok()).toBe(true);
+	expect(
+		MarketplacePluginListSchema.parse(await failedInstallations.json()).items.find((item) => item.pluginId === id),
+	).toMatchObject({
+		version: '1.0.0',
+		enabled: true,
+	});
+	expect((await records()).rows).toEqual([{ id: 'retained' }, { id: 'user-fixture' }]);
+	rejectedPath = undefined;
+	await plan.getByRole('button', { name: 'Preview again', exact: true }).click();
+	const secondTab = await page.context().newPage();
+	resources.defer(() => secondTab.close());
+	await secondTab.emulateMedia({ reducedMotion: 'reduce' });
+	await secondTab.goto(origin);
+	await secondTab.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const secondMarket = secondTab.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	await secondMarket.getByRole('button', { name: 'Manage installed plugins', exact: true }).click();
+	await secondMarket.getByRole('button', { name: 'Update Lifecycle Fixture to 2.0.0', exact: true }).click();
+	const secondPlan = secondTab.getByRole('dialog', { name: 'Plugin installation' });
+	const confirm = plan.getByRole('button', { name: 'Update', exact: true });
+	const secondConfirm = secondPlan.getByRole('button', { name: 'Update', exact: true });
+	await expect(confirm).toBeEnabled();
+	await expect(secondConfirm).toBeEnabled();
+	// Both tabs confirm the same preview before either POST reaches the host.
+	// Release the real requests together; do not stub their responses.
+	const gate = Promise.withResolvers<void>();
+	let submitted = 0;
+	const confirmURL = '**' + marketplace + '/install';
+	for (const tab of [page, secondTab]) {
+		await tab.route(confirmURL, async (route) => {
+			if (++submitted === 2) gate.resolve();
+			await gate.promise;
+			await route.continue();
+		});
+	}
+	try {
+		await page.bringToFront();
+		await confirm.click();
+		await secondTab.bringToFront();
+		await secondConfirm.click();
+		await expect.poll(() => submitted).toBe(2);
+		await expect
+			.poll(
+				async () => {
+					const states = await Promise.all(
+						[plan, secondPlan].map(async (dialog) => {
+							if (await dialog.getByRole('button', { name: 'Done', exact: true }).isVisible())
+								return 'success';
+							if (
+								await dialog
+									.getByText('The plan changed. Preview it again.', { exact: true })
+									.isVisible()
+							)
+								return 'stale';
+							return 'pending';
+						}),
+					);
+					return states.sort();
+				},
+				{ timeout: 15000 },
+			)
+			.toEqual(['stale', 'success']);
+		if (await plan.getByRole('button', { name: 'Done', exact: true }).isVisible()) {
+			await page.bringToFront();
+			await plan.getByRole('button', { name: 'Done', exact: true }).click();
+		} else {
+			await page.bringToFront();
+			await plan.getByRole('button', { name: 'Close application', exact: true }).click();
+		}
+	} finally {
+		gate.resolve();
+		await secondTab.close();
+		await page.unroute(confirmURL);
+	}
+
 	await expect(card).toContainText('2.0.0');
 	expect(downloads).toHaveLength(3);
 	expect((await records()).rows).toEqual([{ id: 'retained' }, { id: 'user-fixture' }]);
