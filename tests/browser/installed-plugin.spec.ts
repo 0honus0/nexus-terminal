@@ -6,10 +6,11 @@ import { pluginTablePrefix } from '../../src/database/node/database-api.js';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { isIP, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, CDPSession } from '@playwright/test';
 import { browserTest as test, expect } from './plugin-host-fixture.js';
 import vue from '@vitejs/plugin-vue';
 import { build, preview } from 'vite';
@@ -146,6 +147,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 	const frontend = join(directory, 'app');
 	let server: Awaited<ReturnType<typeof preview>> | undefined;
 	let anonymous: APIRequestContext | undefined;
+	let downloadSession: CDPSession | undefined;
 
 	let releaseImports: () => void = () => {};
 
@@ -267,6 +269,29 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await page.getByRole('button', { name: 'Backup and Restore', exact: true }).click();
 		const backup = page.getByRole('region', { name: 'Backup and Restore', exact: true });
 		const exportPanel = backup.locator('.nexus-backup__sections').getByRole('region', { name: 'Export' });
+		// Use a fresh directory for every run; existing filenames may be renamed by Chrome.
+		const remoteDownloadDir = process.env.NEXUS_TEST_CDP_DOWNLOAD_DIR;
+		if (remoteDownloadDir) {
+			if (!cdp || !/^[a-z]:[\\/]/iu.test(remoteDownloadDir))
+				throw new Error('Remote download assertions require a disposable absolute Windows directory');
+			downloadSession = await page.context().browser()!.newBrowserCDPSession();
+			const session = await page.context().newCDPSession(page);
+			try {
+				const { targetInfo } = await session.send('Target.getTargetInfo');
+				const { browserContextIds } = await downloadSession.send('Target.getBrowserContexts');
+				if (!targetInfo.browserContextId || !browserContextIds.includes(targetInfo.browserContextId))
+					throw new Error('Download behavior must be scoped to a disposable context');
+				await downloadSession.send('Browser.setDownloadBehavior', {
+					behavior: 'allow',
+					browserContextId: targetInfo.browserContextId,
+					downloadPath: remoteDownloadDir,
+					eventsEnabled: true,
+				});
+			} finally {
+				await session.detach();
+			}
+		}
+
 		await exportPanel.getByLabel('Password').fill('test-backup-password');
 		const exported = page.waitForResponse(
 			(response) =>
@@ -280,7 +305,51 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		expect(response.status()).toBe(200);
 		const archiveData = BackupFileSchema.parse(await response.json());
 		const archivePath = join(directory, 'nexus-backup.json');
-		if (cdp) await writeFile(archivePath, JSON.stringify(archiveData));
+		if (remoteDownloadDir) {
+			const deadline = new AbortController();
+			try {
+				expect(
+					await Promise.race([
+						archive.failure(),
+						delay(30000, undefined, { signal: deadline.signal }).then(() => {
+							throw new Error('Remote download timed out');
+						}),
+					]),
+				).toBeNull();
+			} finally {
+				deadline.abort();
+			}
+			const verifier = await page.context().newPage();
+			try {
+				await verifier.goto(origin);
+				await verifier.setContent('<input type="file" id="fixture-download">');
+				const session = await verifier.context().newCDPSession(verifier);
+				try {
+					const { root } = await session.send('DOM.getDocument');
+					const { nodeId } = await session.send('DOM.querySelector', {
+						nodeId: root.nodeId,
+						selector: '#fixture-download',
+					});
+					await session.send('DOM.setFileInputFiles', {
+						nodeId,
+						files: [win32.join(remoteDownloadDir, 'nexus-backup.json')],
+					});
+					const expected = JSON.stringify(archiveData);
+					const checked = await verifier
+						.locator('input')
+						.evaluate(async (input: HTMLInputElement, expected) => {
+							const file = input.files?.[0];
+							return { size: file?.size, matches: file ? (await file.text()) === expected : false };
+						}, expected);
+					expect(checked).toEqual({ size: Buffer.byteLength(expected), matches: true });
+				} finally {
+					await session.detach();
+				}
+			} finally {
+				await verifier.close();
+			}
+			await writeFile(archivePath, JSON.stringify(archiveData));
+		} else if (cdp) await writeFile(archivePath, JSON.stringify(archiveData));
 		else await archive.saveAs(archivePath);
 		expect(BackupFileSchema.parse(JSON.parse(await readFile(archivePath, 'utf8')))).toEqual(archiveData);
 
@@ -479,6 +548,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		expect((await page.request.get(installed.url())).status()).toBe(401);
 	} finally {
 		releaseImports();
+		await downloadSession?.detach().catch(() => undefined);
 		await page.close();
 		try {
 			await Promise.all([server?.close(), anonymous?.dispose(), scope.close()]);

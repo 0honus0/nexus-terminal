@@ -27,7 +27,7 @@ export const browserTest = cdp
 	? base.extend({
 			browser: [
 				async ({}, use) => {
-					const browser = await chromium.connectOverCDP(cdp);
+					const browser = await chromium.connectOverCDP(cdp, { noDefaults: true });
 					try {
 						await use(browser);
 					} finally {
