@@ -1340,6 +1340,69 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	await expect(failure.locator('pre')).toContainText('"committed": true');
 });
 
+test('异步卸载预览取消后恢复键盘焦点且不重复请求', async ({ page, host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	const pluginId = '@nexus-terminal/test';
+	const version = '0.0.1-dev.1';
+	const requested = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	let previews = 0;
+	host.setPluginVersion(version);
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						pluginId,
+						version,
+						kind: 'application',
+						hasBackend: false,
+						source: { kind: 'local' },
+						enabled: true,
+						runtime: null,
+						issue: null,
+					},
+				],
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/plugins/*/uninstall-plan', async (route) => {
+		previews++;
+		requested.resolve();
+		await release.promise;
+		await route.fulfill({
+			json: { pluginId, version, revision: 'a'.repeat(64), dependents: [], required: false },
+		});
+	});
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
+	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
+	await market.getByRole('button', { name: 'Manage Counter', exact: true }).click();
+	const manage = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	const trigger = manage.getByRole('button', { name: 'Uninstall', exact: true });
+	try {
+		await trigger.focus();
+		await page.keyboard.press('Enter');
+		await requested.promise;
+		await page.keyboard.press('Enter');
+		expect(previews).toBe(1);
+	} finally {
+		release.resolve();
+	}
+	const dialog = page.getByRole('dialog', { name: 'Uninstall', exact: true });
+	await expect(dialog).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(dialog).toHaveCount(0);
+	await expect(trigger).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(dialog).toBeVisible();
+	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(dialog).toHaveCount(0);
+	await expect(trigger).toBeFocused();
+	expect(previews).toBe(2);
+});
+
 test('市场按清单显示插件名称，停用及刷新后仍随语言变化', async ({ page, host }) => {
 	const pluginId = '@nexus-terminal/test';
 	const version = '0.0.1-dev.1';

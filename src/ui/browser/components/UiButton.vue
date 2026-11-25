@@ -39,6 +39,14 @@
 		:type="props.type"
 		:disabled="props.disabled || props.loading"
 		:aria-busy="props.loading || undefined"
+		@click.capture="
+			(event) => {
+				if ((event.currentTarget as HTMLButtonElement).getAttribute('aria-disabled') === 'true') {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+				}
+			}
+		"
 		:data-loading-animation="props.loading ? (animateIcon() ? 'icon' : 'spinner') : undefined"
 		:data-loading-placement="props.loading && !animateIcon() ? spinnerPlacement() : undefined"
 		class="ui-button"
@@ -239,7 +247,7 @@
 		--_ui-button-filter: none;
 	}
 
-	.ui-button:not(:disabled):hover {
+	.ui-button:not(:disabled):not([aria-disabled='true']):hover {
 		background-color: var(--ui-button-hover-background, var(--ui-button-background, var(--_ui-button-fill-hover)));
 		border-color: var(--ui-button-hover-border, var(--ui-button-border, var(--_ui-button-edge-hover)));
 		box-shadow: var(
@@ -248,7 +256,7 @@
 		);
 	}
 
-	.ui-button:not(:disabled):active {
+	.ui-button:not(:disabled):not([aria-disabled='true']):active {
 		background-color: var(
 			--ui-button-active-background,
 			var(--ui-button-background, var(--_ui-button-fill-active))
@@ -265,7 +273,8 @@
 		box-shadow: var(--ui-button-focus-shadow, var(--ui-focus-ring, 0 0 0 3px rgb(160 108 213 / 18%)));
 	}
 
-	.ui-button:disabled:not([aria-busy='true']) {
+	.ui-button:disabled:not([aria-busy='true']),
+	.ui-button[aria-disabled='true']:not([aria-busy='true']) {
 		cursor: not-allowed;
 		border-color: var(--ui-button-disabled-border, var(--_ui-button-disabled-border));
 		background-color: var(
@@ -360,7 +369,8 @@
 			box-shadow: none;
 		}
 
-		.ui-button:disabled {
+		.ui-button:disabled,
+		.ui-button[aria-disabled='true'] {
 			border-color: GrayText;
 			color: GrayText;
 		}

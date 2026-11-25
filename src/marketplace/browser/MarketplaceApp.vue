@@ -401,7 +401,7 @@
 	}
 
 	async function prepareUninstall(item: MarketplacePlugin): Promise<void> {
-		if (planning.value) return;
+		if (planning.value || activeIds.value.has(item.pluginId)) return;
 		const request = new AbortController();
 		uninstallRequest?.abort();
 		uninstallRequest = request;
@@ -727,7 +727,8 @@
 				</UiButton>
 				<UiButton
 					tone="danger"
-					:disabled="planning || activeIds.has(managed.pluginId)"
+					:disabled="activeIds.has(managed.pluginId)"
+					:aria-disabled="planning || undefined"
 					@click="prepareUninstall(managed)"
 				>
 					{{ t('marketplace.uninstall') }}
