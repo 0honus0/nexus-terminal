@@ -1071,6 +1071,8 @@ test('普通 HTTP 下应用窗口仍可运行 SDK 任务和宿主 HTTP 与 WS �
 	);
 	await expect(application.locator(".window-tab[data-tone='info']")).toHaveCount(1);
 	await expect(application.locator('.window-tabs__list')).toHaveCSS('flex-wrap', 'nowrap');
+	await expect(application.getByRole('tab', { name: 'Two' })).toHaveCSS('font-size', '13px');
+	await expect(application.getByRole('tab', { name: 'Two' })).toHaveCSS('line-height', '18px');
 
 	await application.getByRole('button', { name: 'Close tab Two' }).click();
 	await expect(application.getByRole('tab', { name: 'Two' })).toHaveCount(0);

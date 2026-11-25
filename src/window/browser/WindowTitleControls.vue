@@ -290,6 +290,8 @@
 		color: inherit;
 		padding: 8px 10px;
 		font: inherit;
+		font-size: 13px;
+		line-height: 18px;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
