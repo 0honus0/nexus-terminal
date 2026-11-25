@@ -268,6 +268,16 @@ async function previewInstall(
 	return MarketplaceInstallPlanSchema.parse(await response.json());
 }
 
+async function previewRuntimeImpact(origin: string, pluginId: string, cookie: string) {
+	const response = await marketRequest(
+		origin,
+		managerPath + '/plugins/' + encodeURIComponent(pluginId) + '/runtime-impact',
+		cookie,
+	);
+	assert.equal(response.status, 200);
+	return MarketplaceRuntimeImpactSchema.parse(await response.json());
+}
+
 function setEnabled(
 	origin: string,
 	pluginId: string,
@@ -330,7 +340,11 @@ test('市场由宿主登记为内置插件，运行时关闭时撤销市场路�
 	assert.equal(market?.runtime, 'running');
 	assert.equal(market?.readiness.state, 'ready');
 	assert.deepEqual(await listInstalledPlugins(origin, cookie), []);
-	assert.equal((await setEnabled(origin, MarketplacePluginId, cookie, { enabled: false })).status, 404);
+	assert.equal(
+		(await setEnabled(origin, MarketplacePluginId, cookie, { enabled: false, impactRevision: 'a'.repeat(64) }))
+			.status,
+		404,
+	);
 	const socket = new WebSocket(origin.replace('http:', 'ws:') + '/api/state/ws', { headers: { cookie } });
 	t.after(() => socket.terminate());
 	const messages = on(socket, 'message', { close: ['close'] });
@@ -402,7 +416,18 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 	assert.equal(finished.committed, true);
 	const duplicate = await setEnabled(origin, pluginId, cookie, { enabled: true }, observationId);
 	assert.equal(MarketplaceOperationSchema.parse(await duplicate.json()).id, operation.id);
-	assert.equal((await setEnabled(origin, pluginId, cookie, { enabled: false }, observationId)).status, 409);
+	assert.equal(
+		(
+			await setEnabled(
+				origin,
+				pluginId,
+				cookie,
+				{ enabled: false, impactRevision: (await previewRuntimeImpact(origin, pluginId, cookie)).revision },
+				observationId,
+			)
+		).status,
+		409,
+	);
 	const lookup = await fetch(`${origin}${managerPath}/operations/${operation.id}`, { headers: { cookie } });
 	assert.deepEqual(MarketplaceOperationSchema.parse(await lookup.json()), finished);
 	assert.equal((await listInstalledPlugins(origin, cookie))[0].enabled, true);
@@ -448,7 +473,10 @@ test('安装记录持久化，市场列表和启停需要登录', { timeout: 100
 	assert.equal('directory' in item, false);
 
 	const observeRecovered = await observeOperations(t, origin, cookie);
-	const disabled = await setEnabled(origin, pluginId, cookie, { enabled: false });
+	const disabled = await setEnabled(origin, pluginId, cookie, {
+		enabled: false,
+		impactRevision: (await previewRuntimeImpact(origin, pluginId, cookie)).revision,
+	});
 	assert.equal(disabled.status, 202);
 	assert.equal(
 		(await observeRecovered(MarketplaceOperationSchema.parse(await disabled.json()).id)).state,
@@ -503,7 +531,14 @@ test('恢复保留缺失、换包及激活失败的安装记录，并继续按�
 	let observe = await observeOperations(t, origin, cookie);
 
 	const changeEnabled = async (pluginId: string, enabled: boolean) => {
-		const response = await setEnabled(origin, pluginId, cookie, { enabled });
+		const response = await setEnabled(
+			origin,
+			pluginId,
+			cookie,
+			enabled
+				? { enabled: true }
+				: { enabled: false, impactRevision: (await previewRuntimeImpact(origin, pluginId, cookie)).revision },
+		);
 		assert.equal(response.status, 202);
 		return observe(MarketplaceOperationSchema.parse(await response.json()).id);
 	};
@@ -994,6 +1029,21 @@ test('从仓库安装并更新实际产物，卸载保留数据，确认清除�
 	assert.deepEqual(impact.dependents, [pluginId]);
 	assert.equal(impact.pluginId, dependency);
 	assert.equal(impact.version, '1.0.0');
+	// Disruptive changes require a fresh preview; no legacy request is accepted.
+	assert.equal((await setEnabled(origin, dependency, cookie, { enabled: false })).status, 400);
+	assert.equal(
+		(await marketRequest(origin, managerPath + '/reload', cookie, 'POST', { pluginId: dependency })).status,
+		400,
+	);
+	assert.equal(
+		(await setEnabled(origin, dependency, cookie, { enabled: true, impactRevision: impact.revision })).status,
+		400,
+	);
+	assert.equal(
+		(await listInstalledPlugins(origin, cookie)).find((row) => row.pluginId === dependency)?.enabled,
+		true,
+	);
+
 	const badRevision = impact.revision === 'a'.repeat(64) ? 'b'.repeat(64) : 'a'.repeat(64);
 	const rejected = await setEnabled(origin, dependency, cookie, { enabled: false, impactRevision: badRevision });
 	const rejectedOperation = await completed(MarketplaceOperationSchema.parse(await rejected.json()).id);
@@ -1009,7 +1059,10 @@ test('从仓库安装并更新实际产物，卸载保留数据，确认清除�
 	const confirmedReload = await run('/reload', { pluginId: dependency, impactRevision: impact.revision });
 	assert.equal(confirmedReload.state, 'succeeded');
 
-	const disabled = await setEnabled(origin, pluginId, cookie, { enabled: false });
+	const disabled = await setEnabled(origin, pluginId, cookie, {
+		enabled: false,
+		impactRevision: (await previewRuntimeImpact(origin, pluginId, cookie)).revision,
+	});
 	assert.equal((await completed(MarketplaceOperationSchema.parse(await disabled.json()).id)).state, 'succeeded');
 	const update = await previewInstall(origin, cookie, source.id, pluginId, '2.0.0');
 	assert.equal((await run('/install', { plan: update })).state, 'succeeded');

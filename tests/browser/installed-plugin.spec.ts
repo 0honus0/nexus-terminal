@@ -19,6 +19,7 @@ import { BackupFileSchema, backupBase } from '../../src/backup/backup-http-types
 import { MarketplaceStorage } from '../../src/marketplace/node/marketplace-storage.js';
 import {
 	MarketplacePluginListSchema,
+	MarketplaceRuntimeImpactSchema,
 	MarketplacePreloginSchema,
 	marketplacePreloginPath,
 } from '../../src/marketplace/marketplace-http-types.js';
@@ -89,9 +90,19 @@ async function buildPlugin(directory: string, version: string): Promise<void> {
 	await symlink(join(directory, 'private.js'), join(output, 'external.js'));
 }
 
+async function previewRuntimeImpact(request: APIRequestContext, origin: string) {
+	const response = await request.get(
+		`${origin}${marketplace}/plugins/${encodeURIComponent(pluginId)}/runtime-impact`,
+	);
+	expect(response.status()).toBe(200);
+	return MarketplaceRuntimeImpactSchema.parse(await response.json());
+}
+
 async function setEnabled(request: APIRequestContext, origin: string, enabled: boolean): Promise<void> {
 	const response = await request.patch(`${origin}${marketplace}/plugins/${encodeURIComponent(pluginId)}`, {
-		data: { enabled },
+		data: enabled
+			? { enabled: true }
+			: { enabled: false, impactRevision: (await previewRuntimeImpact(request, origin)).revision },
 	});
 	expect(response.status()).toBe(202);
 	const { id } = MarketplaceOperationSchema.parse(await response.json());
@@ -242,7 +253,9 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		expect((await page.request.get(new URL('package.json', firstURL).href)).status()).toBe(404);
 
 		const reloadResponse = page.waitForResponse(isEntry);
-		const reload = await page.request.post(`${origin}${marketplace}/reload`, { data: { pluginId } });
+		const reload = await page.request.post(`${origin}${marketplace}/reload`, {
+			data: { pluginId, impactRevision: (await previewRuntimeImpact(page.request, origin)).revision },
+		});
 		expect(reload.status()).toBe(202);
 		const reloaded = await reloadResponse;
 		expect(reloaded.status()).toBe(200);

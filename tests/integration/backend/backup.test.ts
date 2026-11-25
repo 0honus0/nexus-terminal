@@ -23,6 +23,7 @@ import { BackupDataApi } from '../../../src/backup/node/backup-data-api.js';
 import type { BackupTable } from '../../../src/backup/backup-types.js';
 import { pluginTablePrefix } from '../../../src/database/node/database-api.js';
 import { MarketplaceRepositorySchema } from '../../../src/marketplace/marketplace-catalog-types.js';
+import { MarketplaceRuntimeImpactSchema } from '../../../src/marketplace/marketplace-http-types.js';
 import { MarketplaceInstallPlanSchema } from '../../../src/marketplace/marketplace-install-types.js';
 import { MarketplaceStorage } from '../../../src/marketplace/node/marketplace-storage.js';
 import { MarketplaceOperationSchema, MarketplacePluginId } from '../../../src/marketplace/marketplace-types.js';
@@ -143,18 +144,11 @@ test('备份已停用插件，跨宿主重加密密文，恢复完成后重新�
 	}
 	const settingsBefore = SettingsSnapshotSchema.parse(await (await to.call(settingsBase)).json());
 
-	const stopped = await fetch(
-		from.origin +
-			'/api/plugins/' +
-			encodeURIComponent(MarketplacePluginId) +
-			'/manager/plugins/' +
-			encodeURIComponent(pluginId),
-		{
-			method: 'PATCH',
-			headers: { cookie: from.cookie, 'content-type': 'application/json' },
-			body: JSON.stringify({ enabled: false }),
-		},
-	);
+	const pluginEndpoint = `/api/plugins/${encodeURIComponent(MarketplacePluginId)}/manager/plugins/${encodeURIComponent(pluginId)}`;
+	const impactResponse = await from.call(pluginEndpoint + '/runtime-impact');
+	assert.equal(impactResponse.status, 200);
+	const impact = MarketplaceRuntimeImpactSchema.parse(await impactResponse.json());
+	const stopped = await from.call(pluginEndpoint, { enabled: false, impactRevision: impact.revision }, 'PATCH');
 	assert.equal(stopped.status, 202);
 	const stopJob = MarketplaceOperationSchema.parse(await stopped.json());
 	const stopPath = `/api/plugins/${encodeURIComponent(MarketplacePluginId)}/manager/operations/${stopJob.id}`;

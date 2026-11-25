@@ -15,7 +15,8 @@ import {
 	MarketplaceUninstallChangeSchema,
 	MarketplaceFrontendSchema,
 	MarketplacePluginSchema,
-	MarketplaceSetEnabledChangeSchema,
+	MarketplaceSetEnabledInputSchema,
+	validMarketplaceEnabledImpact,
 } from './marketplace-types.js';
 
 export const marketplaceFrontendPath = '/marketplace/frontends';
@@ -45,11 +46,11 @@ export const MarketplaceFrontendAssetParamsSchema = MarketplaceFrontendSchema.pi
 
 export const MarketplacePluginListSchema = z.strictObject({ items: z.array(MarketplacePluginSchema) });
 
-export const MarketplacePluginParamsSchema = MarketplaceSetEnabledChangeSchema.pick({ pluginId: true });
+export const MarketplacePluginParamsSchema = MarketplaceSetEnabledInputSchema.pick({ pluginId: true });
 
-export const MarketplaceSetEnabledSchema = MarketplaceSetEnabledChangeSchema.omit({ action: true }).extend({
+export const MarketplaceSetEnabledSchema = MarketplaceSetEnabledInputSchema.extend({
 	observationId: z.uuid().optional(),
-});
+}).refine(validMarketplaceEnabledImpact, { path: ['impactRevision'] });
 
 export const MarketplaceOperationParamsSchema = z.strictObject({ operationId: z.uuid() });
 

@@ -20,6 +20,7 @@ import { HttpProblemSchema } from '../../../src/http/http-problem-http-types.js'
 import { MarketplaceRepositorySchema } from '../../../src/marketplace/marketplace-catalog-types.js';
 import {
 	MarketplacePluginListSchema,
+	MarketplaceRuntimeImpactSchema,
 	MarketplaceUninstallPlanSchema,
 } from '../../../src/marketplace/marketplace-http-types.js';
 import { MarketplaceInstallPlanSchema } from '../../../src/marketplace/marketplace-install-types.js';
@@ -303,7 +304,10 @@ test('独立项目使用 SDK 包编译前后端，经市场安装、启停和卸
 	await logs.getByRole('button', { name: 'Close application' }).click();
 
 	const endpoint = manager + '/plugins/' + encodeURIComponent(pluginId);
-	await operation(endpoint, { enabled: false }, 'PATCH');
+	const impactResponse = await call(endpoint + '/runtime-impact');
+	assert.equal(impactResponse.status, 200);
+	const impact = MarketplaceRuntimeImpactSchema.parse(await impactResponse.json());
+	await operation(endpoint, { enabled: false, impactRevision: impact.revision }, 'PATCH');
 	const stopped = await call(pluginPath + '/items');
 	assert.equal(stopped.status, 404);
 	await stopped.body?.cancel();

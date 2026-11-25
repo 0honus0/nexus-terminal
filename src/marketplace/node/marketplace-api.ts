@@ -285,15 +285,12 @@ export class MarketplaceApi {
 				) => {
 					signal.throwIfAborted();
 					return this.#submit(
-						{ action: 'reload', pluginId, ...(impactRevision && { impactRevision }) },
+						{ action: 'reload', pluginId, impactRevision },
 						observationId,
 						async ({ commit }) => {
 							const record = await this.#installed(pluginId);
 							if (!record.enabled) throw new CodedError('MARKETPLACE_PLUGIN_DISABLED');
-							if (
-								impactRevision &&
-								(await this.#uninstallPlan(record, this.#scope.signal)).revision !== impactRevision
-							)
+							if ((await this.#uninstallPlan(record, this.#scope.signal)).revision !== impactRevision)
 								throw new CodedError('MARKETPLACE_INSTALL_PLAN_CHANGED');
 							this.#assertOpen();
 							this.#frontends.remove(pluginId);
@@ -558,7 +555,6 @@ export class MarketplaceApi {
 		return this.#operations.submit(change, observationId, async (committed) => {
 			if (
 				!enabled &&
-				impactRevision &&
 				(await this.#uninstallPlan(await this.#installed(pluginId), this.#scope.signal)).revision !==
 					impactRevision
 			)

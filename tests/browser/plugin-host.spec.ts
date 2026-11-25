@@ -1209,7 +1209,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	host.setPluginVersion('0.0.1-dev.1');
 	await page.route('**/api/plugins/*/manager/plugins/*', async (route) => {
 		const pluginId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!);
-		const { enabled, observationId } = route.request().postDataJSON();
+		const { enabled, observationId, impactRevision } = route.request().postDataJSON();
 		if (pluginId === '@nexus-terminal/test') {
 			firstRequest.resolve();
 			await finishFirst.promise;
@@ -1221,7 +1221,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 			json: {
 				id: randomUUID(),
 				observationId,
-				change: { action: 'set-enabled', pluginId, enabled },
+				change: { action: 'set-enabled', pluginId, enabled, impactRevision },
 				state: failed ? 'failed' : 'succeeded',
 				...(failed && { error: 'MARKETPLACE_OPERATION_FAILED' }),
 				createdAt: new Date().toISOString(),
@@ -1506,7 +1506,7 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 			json: {
 				id: randomUUID(),
 				observationId: request.observationId,
-				change: { action: 'set-enabled', pluginId, enabled },
+				change: { action: 'set-enabled', pluginId, enabled, impactRevision: request.impactRevision },
 				state: 'succeeded',
 				createdAt: new Date().toISOString(),
 				committed: true,

@@ -39,8 +39,9 @@ type UninstallPlan = z.infer<typeof MarketplaceUninstallPlanSchema>;
 
 type Submission =
 	| { action: 'install'; plan: MarketplaceInstallPlan }
-	| { action: 'reload'; pluginId: string; impactRevision?: string }
-	| { action: 'set-enabled'; pluginId: string; enabled: boolean; impactRevision?: string }
+	| { action: 'reload'; pluginId: string; impactRevision: string }
+	| { action: 'set-enabled'; pluginId: string; enabled: true }
+	| { action: 'set-enabled'; pluginId: string; enabled: false; impactRevision: string }
 	| { action: 'uninstall'; plan: UninstallPlan; data: 'keep' | 'clear' }
 	| { action: 'clear-data'; pluginId: string };
 
@@ -210,7 +211,7 @@ export class MarketplaceDesktopApi {
 					'PATCH',
 					{
 						enabled: command.enabled,
-						impactRevision: command.impactRevision,
+						...(!command.enabled && { impactRevision: command.impactRevision }),
 						observationId,
 					},
 				);

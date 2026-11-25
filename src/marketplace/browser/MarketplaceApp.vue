@@ -802,7 +802,11 @@
 									(enabled) =>
 										managed &&
 										(enabled
-											? submit({ action: 'set-enabled', pluginId: managed.pluginId, enabled })
+											? submit({
+													action: 'set-enabled',
+													pluginId: managed.pluginId,
+													enabled: true,
+												})
 											: prepareRuntimeChange(managed, 'disable'))
 								"
 							/>

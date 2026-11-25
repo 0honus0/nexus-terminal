@@ -75,17 +75,27 @@ export const MarketplacePluginSchema = z.strictObject({
 
 export type MarketplacePlugin = z.infer<typeof MarketplacePluginSchema>;
 
-export const MarketplaceSetEnabledChangeSchema = z.strictObject({
-	action: z.literal('set-enabled'),
+export const MarketplaceSetEnabledInputSchema = z.strictObject({
 	pluginId: z.string().min(1).max(214),
 	enabled: z.boolean(),
 	impactRevision: z.hash('sha256').optional(),
 });
 
+export function validMarketplaceEnabledImpact({
+	enabled,
+	impactRevision,
+}: z.infer<typeof MarketplaceSetEnabledInputSchema>): boolean {
+	return enabled ? impactRevision === undefined : impactRevision !== undefined;
+}
+
+const MarketplaceSetEnabledChangeSchema = MarketplaceSetEnabledInputSchema.extend({
+	action: z.literal('set-enabled'),
+}).refine(validMarketplaceEnabledImpact, { path: ['impactRevision'] });
+
 export const MarketplaceReloadChangeSchema = z.strictObject({
 	action: z.literal('reload'),
 	pluginId: PluginPackageNameSchema,
-	impactRevision: z.hash('sha256').optional(),
+	impactRevision: z.hash('sha256'),
 });
 
 const MarketplaceInstallChangeSchema = z.strictObject({
