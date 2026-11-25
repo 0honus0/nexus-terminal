@@ -43,7 +43,11 @@ export class HttpClientService {
 				redirect: 'error',
 				signal: active,
 			});
-			active.throwIfAborted();
+			if (active.aborted) {
+				// A response that arrives after cancellation must not retain an unread body.
+				void response.body?.cancel().catch(() => undefined);
+				active.throwIfAborted();
+			}
 			return response;
 		}
 

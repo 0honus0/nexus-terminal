@@ -35,6 +35,7 @@ export class WsClientService {
 			connect(path, { signal, binaryType = 'arraybuffer', ...options } = {}) {
 				const active = signal ? AbortSignal.any([signal, scope.signal]) : scope.signal;
 				active.throwIfAborted();
+				let closed = false;
 				const socket = useWebSocket<Message>(url(path), {
 					...options,
 					autoClose: false,
@@ -42,24 +43,23 @@ export class WsClientService {
 					immediate: false,
 
 					onConnected(ws) {
-						if (active.aborted) return;
+						if (closed || active.aborted || socket.ws.value !== ws) return;
 						ws.binaryType = binaryType;
 						options.onConnected?.(ws);
 					},
 
 					onDisconnected(ws, event) {
-						if (!active.aborted) options.onDisconnected?.(ws, event);
+						if (!closed && !active.aborted && socket.ws.value === ws) options.onDisconnected?.(ws, event);
 					},
 
 					onMessage(ws, event) {
-						if (!active.aborted) options.onMessage?.(ws, event);
+						if (!closed && !active.aborted && socket.ws.value === ws) options.onMessage?.(ws, event);
 					},
 
 					onError(ws, event) {
-						if (!active.aborted) options.onError?.(ws, event);
+						if (!closed && !active.aborted && socket.ws.value === ws) options.onError?.(ws, event);
 					},
 				});
-				let closed = false;
 
 				function close(code?: number, reason?: string): void {
 					if (closed) return;

@@ -67,18 +67,18 @@ export class TaskService {
 			const start = performance.now();
 			const task = Object.freeze({ id: uuid(), name, mode, startedAt: Date.now() });
 			let outcome: PluginTaskEvent['outcome'] = 'failed';
-			const pending = Promise.resolve().then(async () => {
-				active.throwIfAborted();
-				const result = await work(active);
-				active.throwIfAborted();
-				return result;
-			});
 			const release = view?.onBeforeClose(async (event) => {
 				try {
 					await pending;
 				} catch {
 					if (!active.aborted && !event.signal.aborted) event.preventDefault();
 				}
+			});
+			const pending = Promise.resolve().then(async () => {
+				active.throwIfAborted();
+				const result = await work(active);
+				active.throwIfAborted();
+				return result;
 			});
 			publish('started', task);
 			try {
