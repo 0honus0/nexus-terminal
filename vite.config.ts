@@ -57,5 +57,13 @@ export default defineConfig({
 		outDir: fileURLToPath(new URL('./dist/frontend', import.meta.url)),
 		emptyOutDir: true,
 		target: 'es2022',
+		rolldownOptions: {
+			output: {
+				codeSplitting: {
+					// Keep the shared schema runtime independently cacheable, without splitting the UI dependency cycle.
+					groups: [{ name: 'schema', test: /\/node_modules\/zod\//u, includeDependenciesRecursively: false }],
+				},
+			},
+		},
 	},
 });
