@@ -22,7 +22,8 @@ interface HostFixture {
 }
 
 const cdp = process.env.NEXUS_TEST_CDP;
-const runner = cdp
+
+export const browserTest = cdp
 	? base.extend({
 			browser: [
 				async ({}, use) => {
@@ -38,7 +39,7 @@ const runner = cdp
 		})
 	: base;
 
-export const test = runner.extend<{ host: HostFixture }>({
+export const test = browserTest.extend<{ host: HostFixture }>({
 	async host({ page }, use) {
 		const market = '/api/plugins/' + encodeURIComponent(MarketplacePluginId);
 		const entry = marketplaceFrontendBase + '/' + encodeURIComponent(manifest.name);

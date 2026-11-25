@@ -39,6 +39,9 @@
 	const job = shallowRef<z.infer<typeof BackupStatusSchema> | null>(null);
 	const loading = ref<'export' | 'inspect' | 'restore'>();
 	const dialog = ref(false);
+	watch(dialog, (open) => {
+		if (!open) plan.value = undefined;
+	});
 	const busy = computed(() => !!loading.value || job.value?.state === 'restoring');
 
 	let notifiedJob: string | undefined;
@@ -253,12 +256,12 @@
 			v-model:open="dialog"
 			class="backup-dialog"
 			:title="t('backup.inspect')"
-			:close-label="t('closeApplication')"
+			:description="t('backup.restoreWarning')"
+			:close-label="t('backup.closePreview')"
 			:close-disabled="loading === 'restore'"
 			persistence-key="backup.preview"
 		>
 			<template v-if="plan">
-				<p>{{ t('backup.restoreWarning') }}</p>
 				<UiSection v-if="plan.preview.installs.length" :title="t('backup.installPlugins')">
 					<UiList>
 						<UiListItem
@@ -278,6 +281,7 @@
 				/></UiList>
 			</template>
 			<template v-if="plan" #footer>
+				<UiButton :disabled="loading === 'restore'" @click="dialog = false">{{ t('backup.cancel') }}</UiButton>
 				<UiButton tone="danger" :loading="loading === 'restore'" @click="restore">{{
 					t('backup.tile.restore')
 				}}</UiButton>

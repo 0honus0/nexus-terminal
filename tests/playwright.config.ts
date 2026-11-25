@@ -11,7 +11,7 @@ if (cdp && (origin.protocol !== 'http:' || isIP(origin.hostname) !== 4 || !origi
 export default defineConfig({
 	testDir: './browser',
 	// Remote Chrome can reach the isolated Vite fixture server, not the runner's loopback backend.
-	testMatch: cdp ? 'plugin-host.spec.ts' : undefined,
+	testMatch: cdp ? ['plugin-host.spec.ts', 'installed-plugin.spec.ts'] : undefined,
 	workers: cdp ? 1 : undefined,
 	outputDir: '../test-results',
 	use: { baseURL: origin.origin, locale: 'en-US', trace: 'retain-on-failure' },

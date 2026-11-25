@@ -3,13 +3,14 @@ import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AddressInfo } from 'node:net';
+import { isIP, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
+import { browserTest as test, expect } from './plugin-host-fixture.js';
 import vue from '@vitejs/plugin-vue';
 import { build, preview } from 'vite';
 import { App } from '../../src/app/node/app.js';
-import { BackupFileSchema } from '../../src/backup/backup-http-types.js';
+import { BackupFileSchema, backupBase } from '../../src/backup/backup-http-types.js';
 import { MarketplaceStorage } from '../../src/marketplace/node/marketplace-storage.js';
 import { MarketplacePreloginSchema, marketplacePreloginPath } from '../../src/marketplace/marketplace-http-types.js';
 import {
@@ -93,12 +94,39 @@ async function setEnabled(request: APIRequestContext, origin: string, enabled: b
 		.toBe('succeeded');
 }
 
+const cdp = process.env.NEXUS_TEST_CDP;
+const bind = cdp ? new URL(process.env.NEXUS_TEST_CDP_ORIGIN!).hostname : '127.0.0.1';
+const peer = cdp ? new URL(cdp).hostname : bind;
+if (isIP(bind) !== 4 || isIP(peer) !== 4) throw new Error('Invalid isolated browser binding');
+
+function frontendOrigin(server: Awaited<ReturnType<typeof preview>>) {
+	return 'http://' + bind + ':' + (server.httpServer.address() as AddressInfo).port;
+}
+
 async function serveFrontend(app: App, outDir: string) {
 	await build({ logLevel: 'error', build: { outDir, emptyOutDir: true } });
 	return preview({
 		logLevel: 'error',
 		build: { outDir },
-		preview: { host: '127.0.0.1', port: 0, proxy: { '/api': backendProxy(app.services.get('http').origin) } },
+		plugins: [
+			{
+				name: 'isolated-browser-peer',
+
+				configurePreviewServer(server) {
+					server.middlewares.use((req, res, next) => {
+						if (req.socket.remoteAddress === peer || req.socket.remoteAddress === bind) next();
+						else {
+							res.statusCode = 403;
+							res.end();
+						}
+					});
+					server.httpServer.prependListener('upgrade', (req, socket) => {
+						if (req.socket.remoteAddress !== peer && req.socket.remoteAddress !== bind) socket.destroy();
+					});
+				},
+			},
+		],
+		preview: { host: bind, port: 0, proxy: { '/api': backendProxy(app.services.get('http').origin) } },
 	});
 }
 
@@ -127,7 +155,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await app.startExternalPlugins();
 
 		server = await serveFrontend(app, frontend);
-		const origin = `http://127.0.0.1:${(server.httpServer.address() as AddressInfo).port}`;
+		const origin = frontendOrigin(server);
 		anonymous = await playwright.request.newContext();
 		expect(
 			(await anonymous.get(`${origin}/api/auth/state`, { headers: { origin: 'http://other.invalid' } })).status(),
@@ -232,12 +260,21 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		const backup = page.getByRole('region', { name: 'Backup and Restore', exact: true });
 		const exportPanel = backup.locator('.nexus-backup__sections').getByRole('region', { name: 'Export' });
 		await exportPanel.getByLabel('Password').fill('test-backup-password');
+		const exported = page.waitForResponse(
+			(response) =>
+				new URL(response.url()).pathname === backupBase + '/export' && response.request().method() === 'POST',
+		);
 		const download = page.waitForEvent('download');
 		await exportPanel.getByRole('button', { name: 'Export', exact: true }).click();
 		const archive = await download;
 		expect(archive.suggestedFilename()).toBe('nexus-backup.json');
-		const archivePath = await archive.path();
-		expect(BackupFileSchema.parse(JSON.parse(await readFile(archivePath, 'utf8'))).format).toBe(1);
+		const response = await exported;
+		expect(response.status()).toBe(200);
+		const archiveData = BackupFileSchema.parse(await response.json());
+		const archivePath = join(directory, 'nexus-backup.json');
+		if (cdp) await writeFile(archivePath, JSON.stringify(archiveData));
+		else await archive.saveAs(archivePath);
+		expect(BackupFileSchema.parse(JSON.parse(await readFile(archivePath, 'utf8')))).toEqual(archiveData);
 
 		const changed = await page.request.patch(origin + settingsBase, { data: { theme: 'light' } });
 		expect(changed.ok()).toBe(true);
@@ -259,7 +296,11 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 		await previewButton.click();
 		await expect(toast.getByText('This backup file is invalid.')).toBeVisible();
 		await expect(preview).toHaveCount(0);
-		await file.setInputFiles(archivePath);
+		await file.setInputFiles({
+			name: 'nexus-backup.json',
+			mimeType: 'application/json',
+			buffer: await readFile(archivePath),
+		});
 		await previewButton.click();
 		await expect(toast.getByText('Could not open the backup with this password.')).toBeVisible();
 		await expect(preview).toHaveCount(0);
@@ -272,6 +313,15 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 			SettingsSnapshotSchema.parse(await (await page.request.get(origin + settingsBase)).json()).preferences
 				.theme,
 		).toBe('light');
+		await preview.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(preview).toHaveCount(0);
+		await expect(html).toHaveAttribute('data-ui-mode', 'light');
+		expect(
+			SettingsSnapshotSchema.parse(await (await page.request.get(origin + settingsBase)).json()).preferences
+				.theme,
+		).toBe('light');
+		await previewButton.click();
+		await expect(preview.getByText('@nexus-terminal/settings · 1 rows')).toBeVisible();
 		await preview.getByRole('button', { name: 'Restore', exact: true }).click();
 		await expect(preview).toHaveCount(0);
 		await expect(toast.getByText('Restore complete.', { exact: true })).toBeVisible();
@@ -281,7 +331,27 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 			SettingsSnapshotSchema.parse(await (await page.request.get(origin + settingsBase)).json()).preferences
 				.theme,
 		).toBe('dark');
-		await backup.getByRole('button', { name: 'Close application' }).click();
+		await backup.getByRole('button', { name: 'Close application' }).press('Enter');
+		await expect(backup).toHaveCount(0);
+		await page.getByRole('button', { name: 'Logs', exact: true }).click();
+		const logs = page.getByRole('region', { name: 'Logs', exact: true });
+		const searchLogs = logs.getByRole('searchbox', { name: 'Search messages, sources or event codes' });
+		const level = logs.getByRole('combobox', { name: 'Log level' });
+		await searchLogs.fill('BACKUP_FILE_INVALID');
+		const failedBackup = logs.locator('details').filter({ hasText: 'This backup file is invalid.' });
+		await expect(failedBackup).toBeVisible();
+		await failedBackup.locator('summary').press('Enter');
+		await expect(failedBackup.locator('dd').filter({ hasText: 'BACKUP_FILE_INVALID' })).toBeVisible();
+		await level.click();
+		await page.getByRole('option', { name: 'Info', exact: true }).click();
+		await expect(logs.getByText('No matching logs', { exact: true })).toBeVisible();
+		await searchLogs.fill('BACKUP_RESTORED');
+		await expect(logs.locator('details').filter({ hasText: 'Restore complete.' })).toBeVisible();
+		await logs.getByRole('button', { name: 'Clear logs', exact: true }).click();
+		await expect(logs.getByText('No logs yet', { exact: true })).toBeVisible();
+		await expect(logs.getByRole('button', { name: 'Clear logs', exact: true })).toBeDisabled();
+		await logs.getByRole('button', { name: 'Close application' }).press('Enter');
+		await expect(logs).toHaveCount(0);
 		await page.getByRole('button', { name: 'Settings', exact: true }).click();
 		const themeSource = settings.getByRole('combobox', { name: 'Theme source' });
 		await themeSource.click();
@@ -497,7 +567,7 @@ test('匿名阶段只加载就绪的登录插件和依赖，登录复用实例�
 		}
 		await app.startExternalPlugins();
 		server = await serveFrontend(app, join(directory, 'app'));
-		const origin = `http://127.0.0.1:${(server.httpServer.address() as AddressInfo).port}`;
+		const origin = frontendOrigin(server);
 		operator = await playwright.request.newContext({ baseURL: origin });
 		expect(
 			(
@@ -624,7 +694,7 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 		const frontend = await serveFrontend(app, join(directory, 'app'));
 		resources.defer(() => frontend.close());
 		resources.defer(() => page.close());
-		const origin = 'http://127.0.0.1:' + (frontend.httpServer.address() as AddressInfo).port;
+		const origin = frontendOrigin(frontend);
 		expect(
 			(
 				await page.request.post(origin + '/api/auth/initialize', {
