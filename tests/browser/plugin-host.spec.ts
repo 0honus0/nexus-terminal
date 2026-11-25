@@ -1200,6 +1200,11 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	const firstRequest = Promise.withResolvers<void>();
 	const finishFirst = Promise.withResolvers<void>();
 	let appEnabled = true;
+	let reloadRequests = 0;
+	page.on('request', (request) => {
+		if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/manager/reload'))
+			reloadRequests++;
+	});
 
 	host.setPluginVersion('0.0.1-dev.1');
 	await page.route('**/api/plugins/*/manager/plugins/*', async (route) => {
@@ -1301,7 +1306,28 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		await expect(details.getByText('0.0.1-dev.1', { exact: true })).toHaveCSS('font-weight', '400');
 		await expect(details.locator('footer').getByRole('button')).toHaveText(['Reload', 'Uninstall']);
 		await expect(enable).toBeChecked();
+		const reload = details.getByRole('button', { name: 'Reload', exact: true });
+		let submitted = false;
+		void firstRequest.promise.then(() => (submitted = true));
+		await reload.press('Enter');
+		const reloadDialog = page.getByRole('dialog', { name: 'Reload plugin?', exact: true });
+		await expect(reloadDialog).toBeVisible();
+		await expect(reloadDialog.getByText(/active or suspended sessions/)).toBeVisible();
+		await reloadDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+		await expect(reloadDialog).toHaveCount(0);
+		await expect(reload).toBeFocused();
+		expect(reloadRequests).toBe(0);
+		await enable.press('Space');
+		const disable = page.getByRole('dialog', { name: 'Disable plugin?', exact: true });
+		await expect(disable).toBeVisible();
+		await expect(disable.getByText(/active or suspended sessions/)).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(disable).toHaveCount(0);
+		await expect(enable).toBeChecked();
+		await expect(enable).toBeFocused();
+		expect(submitted).toBe(false);
 		await enable.click();
+		await disable.getByRole('button', { name: 'Disable', exact: true }).click();
 		await firstRequest.promise;
 		await expect(enable).toBeDisabled();
 		await close.press('Enter');
@@ -1313,6 +1339,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 			(request) => request.method() === 'PATCH' && request.url().endsWith(encodeURIComponent('@example/support')),
 		);
 		await enable.click();
+		await disable.getByRole('button', { name: 'Disable', exact: true }).click();
 		expect((await supportRequest).postDataJSON()).toMatchObject({ enabled: false });
 		await close.press('Enter');
 	} finally {
@@ -1469,6 +1496,10 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 		/^@nexus-terminal\/test\s*0\.0\.1-dev\.1$/u,
 	);
 	await details.getByRole('switch', { name: '启用插件', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: '停用插件？', exact: true })
+		.getByRole('button', { name: '停用', exact: true })
+		.click();
 	const visibility = details.getByRole('switch', { name: '在桌面显示', exact: true });
 	await expect(visibility).toBeDisabled();
 	await expect(visibility).not.toBeChecked();

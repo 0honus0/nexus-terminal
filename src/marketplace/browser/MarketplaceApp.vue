@@ -115,6 +115,27 @@
 	});
 	const uninstallPlan = shallowRef<z.infer<typeof MarketplaceUninstallPlanSchema>>();
 	const uninstallOpen = ref(false);
+	const runtimeChange = shallowRef<
+		{ action: 'set-enabled'; pluginId: string; enabled: false } | { action: 'reload'; pluginId: string }
+	>();
+	const runtimeChangeOpen = ref(false);
+	let runtimeChangeTrigger: HTMLElement | undefined;
+	const runtimeChangeTitle = computed(() =>
+		t(
+			runtimeChange.value?.action === 'reload'
+				? 'marketplace.reloadConfirmTitle'
+				: 'marketplace.disableConfirmTitle',
+		),
+	);
+	const runtimeChangeAllowed = computed(
+		() =>
+			!!runtimeChange.value &&
+			managedOpen.value &&
+			managed.value?.pluginId === runtimeChange.value.pluginId &&
+			managed.value.enabled &&
+			!activeIds.value.has(runtimeChange.value.pluginId),
+	);
+
 	const clearOnUninstall = ref(false);
 	const clearTarget = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items'][number]>();
 	const clearOpen = ref(false);
@@ -190,6 +211,7 @@
 				builtinOpen.value = false;
 				dismissInstallation();
 				uninstallOpen.value = false;
+				runtimeChangeOpen.value = false;
 				clearOpen.value = false;
 			}
 		},
@@ -416,6 +438,38 @@
 		}
 	}
 
+	function prepareRuntimeChange(item: MarketplacePlugin, action: 'disable' | 'reload'): void {
+		if (!item.enabled || activeIds.value.has(item.pluginId) || runtimeChangeOpen.value) return;
+		runtimeChangeTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+		runtimeChange.value =
+			action === 'reload'
+				? { action: 'reload', pluginId: item.pluginId }
+				: { action: 'set-enabled', pluginId: item.pluginId, enabled: false };
+		runtimeChangeOpen.value = true;
+	}
+
+	function restoreRuntimeChangeFocus(event: Event): void {
+		const trigger = runtimeChangeTrigger;
+		runtimeChangeTrigger = undefined;
+		if (
+			!managedOpen.value ||
+			minimized ||
+			scope.signal.aborted ||
+			!trigger?.isConnected ||
+			trigger.matches(':disabled')
+		)
+			return;
+		event.preventDefault();
+		trigger.focus();
+	}
+
+	function confirmRuntimeChange(): void {
+		const command = runtimeChange.value;
+		if (!command || !runtimeChangeAllowed.value) return;
+		runtimeChangeOpen.value = false;
+		void submit(command);
+	}
+
 	async function prepareUninstall(item: MarketplacePlugin): Promise<void> {
 		if (planning.value || activeIds.value.has(item.pluginId)) return;
 		const request = new AbortController();
@@ -440,6 +494,7 @@
 		if (!open) {
 			uninstallRequest?.abort();
 			uninstallOpen.value = false;
+			runtimeChangeOpen.value = false;
 		}
 	});
 
@@ -703,7 +758,9 @@
 								@update:model-value="
 									(enabled) =>
 										managed &&
-										submit({ action: 'set-enabled', pluginId: managed.pluginId, enabled })
+										(enabled
+											? submit({ action: 'set-enabled', pluginId: managed.pluginId, enabled })
+											: prepareRuntimeChange(managed, 'disable'))
 								"
 							/>
 						</template>
@@ -739,7 +796,7 @@
 				<UiButton
 					v-if="managed.enabled"
 					:disabled="activeIds.has(managed.pluginId)"
-					@click="submit({ action: 'reload', pluginId: managed.pluginId })"
+					@click="prepareRuntimeChange(managed, 'reload')"
 				>
 					{{ t('marketplace.reload') }}
 				</UiButton>
@@ -750,6 +807,21 @@
 					@click="prepareUninstall(managed)"
 				>
 					{{ t('marketplace.uninstall') }}
+				</UiButton>
+			</template>
+		</UiDialog>
+		<UiDialog
+			v-model:open="runtimeChangeOpen"
+			:title="runtimeChangeTitle"
+			:description="t('marketplace.runtimeChangeWarning')"
+			:close-label="t('closeApplication')"
+			@close-auto-focus="restoreRuntimeChangeFocus"
+		>
+			<p v-if="runtimeChange">{{ runtimeChange.pluginId }}</p>
+			<template #footer>
+				<UiButton @click="runtimeChangeOpen = false">{{ t('marketplace.cancel') }}</UiButton>
+				<UiButton tone="danger" :disabled="!runtimeChangeAllowed" @click="confirmRuntimeChange">
+					{{ t(runtimeChange?.action === 'reload' ? 'marketplace.reload' : 'marketplace.disable') }}
 				</UiButton>
 			</template>
 		</UiDialog>

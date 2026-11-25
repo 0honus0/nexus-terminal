@@ -1101,11 +1101,39 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	const detail = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
 	const enable = detail.getByRole('switch', { name: 'Enable plugin' });
 	await enable.click();
+	const disable = page.getByRole('dialog', { name: 'Disable plugin?', exact: true });
+	await expect(disable).toBeVisible();
+	await disable.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(disable).toHaveCount(0);
+	await expect(enable).toBeChecked();
+	await enable.click();
+	await disable.getByRole('button', { name: 'Disable', exact: true }).click();
 	await expect(enable).not.toBeChecked();
 	await expect(detail.getByText('Disabled', { exact: true })).toBeVisible();
 	await enable.click();
 	await expect(enable).toBeChecked();
 	await expect(detail.getByText('Available', { exact: true })).toBeVisible();
+	await detail.getByRole('button', { name: 'Reload', exact: true }).click();
+	const reload = page.getByRole('dialog', { name: 'Reload plugin?', exact: true });
+	await expect(reload).toBeVisible();
+	const accepted = page.waitForResponse(
+		(response) =>
+			response.request().method() === 'POST' && new URL(response.url()).pathname === marketplace + '/reload',
+	);
+	await reload.getByRole('button', { name: 'Reload', exact: true }).click();
+	const reloaded = await accepted;
+	expect(reloaded.status()).toBe(202);
+	const operation = MarketplaceOperationSchema.parse(await reloaded.json());
+	await expect
+		.poll(
+			async () =>
+				MarketplaceOperationSchema.parse(
+					await (await page.request.get(origin + marketplace + '/operations/' + operation.id)).json(),
+				).state,
+		)
+		.toBe('succeeded');
+	await expect(detail.getByText('Available', { exact: true })).toBeVisible();
+	expect((await records()).rows).toHaveLength(2);
 	await detail.getByRole('button', { name: 'Uninstall', exact: true }).click();
 	const uninstall = page.getByRole('dialog', { name: 'Uninstall', exact: true });
 	const permanent = uninstall.getByRole('switch', { name: 'Permanently clear plugin data' });

@@ -23,6 +23,11 @@ export const appMessages = {
 			confirmInstall: 'Install',
 			confirmUpdate: 'Update',
 			reload: 'Reload',
+			disable: 'Disable',
+			disableConfirmTitle: 'Disable plugin?',
+			reloadConfirmTitle: 'Reload plugin?',
+			runtimeChangeWarning:
+				'This operation may stop this plugin and its dependent plugins. Open windows, active or suspended sessions, and running tasks may be interrupted. Save your work before continuing.',
 			affected: 'Affected plugins',
 			updateVersion: 'Update to {version}',
 			updateAvailable: 'Update available',
@@ -292,6 +297,11 @@ export const appMessages = {
 			confirmInstall: '安装',
 			confirmUpdate: '更新',
 			reload: '重新加载',
+			disable: '停用',
+			disableConfirmTitle: '停用插件？',
+			reloadConfirmTitle: '重新加载插件？',
+			runtimeChangeWarning:
+				'此操作可能停止该插件及依赖它的插件。已打开的窗口、活动或挂起的会话以及正在执行的任务可能中断。请先保存工作再继续。',
 			affected: '受影响的插件',
 			updateVersion: '更新至 {version}',
 			updateAvailable: '有更新',
