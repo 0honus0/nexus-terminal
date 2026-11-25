@@ -750,8 +750,12 @@
 					<UiSwitch v-model="clearOnUninstall" :aria-label="t('marketplace.clearOnUninstall')" />
 				</label>
 			</template>
-			<template v-if="uninstallPlan && !uninstallPlan.required" #footer>
+			<template v-if="uninstallPlan" #footer>
+				<UiButton :disabled="submittingIds.has(uninstallPlan.pluginId)" @click="uninstallOpen = false">
+					{{ t('marketplace.cancel') }}
+				</UiButton>
 				<UiButton
+					v-if="!uninstallPlan.required"
 					tone="danger"
 					:loading="submittingIds.has(uninstallPlan.pluginId)"
 					:disabled="activeIds.has(uninstallPlan.pluginId)"
@@ -766,6 +770,9 @@
 		<UiDialog v-model:open="clearOpen" :title="t('marketplace.clearData')" :close-label="t('closeApplication')">
 			<p v-if="clearTarget">{{ t('marketplace.clearConfirm', { name: clearTarget.pluginId }) }}</p>
 			<template v-if="clearTarget" #footer>
+				<UiButton :disabled="submittingIds.has(clearTarget.pluginId)" @click="clearOpen = false">
+					{{ t('marketplace.cancel') }}
+				</UiButton>
 				<UiButton
 					tone="danger"
 					:loading="submittingIds.has(clearTarget.pluginId)"

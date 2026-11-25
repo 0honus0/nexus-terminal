@@ -1,4 +1,8 @@
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
+import { create as createArchive } from 'tar';
+import { sql } from 'kysely';
+import { pluginTablePrefix } from '../../src/database/node/database-api.js';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -782,4 +786,194 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 		releaseOldReads.resolve();
 		await resources.disposeAsync();
 	}
+});
+
+test('marketplace installs, updates and uninstalls actual packages with retained data', async ({ page }) => {
+	test.setTimeout(90000);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await using resources = new AsyncDisposableStack();
+	const directory = await mkdtemp(join(tmpdir(), 'nexus-marketplace-lifecycle-'));
+	resources.defer(() => rm(directory, { recursive: true, force: true }));
+	const app = new App({ dataDirectory: join(directory, 'data'), logLevel: 'fatal' });
+	resources.defer(() => app.close());
+	const id = '@test/lifecycle';
+	const dependency = '@test/lifecycle-support';
+	let catalog: unknown = [];
+	const artifacts = new Map<string, Buffer>();
+	const downloads: string[] = [];
+	const repository = createServer((request, response) => {
+		const path = request.url ?? '';
+		if (path === '/catalog.json') {
+			response.setHeader('content-type', 'application/json');
+			response.end(JSON.stringify(catalog));
+		} else if (artifacts.has(path)) {
+			downloads.push(path);
+			response.end(artifacts.get(path));
+		} else response.writeHead(404).end();
+	});
+	resources.defer(() => {
+		repository.closeAllConnections();
+		if (repository.listening) return new Promise<void>((resolve) => repository.close(() => resolve()));
+	});
+	repository.listen(0, '127.0.0.1');
+	await once(repository, 'listening');
+	const source = 'http://127.0.0.1:' + (repository.address() as AddressInfo).port;
+
+	async function pack(name: string, version: string, code: string, dependsOn: Record<string, string> = {}) {
+		const root = join(directory, name, version);
+		await mkdir(root, { recursive: true });
+		await writeFile(
+			join(root, 'package.json'),
+			JSON.stringify({
+				name,
+				version,
+				displayName: name === id ? 'Lifecycle Fixture' : 'Lifecycle Support',
+				type: 'module',
+				peerDependencies: { 'nexus-terminal': '^1.0.0' },
+				nexus: { kind: 'extension', entry: { backend: 'index.mjs' }, dependsOn },
+			}),
+		);
+		await writeFile(join(root, 'index.mjs'), code);
+		const { package: manifest } = await inspectPluginPackage(root);
+		const file = join(root, 'artifact.tgz');
+		await createArchive({ cwd: root, file, gzip: true, prefix: 'package/' }, ['package.json', 'index.mjs']);
+		const bytes = await readFile(file);
+		const path = '/' + encodeURIComponent(name) + '-' + version + '.tgz';
+		artifacts.set(path, bytes);
+		return {
+			package: manifest,
+			distributions: [
+				{ tarball: source + path, integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64') },
+			],
+		};
+	}
+
+	const code = `
+		export const backup = [{table: 'records', version: 1, keys: ['id'], fields: {id:'plain'}}];
+		export const migrations = {async getMigrations() { return {initial: {async up(db) {
+			await db.schema.createTable('records').addColumn('id', 'text', c => c.primaryKey()).execute();
+		}}}; }};
+		export async function activate(ctx) {
+			await ctx.app.database.withClient(db => db.insertInto('records').values({id:'retained'}).onConflict(c => c.doNothing()).execute());
+			ctx.self.readiness.set({state:'ready'});
+		}
+	`;
+	const support = await pack(
+		dependency,
+		'1.0.0',
+		"export function activate(ctx) { ctx.self.readiness.set({state:'ready'}); }",
+	);
+	const first = await pack(id, '1.0.0', code, { [dependency]: '^1.0.0' });
+	const second = await pack(id, '2.0.0', code, { [dependency]: '^1.0.0' });
+	catalog = [
+		{ id: dependency, versions: [support] },
+		{ id, versions: [first] },
+	];
+	await app.initialize();
+	await app.startBuiltinPlugins();
+	await app.startExternalPlugins();
+	const frontend = await serveFrontend(app, join(directory, 'frontend'));
+	resources.defer(() => frontend.close());
+	resources.defer(() => page.close());
+	const origin = frontendOrigin(frontend);
+	await page.goto(origin);
+	await page.getByLabel('Username', { exact: true }).fill('fixture-owner');
+	await page.getByLabel('Password', { exact: true }).fill('test-password');
+	await page.getByRole('button', { name: 'Create account', exact: true }).click();
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	const manage = market.getByRole('button', { name: 'Manage installed plugins', exact: true });
+	await manage.click();
+	const repositories = market.getByRole('region', { name: 'Repositories', exact: true });
+	await repositories.getByRole('textbox', { name: 'Repository catalog URL' }).fill(source + '/catalog.json');
+	await repositories.getByRole('button', { name: 'Add repository' }).click();
+	await expect(repositories.getByText(source + '/catalog.json', { exact: true })).toBeVisible();
+	await manage.click();
+	const listing = market.getByRole('button', { name: 'View Lifecycle Fixture', exact: true });
+	await listing.click();
+	await page.getByRole('button', { name: 'Preview installation', exact: true }).click();
+	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
+	await expect(plan.getByText(dependency, { exact: false })).toBeVisible();
+	expect(downloads).toEqual([]);
+	await plan.getByRole('button', { name: 'Install', exact: true }).click();
+	await plan.getByRole('button', { name: 'Done', exact: true }).click({ timeout: 15000 });
+	const card = market
+		.getByRole('article')
+		.filter({ has: page.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }) });
+	await expect(card).toContainText('1.0.0');
+	await expect(card.getByRole('status')).toHaveText('Available');
+	expect(downloads).toHaveLength(2);
+	const table = pluginTablePrefix(id) + 'records';
+	const database = app.services.get('database');
+
+	const records = () => database.withClient((db) => sql`select id from ${sql.id(table)}`.execute(db));
+
+	expect((await records()).rows).toEqual([{ id: 'retained' }]);
+	await database.withClient((db) => sql`insert into ${sql.id(table)} (id) values ('user-fixture')`.execute(db));
+
+	catalog = [
+		{ id: dependency, versions: [support] },
+		{ id, versions: [first, second] },
+	];
+	await repositories.getByRole('button', { name: 'Refresh 127.0.0.1', exact: true }).click();
+	await card.getByRole('button', { name: 'Update Lifecycle Fixture to 2.0.0', exact: true }).click();
+	await plan.getByRole('button', { name: 'Update', exact: true }).click();
+	await plan.getByRole('button', { name: 'Done', exact: true }).click({ timeout: 15000 });
+	await expect(card).toContainText('2.0.0');
+	expect(downloads).toHaveLength(3);
+	expect((await records()).rows).toEqual([{ id: 'retained' }, { id: 'user-fixture' }]);
+
+	await card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }).click();
+	const detail = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	const enable = detail.getByRole('switch', { name: 'Enable plugin' });
+	await enable.click();
+	await expect(enable).not.toBeChecked();
+	await expect(detail.getByText('Disabled', { exact: true })).toBeVisible();
+	await enable.click();
+	await expect(enable).toBeChecked();
+	await expect(detail.getByText('Available', { exact: true })).toBeVisible();
+	await detail.getByRole('button', { name: 'Uninstall', exact: true }).click();
+	const uninstall = page.getByRole('dialog', { name: 'Uninstall', exact: true });
+	const permanent = uninstall.getByRole('switch', { name: 'Permanently clear plugin data' });
+	await expect(permanent).not.toBeChecked();
+	await permanent.click();
+	await expect(permanent).toBeChecked();
+	await uninstall.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(uninstall).toHaveCount(0);
+	await expect(detail).toBeVisible();
+	expect((await records()).rows).toHaveLength(2);
+	await detail.getByRole('button', { name: 'Uninstall', exact: true }).click();
+	await expect(permanent).not.toBeChecked();
+	await uninstall.getByRole('contentinfo').getByRole('button', { name: 'Uninstall', exact: true }).click();
+	await expect(uninstall).toHaveCount(0);
+	await expect(card).toHaveCount(0);
+	const retained = market.getByText(id, { exact: true });
+	await expect(retained).toBeVisible();
+	expect((await records()).rows).toHaveLength(2);
+	await market.getByRole('button', { name: 'Clear data', exact: true }).click();
+	const clear = page.getByRole('dialog', { name: 'Clear data', exact: true });
+	await clear.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(clear).toHaveCount(0);
+	await expect(retained).toBeVisible();
+	expect((await records()).rows).toHaveLength(2);
+	await market.getByRole('button', { name: 'Clear data', exact: true }).click();
+	await clear.getByRole('contentinfo').getByRole('button', { name: 'Clear data', exact: true }).click();
+	await expect(clear).toHaveCount(0);
+	await expect(retained).toHaveCount(0);
+	await expect
+		.poll(
+			async () =>
+				(
+					await database.withClient((db) =>
+						sql`select name from sqlite_schema where name = ${table}`.execute(db),
+					)
+				).rows,
+		)
+		.toEqual([]);
+	await expect(
+		market
+			.getByRole('article')
+			.filter({ has: page.getByRole('button', { name: 'Manage Lifecycle Support', exact: true }) })
+			.getByRole('status'),
+	).toHaveText('Available');
 });
