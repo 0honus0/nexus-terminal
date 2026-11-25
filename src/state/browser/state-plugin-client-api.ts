@@ -63,24 +63,40 @@ export class StateClientService {
 						for (const listener of [...listeners]) listener(status);
 					}
 
-					topicScope.run(() =>
-						watch(
-							service.#client,
-							(client, _, onCleanup) => {
-								if (scope.signal.aborted) return;
-								publish({ reason: 'disconnected' });
-								if (client)
-									onCleanup(
-										client.subscribe(identity, z.unknown(), {
-											updated: (value) => publish({ value }),
+					try {
+						topicScope.run(() =>
+							watch(
+								service.#client,
+								(client, _, onCleanup) => {
+									if (scope.signal.aborted) return;
+									publish({ reason: 'disconnected' });
+									if (!client) return;
+									let live = true;
+									let release: (() => void) | undefined;
+									onCleanup(() => {
+										live = false;
+										release?.();
+									});
 
-											unconfirmed: (reason) => publish({ reason }),
-										}),
-									);
-							},
-							{ immediate: true },
-						),
-					);
+									const publishCurrent = (status: Status) => {
+										if (live && !scope.signal.aborted && service.#client() === client)
+											publish(status);
+									};
+
+									release = client.subscribe(identity, z.unknown(), {
+										updated: (value) => publishCurrent({ value }),
+
+										unconfirmed: (reason) => publishCurrent({ reason }),
+									});
+									if (!live) release();
+								},
+								{ immediate: true },
+							),
+						);
+					} catch (cause) {
+						topicScope.stop();
+						throw cause;
+					}
 					topics.set(name, entry);
 					topic = entry;
 				}

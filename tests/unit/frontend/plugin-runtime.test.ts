@@ -439,3 +439,56 @@ test('SDK 窗口入口绑定当前插件，桌面拆除和插件停用后拒绝�
 	await runtime.sync([]);
 	assert.throws(() => open('main'));
 });
+
+test('状态共享订阅切换后拒绝旧客户端的迟到通知', async (t) => {
+	const plugin = new PluginScope(() => {});
+	t.after(() => plugin.close());
+	const callbacks: ((value: unknown) => void)[] = [];
+
+	const fixtureClient = () =>
+		({
+			subscribe(_topic, schema, observer) {
+				callbacks.push((value) => observer.updated(schema.parse(value)));
+				return () => {};
+			},
+		}) satisfies Pick<StateClient, 'subscribe'>;
+
+	const current = shallowRef<Pick<StateClient, 'subscribe'>>(fixtureClient());
+	const state = new StateClientService(() => current.value, { report() {} }).bind('@test/consumer', plugin);
+	const observed: number[] = [];
+	state.subscribe('items', z.number(), { updated: (value) => observed.push(value) });
+	callbacks[0]!(1);
+	current.value = fixtureClient();
+	callbacks[0]!(2);
+	await nextTick();
+	callbacks[1]!(3);
+	callbacks[0]!(4);
+	assert.deepEqual(observed, [1, 3]);
+});
+
+test('首次共享状态订阅失败后不遗留监听作用域', async (t) => {
+	const plugin = new PluginScope(() => {});
+	t.after(() => plugin.close());
+	let calls = 0;
+	let releases = 0;
+
+	const makeClient = () =>
+		({
+			subscribe() {
+				if (++calls === 1) throw new Error('fixture subscribe failure');
+				return () => {
+					releases++;
+				};
+			},
+		}) satisfies Pick<StateClient, 'subscribe'>;
+
+	const current = shallowRef<Pick<StateClient, 'subscribe'>>(makeClient());
+	const state = new StateClientService(() => current.value, { report() {} }).bind('@test/consumer', plugin);
+	assert.throws(() => state.subscribe('items', z.number(), { updated() {} }), /fixture subscribe failure/u);
+	const release = state.subscribe('items', z.number(), { updated() {} });
+	current.value = makeClient();
+	await nextTick();
+	assert.equal(calls, 3);
+	release();
+	assert.equal(releases, 2);
+});

@@ -130,9 +130,7 @@ export class StateClient {
 		if (frame.type === 'unavailable') {
 			this.#invalidate(subscription, 'unavailable');
 			// 内置主题可能晚于监听端口就绪。请求重新登记可在同一连接恢复该主题。
-			if (this.#subscriptions.get(stateTopicKey(frame.topic)) === subscription) {
-				subscription.retry = setTimeout(() => this.#send('subscribe', subscription.topic), 1000);
-			}
+			this.#retry(subscription);
 			return;
 		}
 
@@ -154,7 +152,7 @@ export class StateClient {
 				frame.type === 'snapshot'
 					? frame.state
 					: jsonPatch.applyPatch(last!.state, frame.changes, true, false, true).newDocument;
-			subscription.updated(next);
+			subscription.updated(structuredClone(next));
 			subscription.cursor = { instanceId: frame.instanceId, revision: frame.revision, state: next };
 			subscription.resyncing = false;
 			clearTimeout(subscription.retry);
@@ -163,16 +161,29 @@ export class StateClient {
 			if (subscription.resyncing && frame.type === 'snapshot') {
 				// 无效重同步快照留待重新订阅，避免同步错误造成无限请求。
 				this.#invalidate(subscription, 'resync');
-				subscription.retry = setTimeout(() => this.#send('subscribe', subscription.topic), 1000);
+				this.#retry(subscription);
 			} else this.#resync(subscription);
 		}
 	}
 
 	#resync(subscription: Subscription): void {
-		if (subscription.resyncing) return;
+		if (subscription.resyncing || !this.#registered(subscription)) return;
 		this.#invalidate(subscription, 'resync');
+		if (!this.#registered(subscription)) return;
 		subscription.resyncing = true;
 		this.#send('resync', subscription.topic);
+	}
+
+	#registered(subscription: Subscription): boolean {
+		return !this.#closed && this.#subscriptions.get(stateTopicKey(subscription.topic)) === subscription;
+	}
+
+	#retry(subscription: Subscription): void {
+		if (!this.#registered(subscription)) return;
+		clearTimeout(subscription.retry);
+		subscription.retry = setTimeout(() => {
+			if (this.#registered(subscription)) this.#send('subscribe', subscription.topic);
+		}, 1000);
 	}
 
 	#invalidate(subscription: Subscription, reason: Unconfirmed): void {
