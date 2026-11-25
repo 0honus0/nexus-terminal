@@ -1,6 +1,6 @@
 <script setup lang="ts">
 	import UiTransition from './UiTransition.vue';
-	import { ref, type VNodeChild } from 'vue';
+	import { computed, ref, type VNodeChild } from 'vue';
 	import { unrefElement } from '@vueuse/core';
 	import {
 		DropdownMenuRoot,
@@ -13,18 +13,19 @@
 	import type { UiDropdownMenuProps } from '../ui-component-types.js';
 	import { useTransientOverlay } from '../ui-overlay.js';
 	import '../ui-menu.css';
-	withDefaults(defineProps<UiDropdownMenuProps>(), { align: 'end', transition: 'none' });
+	const props = withDefaults(defineProps<UiDropdownMenuProps>(), { align: 'end', transition: 'none' });
 	const emit = defineEmits<{ select: [id: string] }>();
 	defineSlots<{ default: () => VNodeChild }>();
 	const open = defineModel<boolean>('open', { default: false });
 	const trigger = ref<InstanceType<typeof DropdownMenuTrigger>>();
-	const overlay = useTransientOverlay(open);
+	const unavailable = computed(() => !!props.disabled || !props.items.length);
+	const overlay = useTransientOverlay(open, unavailable);
 
 	const select = (id: string) => overlay.select(unrefElement(trigger), () => emit('select', id));
 </script>
 <template>
 	<DropdownMenuRoot v-model:open="open" :modal="false">
-		<DropdownMenuTrigger ref="trigger" as-child :disabled="disabled || !items.length"><slot /></DropdownMenuTrigger>
+		<DropdownMenuTrigger ref="trigger" as-child :disabled="unavailable"><slot /></DropdownMenuTrigger>
 		<DropdownMenuPortal>
 			<UiTransition :preset="transition === 'fade' ? 'fade' : 'none'"
 				><DropdownMenuContent

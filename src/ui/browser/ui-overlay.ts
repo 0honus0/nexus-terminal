@@ -10,7 +10,7 @@ export function dismissTransientOverlay() {
 	active?.dismiss();
 }
 
-export function useTransientOverlay(open: Ref<boolean>) {
+export function useTransientOverlay(open: Ref<boolean>, disabled?: Readonly<Ref<boolean>>) {
 	let restoreFocus = true;
 	const overlay: TransientOverlay = {
 		dismiss() {
@@ -19,8 +19,12 @@ export function useTransientOverlay(open: Ref<boolean>) {
 		},
 	};
 	watch(
-		open,
-		(value) => {
+		[open, () => disabled?.value ?? false],
+		([value, unavailable]) => {
+			if (value && unavailable) {
+				overlay.dismiss();
+				return;
+			}
 			if (value) {
 				if (active !== overlay) active?.dismiss();
 				restoreFocus = true;

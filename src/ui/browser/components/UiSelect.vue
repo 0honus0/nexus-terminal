@@ -20,7 +20,6 @@
 	defineOptions({ inheritAttrs: false });
 	const value = defineModel<string>();
 	const open = defineModel<boolean>('open', { default: false });
-	const overlay = useTransientOverlay(open);
 	const { play } = useUiMotion();
 	const visibleClip = 'inset(-48px)';
 	const props = withDefaults(defineProps<UiSelectProps>(), {
@@ -31,6 +30,8 @@
 		block: false,
 		contentAlign: 'center',
 	});
+	const unavailable = computed(() => props.disabled || props.options.length === 0);
+	const overlay = useTransientOverlay(open, unavailable);
 	// 选项弹层装卸会暂时清空 Reka 的选项登记；触发器文字由稳定的数据源提供。
 	const selectedLabel = computed(
 		() => props.options.find((option) => option.value === value.value)?.label ?? props.placeholder ?? '',
@@ -86,7 +87,7 @@
 		v-model:open="open"
 		:name="props.name"
 		:required="props.required"
-		:disabled="props.disabled || props.options.length === 0"
+		:disabled="unavailable"
 	>
 		<SelectTrigger
 			v-bind="$attrs"

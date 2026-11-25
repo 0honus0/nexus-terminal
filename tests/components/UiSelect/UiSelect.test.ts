@@ -58,3 +58,33 @@ it('switches between adjacent selectors without locking the page or keeping both
 		wrapper.unmount();
 	}
 });
+
+it.each(['disabled', 'empty'] as const)(
+	'closes an open selector when it becomes %s and does not reopen on recovery',
+	async (reason) => {
+		const options = [
+			{ value: 'all', label: 'All' },
+			{ value: 'one', label: 'One' },
+		];
+		const wrapper = mount(UiSelect, { props: { options, modelValue: 'all' }, attachTo: document.body });
+		try {
+			const trigger = wrapper.get('[data-ui="select"]');
+			await trigger.trigger('keydown', { key: 'ArrowDown' });
+			await flushPromises();
+			expect(trigger.attributes('aria-expanded')).toBe('true');
+			await wrapper.setProps(reason === 'disabled' ? { disabled: true } : { options: [] });
+			await flushPromises();
+			expect(trigger.attributes('aria-expanded')).toBe('false');
+			expect(document.querySelector('[role="listbox"]')).toBeNull();
+			await wrapper.setProps({ options, disabled: false });
+			await flushPromises();
+			expect(trigger.attributes('aria-expanded')).toBe('false');
+			expect(trigger.text()).toBe('All');
+			await trigger.trigger('keydown', { key: 'ArrowDown' });
+			await flushPromises();
+			expect(trigger.attributes('aria-expanded')).toBe('true');
+		} finally {
+			wrapper.unmount();
+		}
+	},
+);
