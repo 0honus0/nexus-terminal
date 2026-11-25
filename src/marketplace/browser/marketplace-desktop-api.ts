@@ -14,6 +14,7 @@ import {
 	MarketplaceRepositoryListSchema,
 	MarketplaceRetainedDataListSchema,
 	MarketplaceUninstallPlanSchema,
+	MarketplaceRuntimeImpactSchema,
 } from '../marketplace-http-types.js';
 import {
 	MarketplaceInstallPlanSchema,
@@ -38,8 +39,8 @@ type UninstallPlan = z.infer<typeof MarketplaceUninstallPlanSchema>;
 
 type Submission =
 	| { action: 'install'; plan: MarketplaceInstallPlan }
-	| { action: 'reload'; pluginId: string }
-	| { action: 'set-enabled'; pluginId: string; enabled: boolean }
+	| { action: 'reload'; pluginId: string; impactRevision?: string }
+	| { action: 'set-enabled'; pluginId: string; enabled: boolean; impactRevision?: string }
 	| { action: 'uninstall'; plan: UninstallPlan; data: 'keep' | 'clear' }
 	| { action: 'clear-data'; pluginId: string };
 
@@ -132,6 +133,14 @@ export class MarketplaceDesktopApi {
 		return request('/manager/install-plan', MarketplaceInstallPlanSchema, signal, 'POST', source);
 	}
 
+	previewRuntimeImpact(pluginId: string, signal: AbortSignal) {
+		return request(
+			`/manager/plugins/${encodeURIComponent(pluginId)}/runtime-impact`,
+			MarketplaceRuntimeImpactSchema,
+			signal,
+		);
+	}
+
 	previewUninstall(pluginId: string, signal: AbortSignal): Promise<UninstallPlan> {
 		return request(
 			`/manager/plugins/${encodeURIComponent(pluginId)}/uninstall-plan`,
@@ -201,12 +210,14 @@ export class MarketplaceDesktopApi {
 					'PATCH',
 					{
 						enabled: command.enabled,
+						impactRevision: command.impactRevision,
 						observationId,
 					},
 				);
 			case 'reload':
 				return request('/manager/reload', MarketplaceOperationSchema, this.#signal, 'POST', {
 					pluginId: command.pluginId,
+					impactRevision: command.impactRevision,
 					observationId,
 				});
 			case 'clear-data':

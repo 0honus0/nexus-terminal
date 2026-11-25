@@ -23,6 +23,7 @@ import {
 	MarketplaceConfirmInstallSchema,
 	MarketplaceRetainedDataListSchema,
 	MarketplaceReloadSchema,
+	MarketplaceRuntimeImpactSchema,
 	MarketplaceUninstallPlanSchema,
 	MarketplaceUninstallSchema,
 	MarketplaceOperationListSchema,
@@ -215,6 +216,20 @@ export class MarketplaceApi {
 					this.#uninstallPlan(await this.#installed(pluginId), signal),
 			},
 			{
+				method: 'get',
+				path: '/manager/plugins/:pluginId/runtime-impact',
+				input: MarketplacePluginParamsSchema,
+				output: MarketplaceRuntimeImpactSchema,
+
+				handler: async ({ pluginId }: z.infer<typeof MarketplacePluginParamsSchema>, signal: AbortSignal) => {
+					const { required: _required, ...impact } = await this.#uninstallPlan(
+						await this.#installed(pluginId),
+						signal,
+					);
+					return impact;
+				},
+			},
+			{
 				method: 'post',
 				path: '/manager/uninstall',
 				input: MarketplaceUninstallSchema,
@@ -265,20 +280,30 @@ export class MarketplaceApi {
 				status: 202,
 
 				handler: (
-					{ pluginId, observationId }: z.infer<typeof MarketplaceReloadSchema>,
+					{ pluginId, observationId, impactRevision }: z.infer<typeof MarketplaceReloadSchema>,
 					signal: AbortSignal,
 				) => {
 					signal.throwIfAborted();
-					return this.#submit({ action: 'reload', pluginId }, observationId, async ({ commit }) => {
-						const record = await this.#installed(pluginId);
-						if (!record.enabled) throw new CodedError('MARKETPLACE_PLUGIN_DISABLED');
-						this.#frontends.remove(pluginId);
-						await this.#runtime.removeInstalled(record);
-						await this.#start([record], true);
-						const issue = this.#issues.get(pluginId);
-						if (issue) throw new CodedError(issue);
-						commit();
-					});
+					return this.#submit(
+						{ action: 'reload', pluginId, ...(impactRevision && { impactRevision }) },
+						observationId,
+						async ({ commit }) => {
+							const record = await this.#installed(pluginId);
+							if (!record.enabled) throw new CodedError('MARKETPLACE_PLUGIN_DISABLED');
+							if (
+								impactRevision &&
+								(await this.#uninstallPlan(record, this.#scope.signal)).revision !== impactRevision
+							)
+								throw new CodedError('MARKETPLACE_INSTALL_PLAN_CHANGED');
+							this.#assertOpen();
+							this.#frontends.remove(pluginId);
+							await this.#runtime.removeInstalled(record);
+							await this.#start([record], true);
+							const issue = this.#issues.get(pluginId);
+							if (issue) throw new CodedError(issue);
+							commit();
+						},
+					);
 				},
 			},
 			{
@@ -523,14 +548,22 @@ export class MarketplaceApi {
 	readonly #updateEnabled: HttpRoute<
 		typeof MarketplaceSetEnabledSchema,
 		typeof MarketplaceOperationSchema
-	>['handler'] = async ({ pluginId, enabled, observationId }, signal) => {
+	>['handler'] = async ({ pluginId, enabled, observationId, impactRevision }, signal) => {
 		await this.#installed(pluginId);
 		signal.throwIfAborted();
 		this.#assertOpen();
 
 		// 202 只确认受理。执行进入宿主队列，浏览器断线不撤销已受理的变更。
-		const change = { action: 'set-enabled', pluginId, enabled } as const;
+		const change = { action: 'set-enabled', pluginId, enabled, ...(impactRevision && { impactRevision }) } as const;
 		return this.#operations.submit(change, observationId, async (committed) => {
+			if (
+				!enabled &&
+				impactRevision &&
+				(await this.#uninstallPlan(await this.#installed(pluginId), this.#scope.signal)).revision !==
+					impactRevision
+			)
+				return 'MARKETPLACE_INSTALL_PLAN_CHANGED';
+			this.#assertOpen();
 			const result = await this.#setEnabled(pluginId, enabled, committed.commit);
 			return enabled || result.issue === 'MARKETPLACE_PLUGIN_STOP_FAILED' ? result.issue : null;
 		});

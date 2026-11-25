@@ -24,6 +24,7 @@ import {
 	MarketplaceRepositoryListSchema,
 	MarketplaceRetainedDataListSchema,
 	MarketplaceUninstallPlanSchema,
+	MarketplaceRuntimeImpactSchema,
 } from '../../../src/marketplace/marketplace-http-types.js';
 import { MarketplaceInstallPlanSchema } from '../../../src/marketplace/marketplace-install-types.js';
 import { planMarketplaceInstall } from '../../../src/marketplace/node/marketplace-install-planner.js';
@@ -983,6 +984,31 @@ test('从仓库安装并更新实际产物，卸载保留数据，确认清除�
 		cookie,
 	);
 	assert.deepEqual(MarketplaceUninstallPlanSchema.parse(await dependant.json()).dependents, [pluginId]);
+	const impactResponse = await marketRequest(
+		origin,
+		managerPath + '/plugins/' + encodeURIComponent(dependency) + '/runtime-impact',
+		cookie,
+	);
+	assert.equal(impactResponse.status, 200);
+	const impact = MarketplaceRuntimeImpactSchema.parse(await impactResponse.json());
+	assert.deepEqual(impact.dependents, [pluginId]);
+	assert.equal(impact.pluginId, dependency);
+	assert.equal(impact.version, '1.0.0');
+	const badRevision = impact.revision === 'a'.repeat(64) ? 'b'.repeat(64) : 'a'.repeat(64);
+	const rejected = await setEnabled(origin, dependency, cookie, { enabled: false, impactRevision: badRevision });
+	const rejectedOperation = await completed(MarketplaceOperationSchema.parse(await rejected.json()).id);
+	assert.equal(rejectedOperation.error, 'MARKETPLACE_INSTALL_PLAN_CHANGED');
+	assert.equal(rejectedOperation.committed, false);
+	const rejectedReload = await run('/reload', { pluginId: dependency, impactRevision: badRevision });
+	assert.equal(rejectedReload.error, 'MARKETPLACE_INSTALL_PLAN_CHANGED');
+	assert.equal(rejectedReload.committed, false);
+	assert.equal(
+		(await listInstalledPlugins(origin, cookie)).find((row) => row.pluginId === dependency)?.enabled,
+		true,
+	);
+	const confirmedReload = await run('/reload', { pluginId: dependency, impactRevision: impact.revision });
+	assert.equal(confirmedReload.state, 'succeeded');
+
 	const disabled = await setEnabled(origin, pluginId, cookie, { enabled: false });
 	assert.equal((await completed(MarketplaceOperationSchema.parse(await disabled.json()).id)).state, 'succeeded');
 	const update = await previewInstall(origin, cookie, source.id, pluginId, '2.0.0');
@@ -1001,6 +1027,11 @@ test('从仓库安装并更新实际产物，卸载保留数据，确认清除�
 		(await run('/uninstall', { pluginId, revision: uninstall.revision, data: 'keep' })).state,
 		'succeeded',
 	);
+	// Uninstall changed the actual dependency graph since the preview, not just the supplied hash.
+	const stale = await setEnabled(origin, dependency, cookie, { enabled: false, impactRevision: impact.revision });
+	const staleOperation = await completed(MarketplaceOperationSchema.parse(await stale.json()).id);
+	assert.equal(staleOperation.error, 'MARKETPLACE_INSTALL_PLAN_CHANGED');
+	assert.equal(staleOperation.committed, false);
 	const retained = await marketRequest(origin, managerPath + '/retained-data', cookie);
 	assert.deepEqual(MarketplaceRetainedDataListSchema.parse(await retained.json()).items, [
 		{ pluginId, version: '2.0.0' },

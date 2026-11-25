@@ -7,6 +7,7 @@
 	import type {
 		MarketplaceRetainedDataListSchema,
 		MarketplaceUninstallPlanSchema,
+		MarketplaceRuntimeImpactSchema,
 	} from '../marketplace-http-types.js';
 	import type { MarketplaceDesktopApi } from './marketplace-desktop-api.js';
 	import { CodedError } from '../../utils/error.js';
@@ -119,6 +120,16 @@
 		{ action: 'set-enabled'; pluginId: string; enabled: false } | { action: 'reload'; pluginId: string }
 	>();
 	const runtimeChangeOpen = ref(false);
+	const runtimeImpact = shallowRef<z.infer<typeof MarketplaceRuntimeImpactSchema>>();
+	const runtimeImpactLoading = ref(false);
+	let runtimeImpactRequest: AbortController | undefined;
+	watch(
+		runtimeChangeOpen,
+		(open) => {
+			if (!open) runtimeImpactRequest?.abort();
+		},
+		{ flush: 'sync' },
+	);
 	let runtimeChangeTrigger: HTMLElement | undefined;
 	const runtimeChangeTitle = computed(() =>
 		t(
@@ -127,12 +138,20 @@
 				: 'marketplace.disableConfirmTitle',
 		),
 	);
+	const runtimeImpactMatches = computed(
+		() =>
+			runtimeImpact.value?.pluginId === managed.value?.pluginId &&
+			runtimeImpact.value?.version === managed.value?.version &&
+			!!runtimeImpact.value,
+	);
 	const runtimeChangeAllowed = computed(
 		() =>
 			!!runtimeChange.value &&
 			managedOpen.value &&
 			managed.value?.pluginId === runtimeChange.value.pluginId &&
 			managed.value.enabled &&
+			runtimeImpactMatches.value &&
+			!runtimeImpactLoading.value &&
 			!activeIds.value.has(runtimeChange.value.pluginId),
 	);
 
@@ -446,6 +465,29 @@
 				? { action: 'reload', pluginId: item.pluginId }
 				: { action: 'set-enabled', pluginId: item.pluginId, enabled: false };
 		runtimeChangeOpen.value = true;
+		void readRuntimeImpact();
+	}
+
+	async function readRuntimeImpact(): Promise<void> {
+		const command = runtimeChange.value;
+		if (!command || !runtimeChangeOpen.value) return;
+		runtimeImpactRequest?.abort();
+		const request = new AbortController();
+		runtimeImpactRequest = request;
+		const signal = AbortSignal.any([request.signal, scope.signal]);
+		runtimeImpact.value = undefined;
+		runtimeImpactLoading.value = true;
+		try {
+			const impact = await api.previewRuntimeImpact(command.pluginId, signal);
+			if (signal.aborted || !runtimeChangeOpen.value || runtimeChange.value !== command) return;
+			if (impact.pluginId !== command.pluginId || impact.version !== managed.value?.version)
+				throw new CodedError('MARKETPLACE_INSTALL_PLAN_CHANGED');
+			runtimeImpact.value = impact;
+		} catch (cause) {
+			if (!signal.aborted) reportFailure(cause);
+		} finally {
+			if (runtimeImpactRequest === request) runtimeImpactLoading.value = false;
+		}
 	}
 
 	function restoreRuntimeChangeFocus(event: Event): void {
@@ -465,9 +507,10 @@
 
 	function confirmRuntimeChange(): void {
 		const command = runtimeChange.value;
-		if (!command || !runtimeChangeAllowed.value) return;
+		if (!command || !runtimeChangeAllowed.value || !runtimeImpact.value) return;
+		const impactRevision = runtimeImpact.value.revision;
 		runtimeChangeOpen.value = false;
-		void submit(command);
+		void submit({ ...command, impactRevision });
 	}
 
 	async function prepareUninstall(item: MarketplacePlugin): Promise<void> {
@@ -818,6 +861,25 @@
 			@close-auto-focus="restoreRuntimeChangeFocus"
 		>
 			<p v-if="runtimeChange">{{ runtimeChange.pluginId }}</p>
+			<p v-if="runtimeImpactLoading" role="status">{{ t('marketplace.loadingImpact') }}</p>
+			<template v-else-if="runtimeImpact && runtimeImpactMatches">
+				<UiSection v-if="runtimeImpact.dependents.length" :title="t('marketplace.affected')">
+					<UiList><UiListItem v-for="id in runtimeImpact.dependents" :key="id" :title="id" /></UiList>
+				</UiSection>
+				<p v-else>{{ t('marketplace.noDependents') }}</p>
+			</template>
+			<template v-else>
+				<p role="status">
+					{{
+						t(
+							runtimeImpact
+								? 'notices.MARKETPLACE_INSTALL_PLAN_CHANGED'
+								: 'notices.MARKETPLACE_REQUEST_FAILED',
+						)
+					}}
+				</p>
+				<UiButton @click="readRuntimeImpact">{{ t('marketplace.retryInstallation') }}</UiButton>
+			</template>
 			<template #footer>
 				<UiButton @click="runtimeChangeOpen = false">{{ t('marketplace.cancel') }}</UiButton>
 				<UiButton tone="danger" :disabled="!runtimeChangeAllowed" @click="confirmRuntimeChange">

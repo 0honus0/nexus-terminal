@@ -1229,6 +1229,24 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 			},
 		});
 	});
+	const releaseImpact = Promise.withResolvers<void>();
+	let impactReads = 0;
+	await page.route('**/api/plugins/*/manager/plugins/*/runtime-impact', async (route) => {
+		const pluginId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2)!);
+		if (++impactReads === 1) {
+			await releaseImpact.promise;
+		} else if (impactReads === 2) {
+			await route.fulfill({ status: 503 });
+			return;
+		}
+		await route.fulfill({
+			json: {
+				...byId(pluginId),
+				revision: 'a'.repeat(64),
+				dependents: pluginId === '@nexus-terminal/test' ? ['@example/support'] : [],
+			},
+		});
+	});
 	await page.route('**/api/plugins/*/manager/plugins', (route) =>
 		route.fulfill({
 			json: {
@@ -1313,6 +1331,13 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		const reloadDialog = page.getByRole('dialog', { name: 'Reload plugin?', exact: true });
 		await expect(reloadDialog).toBeVisible();
 		await expect(reloadDialog.getByText(/active or suspended sessions/)).toBeVisible();
+		try {
+			await expect(reloadDialog.getByRole('button', { name: 'Reload', exact: true })).toBeDisabled();
+			await expect.poll(() => impactReads).toBe(1);
+		} finally {
+			releaseImpact.resolve();
+		}
+		await expect(reloadDialog.getByText('@example/support', { exact: true })).toBeVisible();
 		await reloadDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
 		await expect(reloadDialog).toHaveCount(0);
 		await expect(reload).toBeFocused();
@@ -1321,6 +1346,16 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		const disable = page.getByRole('dialog', { name: 'Disable plugin?', exact: true });
 		await expect(disable).toBeVisible();
 		await expect(disable.getByText(/active or suspended sessions/)).toBeVisible();
+		await expect(disable.getByRole('status')).toHaveText('The marketplace request failed.');
+		await expect(disable.getByRole('button', { name: 'Disable', exact: true })).toBeDisabled();
+		await disable.getByRole('button', { name: 'Preview again', exact: true }).press('Enter');
+		await expect(disable.getByText('@example/support', { exact: true })).toBeVisible();
+		// A visible error notification has priority over dialog Escape.
+		const toast = page.locator('[data-ui="toast"]').getByText('The marketplace request failed.', { exact: true });
+		if (await toast.isVisible()) {
+			await page.keyboard.press('Escape');
+			await expect(toast).toHaveCount(0);
+		}
 		await page.keyboard.press('Escape');
 		await expect(disable).toHaveCount(0);
 		await expect(enable).toBeChecked();
@@ -1340,10 +1375,11 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 		);
 		await enable.click();
 		await disable.getByRole('button', { name: 'Disable', exact: true }).click();
-		expect((await supportRequest).postDataJSON()).toMatchObject({ enabled: false });
+		expect((await supportRequest).postDataJSON()).toMatchObject({ enabled: false, impactRevision: 'a'.repeat(64) });
 		await close.press('Enter');
 	} finally {
 		finishFirst.resolve();
+		releaseImpact.resolve();
 	}
 
 	await expect(status).toHaveText('Disabled');
@@ -1457,6 +1493,9 @@ test('市场按清单显示插件名称，停用及刷新后仍随语言变化',
 				],
 			},
 		}),
+	);
+	await page.route('**/api/plugins/*/manager/plugins/*/runtime-impact', (route) =>
+		route.fulfill({ json: { pluginId, version, revision: 'b'.repeat(64), dependents: [] } }),
 	);
 	await page.route('**/api/plugins/*/manager/plugins/' + encodeURIComponent(pluginId), async (route) => {
 		const request = route.request().postDataJSON();

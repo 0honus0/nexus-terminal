@@ -79,11 +79,13 @@ export const MarketplaceSetEnabledChangeSchema = z.strictObject({
 	action: z.literal('set-enabled'),
 	pluginId: z.string().min(1).max(214),
 	enabled: z.boolean(),
+	impactRevision: z.hash('sha256').optional(),
 });
 
 export const MarketplaceReloadChangeSchema = z.strictObject({
 	action: z.literal('reload'),
 	pluginId: PluginPackageNameSchema,
+	impactRevision: z.hash('sha256').optional(),
 });
 
 const MarketplaceInstallChangeSchema = z.strictObject({

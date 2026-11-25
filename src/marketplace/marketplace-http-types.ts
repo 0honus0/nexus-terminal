@@ -83,6 +83,8 @@ export const MarketplaceUninstallPlanSchema = z.strictObject({
 	required: z.boolean(),
 });
 
+export const MarketplaceRuntimeImpactSchema = MarketplaceUninstallPlanSchema.omit({ required: true });
+
 export const MarketplaceUninstallSchema = MarketplaceUninstallChangeSchema.omit({ action: true }).extend({
 	observationId: z.uuid().optional(),
 });

@@ -29,6 +29,8 @@ export const appMessages = {
 			runtimeChangeWarning:
 				'This operation may stop this plugin and its dependent plugins. Open windows, active or suspended sessions, and running tasks may be interrupted. Save your work before continuing.',
 			affected: 'Affected plugins',
+			loadingImpact: 'Checking dependent plugins…',
+			noDependents: 'No other installed plugins depend on this plugin.',
 			updateVersion: 'Update to {version}',
 			updateAvailable: 'Update available',
 			updateNamed: 'Update {name} to {version}',
@@ -303,6 +305,8 @@ export const appMessages = {
 			runtimeChangeWarning:
 				'此操作可能停止该插件及依赖它的插件。已打开的窗口、活动或挂起的会话以及正在执行的任务可能中断。请先保存工作再继续。',
 			affected: '受影响的插件',
+			loadingImpact: '正在检查依赖关系…',
+			noDependents: '没有其他已安装插件依赖此插件。',
 			updateVersion: '更新至 {version}',
 			updateAvailable: '有更新',
 			updateNamed: '将 {name} 更新至 {version}',

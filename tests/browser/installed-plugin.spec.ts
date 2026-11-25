@@ -1097,8 +1097,16 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	expect(downloads).toHaveLength(3);
 	expect((await records()).rows).toEqual([{ id: 'retained' }, { id: 'user-fixture' }]);
 
-	await card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }).click();
+	await market.getByRole('button', { name: 'Manage Lifecycle Support', exact: true }).click();
 	const detail = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
+	await detail.getByRole('switch', { name: 'Enable plugin' }).click();
+	const impactDialog = page.getByRole('dialog', { name: 'Disable plugin?', exact: true });
+	await expect(impactDialog.getByText(id, { exact: true })).toBeVisible();
+	await impactDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect(impactDialog).toHaveCount(0);
+	await expect(detail.getByRole('switch', { name: 'Enable plugin' })).toBeChecked();
+	await detail.getByRole('button', { name: 'Close application' }).press('Enter');
+	await card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }).click();
 	const enable = detail.getByRole('switch', { name: 'Enable plugin' });
 	await enable.click();
 	const disable = page.getByRole('dialog', { name: 'Disable plugin?', exact: true });
