@@ -2,12 +2,22 @@
 	import { LoaderCircle, Plus, X } from '@lucide/vue';
 	import { TabsList, TabsRoot, TabsTrigger } from 'reka-ui';
 	import { useI18n } from 'vue-i18n';
-	import { onScopeDispose } from 'vue';
+	import { nextTick, onScopeDispose, ref, watch } from 'vue';
 	import { UiButton, UiContextMenu, UiDropdownMenu } from '../../ui/browser/ui-components-api.js';
 	import type { WindowChrome } from './window-chrome.js';
 
 	const { chrome, title } = defineProps<{ chrome: WindowChrome; title: string }>();
 	const { t } = useI18n({ useScope: 'global' });
+	const tabsList = ref<{ $el?: HTMLElement }>();
+
+	watch(
+		() => [chrome.tabs.value?.activeId, chrome.tabs.value?.items.length] as const,
+		async () => {
+			await nextTick();
+			const activeTab = tabsList.value?.$el?.querySelector<HTMLElement>(".window-tab:has([data-state='active'])");
+			activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+		},
+	);
 
 	// The titlebar disables native touch gestures for window dragging. Handle
 	// horizontal movement here for mouse, touch and pen at every viewport size.
@@ -91,6 +101,7 @@
 		@update:model-value="(value) => chrome.tab(tabs.id, 'select', String(value))"
 	>
 		<TabsList
+			ref="tabsList"
 			class="window-tabs__list"
 			:aria-label="title"
 			@pointerdown="beginScroll"
@@ -196,17 +207,19 @@
 <style scoped>
 	.window-tabs {
 		display: flex;
-		align-items: center;
+		align-items: stretch;
 		flex: 1;
-		gap: 5px;
+		gap: 2px;
 		min-width: 0;
 	}
 	.window-tabs__list {
 		display: flex;
-		gap: 4px;
+		align-items: stretch;
+		gap: 2px;
 		min-width: 0;
 		flex-wrap: nowrap;
 		overflow: auto hidden;
+		padding: 0 10px;
 		scrollbar-width: none;
 		overscroll-behavior-x: contain;
 		touch-action: none;
@@ -218,12 +231,47 @@
 	}
 
 	.window-tab {
+		position: relative;
 		display: flex;
 		align-items: center;
 		flex: none;
-		max-width: min(180px, 60vw);
-		border-radius: 8px;
-		box-shadow: inset 0 0 0 1px transparent;
+		max-width: min(210px, 60vw);
+		color: var(--ui-muted);
+		transition:
+			background var(--ui-motion-duration, 150ms) ease,
+			color var(--ui-motion-duration, 150ms) ease;
+	}
+	.window-tab:not(:has([data-state='active'])) {
+		margin: 2px 0 4px;
+		border-radius: 9px;
+	}
+	.window-tab + .window-tab:not(:has([data-state='active']))::before {
+		content: '';
+		position: absolute;
+		left: -2px;
+		top: 50%;
+		width: 1px;
+		height: 15px;
+		transform: translateY(-50%);
+		border-radius: 999px;
+		background: light-dark(
+			color-mix(in srgb, var(--ui-text) 16%, transparent),
+			color-mix(in srgb, var(--ui-text) 18%, transparent)
+		);
+		pointer-events: none;
+		transition: opacity var(--ui-motion-duration, 120ms) ease;
+	}
+	.window-tab:has([data-state='active']) + .window-tab:not(:has([data-state='active']))::before,
+	.window-tab:hover + .window-tab:not(:has([data-state='active']))::before,
+	.window-tab:not(:has([data-state='active'])):hover::before {
+		opacity: 0;
+	}
+	.window-tab:not(:has([data-state='active'])):hover {
+		background: light-dark(
+			color-mix(in srgb, var(--ui-text) 6.5%, transparent),
+			color-mix(in srgb, var(--ui-text) 9%, transparent)
+		);
+		color: var(--ui-text);
 	}
 	.window-tab[data-tone='success'] {
 		--_tab-tone: var(--ui-success);
@@ -240,16 +288,46 @@
 	.window-tab[data-tone='neutral'] {
 		--_tab-tone: var(--ui-muted);
 	}
-	.window-tab[data-tone] {
-		background: color-mix(in srgb, var(--_tab-tone) 9%, transparent);
-	}
-	.window-tab[data-tone]:has([data-state='active']) {
-		background: color-mix(in srgb, var(--_tab-tone) 18%, var(--ui-surface));
-		box-shadow: inset 0 0 0 1px var(--_tab-tone);
+	.window-tab[data-tone='warning']:not(:has([data-state='active'])),
+	.window-tab[data-tone='danger']:not(:has([data-state='active'])) {
+		background: color-mix(in srgb, var(--_tab-tone) 12%, transparent);
 		color: var(--ui-text);
 	}
-	.window-tab[data-tone]:not(:has([data-state='active'])):hover {
-		background: color-mix(in srgb, var(--_tab-tone) 14%, transparent);
+	.window-tab[data-tone='warning']:not(:has([data-state='active'])):hover,
+	.window-tab[data-tone='danger']:not(:has([data-state='active'])):hover {
+		background: color-mix(in srgb, var(--_tab-tone) 18%, transparent);
+	}
+	.window-tab:has([data-state='active']) {
+		z-index: 2;
+		margin: 0;
+		border-radius: 10px 10px 0 0;
+		background: var(--ui-surface);
+		color: var(--ui-text);
+	}
+	.window-tab:has([data-state='active'])::before,
+	.window-tab:has([data-state='active'])::after {
+		content: '';
+		position: absolute;
+		bottom: 0;
+		width: 11px;
+		height: 10px;
+		background: var(--ui-surface);
+		pointer-events: none;
+	}
+	.window-tab:has([data-state='active'])::before {
+		left: -10px;
+		-webkit-mask-image: radial-gradient(circle 10px at 0 0, transparent 9.6px, #000 10.1px);
+		mask-image: radial-gradient(circle 10px at 0 0, transparent 9.6px, #000 10.1px);
+	}
+	.window-tab:has([data-state='active'])::after {
+		right: -10px;
+		-webkit-mask-image: radial-gradient(circle 10px at 100% 0, transparent 9.6px, #000 10.1px);
+		mask-image: radial-gradient(circle 10px at 100% 0, transparent 9.6px, #000 10.1px);
+	}
+	.window-tab[data-tone='warning']:has([data-state='active']),
+	.window-tab[data-tone='danger']:has([data-state='active']),
+	.window-tab[data-tone='info']:has([data-state='active']) {
+		box-shadow: inset 0 2.5px 0 var(--_tab-tone);
 	}
 	.window-tab__dot {
 		width: 7px;
@@ -257,6 +335,10 @@
 		border-radius: 50%;
 		background: var(--_tab-tone);
 		flex: none;
+		transition: box-shadow var(--ui-motion-duration, 150ms) ease;
+	}
+	.window-tab:has([data-state='active']) .window-tab__dot {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--_tab-tone) 18%, transparent);
 	}
 	.window-tab__spinner {
 		color: var(--_tab-tone);
@@ -276,19 +358,15 @@
 			animation: none;
 		}
 	}
-	.window-tab:has([data-state='active']) {
-		background: var(--ui-surface);
-		color: var(--ui-primary);
-	}
 	.window-tab__trigger {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 7px;
 		min-width: 0;
 		background: none;
 		border: 0;
 		color: inherit;
-		padding: 8px 10px;
+		padding: 6px 12px;
 		font: inherit;
 		font-size: 13px;
 		line-height: 18px;
@@ -297,23 +375,54 @@
 		text-overflow: ellipsis;
 		cursor: pointer;
 	}
+	.window-tab:has([data-state='active']) .window-tab__trigger {
+		padding-top: 8px;
+		padding-bottom: 9px;
+		font-weight: 560;
+	}
+	.window-tab:has(> [data-ui='button']) .window-tab__trigger {
+		padding-inline-end: 6px;
+	}
 	.window-tab__label {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.window-tab > :deep([data-ui='button']),
+	.window-tab > :deep([data-ui='button']) {
+		flex: none;
+		margin-inline-end: 5px;
+		border-radius: 999px;
+		opacity: 0.56;
+		transition: opacity var(--ui-motion-duration, 120ms) ease;
+	}
+	.window-tab:hover > :deep([data-ui='button']),
+	.window-tab:focus-within > :deep([data-ui='button']),
+	.window-tab:has([data-state='active']) > :deep([data-ui='button']) {
+		opacity: 1;
+	}
 	.window-tabs > :deep([data-ui='button']) {
 		flex: none;
+		align-self: center;
+		margin-bottom: 2px;
+		border-radius: 999px;
+		color: var(--ui-muted);
+	}
+	.window-tabs > :deep([data-ui='button']:hover) {
+		color: var(--ui-text);
 	}
 	.window-tab__trigger:focus-visible {
 		outline-offset: -2px;
 	}
 	.window-actions {
 		display: flex;
+		align-items: center;
+		align-self: center;
 		gap: 3px;
 		margin-inline-start: auto;
 		flex: none;
+	}
+	:global(.application-window__titlebar:has(.window-tabs)) .window-actions {
+		margin-bottom: 2px;
 	}
 </style>

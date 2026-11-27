@@ -289,6 +289,22 @@
 		user-select: none;
 		touch-action: none;
 	}
+	.application-window__titlebar:has(.window-tabs) {
+		min-height: 46px;
+		align-items: stretch;
+		gap: 8px;
+		padding: 7px 10px 4px 10px;
+		background: linear-gradient(
+			to top,
+			var(--ui-surface) 4px,
+			var(--ui-window-header, light-dark(#e8e4f0, #1f1c29)) 4px
+		);
+		border-bottom: 0;
+	}
+	.application-window__titlebar:has(.window-tabs) .application-window__controls {
+		align-self: center;
+		margin-bottom: 2px;
+	}
 	.application-window__identity {
 		display: flex;
 		align-items: center;
@@ -322,6 +338,12 @@
 		padding-top: env(safe-area-inset-top);
 		padding-left: max(14px, env(safe-area-inset-left));
 		padding-right: max(10px, env(safe-area-inset-right));
+	}
+	.is-compact .application-window__titlebar:has(.window-tabs) {
+		min-height: calc(46px + env(safe-area-inset-top));
+		padding-top: calc(7px + env(safe-area-inset-top));
+		padding-bottom: 4px;
+		padding-left: max(10px, env(safe-area-inset-left));
 	}
 	.is-compact .application-window__body {
 		padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-	import { Check } from '@lucide/vue';
+	import { Check, Package, X } from '@lucide/vue';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
+	import type { PluginManifest } from '../../plugin/plugin-manifest-types.js';
 	import type { PluginReadiness, PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
+	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import type { UiProgressState } from '../../ui/browser/ui-component-types.js';
 	import {
 		UiBadge,
@@ -14,16 +16,19 @@
 		UiScrollArea,
 		UiSection,
 	} from '../../ui/browser/ui-components-api.js';
-	import type { MarketplaceInstallPlan } from '../marketplace-install-types.js';
+	import type { MarketplaceInstallPlan, MarketplaceRepositorySource } from '../marketplace-install-types.js';
 	import type { MarketplaceOperation, MarketplacePlugin } from '../marketplace-types.js';
 	import {
 		marketplaceInstalledStatus,
+		marketplaceLabel,
 		marketplacePackageName,
 		marketplacePluginRuntime,
 		marketplaceStatusTones,
 	} from './marketplace-presentation.js';
 
 	const props = defineProps<{
+		target: MarketplaceRepositorySource;
+		targetPackage?: PluginManifest;
 		plan?: MarketplaceInstallPlan;
 		planning: boolean;
 		operation?: MarketplaceOperation;
@@ -37,6 +42,17 @@
 	const open = defineModel<boolean>('open', { required: true });
 	const emit = defineEmits<{ confirm: []; retry: []; configure: [key: string]; finish: [] }>();
 	const { t, locale } = useI18n({ useScope: 'global' });
+	const targetPackage = computed(
+		() =>
+			props.targetPackage ??
+			props.plan?.steps.find(({ package: item }) => item.name === props.target.pluginId)?.package,
+	);
+	const targetName = computed(() =>
+		targetPackage.value
+			? marketplacePackageName(targetPackage.value, locale.value)
+			: marketplaceLabel(props.target.pluginId),
+	);
+	const targetIcon = computed(() => resolvePluginIcon(targetPackage.value?.nexus.icon));
 	const stages = ['resolve', 'install', 'configure'] as const;
 	const stage = computed(() =>
 		props.operation?.state === 'succeeded'
@@ -86,12 +102,31 @@
 					: entries.length === 1
 						? entries[0]
 						: undefined;
-			return { id: pack.name, name: marketplacePackageName(pack, locale.value), status, application };
+			return {
+				id: pack.name,
+				name: marketplacePackageName(pack, locale.value),
+				version: pack.version,
+				status,
+				application,
+			};
 		}),
 	);
 	const configured = computed(() =>
 		configurationRows.value.every(({ status }) => status === 'available' || status === 'disabled'),
 	);
+	const stageSteps = computed(() => {
+		const current = stages.indexOf(stage.value);
+		const blocked = stage.value === 'resolve' && !props.planning && !canConfirm.value;
+		const currentState = failed.value || blocked ? 'failed' : 'current';
+		return stages.map((id, index) => {
+			const complete = index < current || (id === 'configure' && stage.value === id && configured.value);
+			return {
+				id,
+				current: index === current,
+				state: complete ? 'complete' : index > current ? 'pending' : currentState,
+			};
+		});
+	});
 </script>
 
 <template>
@@ -103,29 +138,31 @@
 	>
 		<template #body>
 			<div class="install-body">
-				<UiScrollArea as-child gutter="symmetric" overflow="hidden">
-					<ol class="install-stages" :aria-label="t('marketplace.installFlow.title')">
-						<li
-							v-for="(step, index) in stages"
-							:key="step"
-							:aria-current="step === stage ? 'step' : undefined"
-							:data-complete="
-								index < stages.indexOf(stage) || (step === 'configure' && stage === step && configured)
-							"
-						>
-							<span class="install-stages__marker" aria-hidden="true">
-								<Check
-									v-if="
-										index < stages.indexOf(stage) ||
-										(step === 'configure' && stage === step && configured)
-									"
-									:size="14"
-								/>
-								<template v-else>{{ index + 1 }}</template>
+				<UiScrollArea class="install-overview-frame" gutter="symmetric" overflow="hidden">
+					<div class="install-overview">
+						<div class="install-target">
+							<span class="install-target__icon" aria-hidden="true">
+								<component :is="targetIcon ?? Package" :size="20" />
 							</span>
-							{{ t('marketplace.installFlow.' + step) }}
-						</li>
-					</ol>
+							<strong :title="targetName">{{ targetName }}</strong>
+							<UiBadge class="install-target__version">v{{ target.version }}</UiBadge>
+						</div>
+						<ol class="install-stages" role="list" :aria-label="t('marketplace.installFlow.title')">
+							<li
+								v-for="(step, index) in stageSteps"
+								:key="step.id"
+								:aria-current="step.current ? 'step' : undefined"
+								:data-state="step.state"
+							>
+								<span class="install-stages__marker" aria-hidden="true">
+									<Check v-if="step.state === 'complete'" :size="15" />
+									<X v-else-if="step.state === 'failed'" :size="15" />
+									<template v-else>{{ index + 1 }}</template>
+								</span>
+								<span class="install-stages__label">{{ t('marketplace.installFlow.' + step.id) }}</span>
+							</li>
+						</ol>
+					</div>
 				</UiScrollArea>
 				<UiScrollArea as-child gutter="symmetric">
 					<div
@@ -136,15 +173,19 @@
 						:aria-busy="planning || submitting"
 						tabindex="0"
 					>
+						<h3>{{ t('marketplace.installFlow.' + stage) }}</h3>
 						<template v-if="stage === 'resolve'">
 							<UiProgressRow
 								v-if="planning"
-								:label="t('marketplace.installFlow.resolve')"
+								class="install-progress"
+								:label="t('marketplace.installFlow.resolving')"
 								state="running"
 								status-label=""
 								:show-progress="false"
 							/>
-							<p v-else-if="!plan" role="status">{{ t('notices.MARKETPLACE_INSTALL_PLAN_FAILED') }}</p>
+							<p v-else-if="!plan" class="install-error" role="status">
+								{{ t('notices.MARKETPLACE_INSTALL_PLAN_FAILED') }}
+							</p>
 							<template v-else>
 								<UiSection v-if="plan.blockers.length" :title="t('marketplace.blockers')">
 									<UiList>
@@ -167,7 +208,7 @@
 										:key="step.package.name"
 										:title="marketplacePackageName(step.package, locale)"
 										:description="
-											[step.package.name, step.package.version, step.repository?.label]
+											[step.package.version, step.repository?.label, step.package.name]
 												.filter(Boolean)
 												.join(' · ')
 										"
@@ -182,25 +223,28 @@
 							</template>
 						</template>
 						<template v-else-if="stage === 'install'">
-							<p v-if="failed" role="status">
+							<p v-if="failed" class="install-error" role="status">
 								{{ t('notices.' + (operation?.error ?? 'MARKETPLACE_OPERATION_FAILED')) }}
 							</p>
-							<UiProgressRow
-								v-for="row in installationRows"
-								:key="row.id"
-								:label="row.name"
-								:state="row.state"
-								:status-label="t('marketplace.installFlow.progress.' + row.state)"
-								:show-progress="false"
-								status-display="label"
-							/>
-							<UiProgressRow
-								v-if="operation?.step?.phase === 'activate' && !failed"
-								:label="t('marketplace.installFlow.activating')"
-								state="running"
-								status-label=""
-								:show-progress="false"
-							/>
+							<UiList class="install-progress">
+								<li v-for="row in installationRows" :key="row.id">
+									<UiProgressRow
+										:label="row.name"
+										:state="row.state"
+										:status-label="t('marketplace.installFlow.progress.' + row.state)"
+										:show-progress="false"
+										status-display="label"
+									/>
+								</li>
+								<li v-if="operation?.step?.phase === 'activate' && !failed">
+									<UiProgressRow
+										:label="t('marketplace.installFlow.activating')"
+										state="running"
+										status-label=""
+										:show-progress="false"
+									/>
+								</li>
+							</UiList>
 						</template>
 						<template v-else>
 							<p role="status">
@@ -217,7 +261,7 @@
 									v-for="row in configurationRows"
 									:key="row.id"
 									:title="row.name"
-									:description="row.id"
+									:description="row.version"
 								>
 									<template #actions>
 										<UiBadge :tone="marketplaceStatusTones[row.status]" dot>
@@ -238,7 +282,16 @@
 			</div>
 		</template>
 		<template #footer>
-			<UiButton v-if="stage === 'resolve' && canConfirm" tone="primary" :disabled="busy" @click="emit('confirm')">
+			<UiButton v-if="stage === 'resolve'" appearance="ghost" @click="open = false">
+				{{ t('marketplace.cancel') }}
+			</UiButton>
+			<UiButton
+				v-if="stage === 'resolve' && canConfirm"
+				tone="primary"
+				appearance="solid"
+				:disabled="busy"
+				@click="emit('confirm')"
+			>
 				{{
 					t(
 						plan?.steps.some(({ action }) => action === 'update')
@@ -253,6 +306,7 @@
 			<UiButton
 				v-else-if="stage === 'configure'"
 				:tone="configured ? 'primary' : 'neutral'"
+				:appearance="configured ? 'solid' : 'soft'"
 				@click="emit('finish')"
 			>
 				{{ t(configured ? 'marketplace.installFlow.done' : 'marketplace.installFlow.later') }}
@@ -263,7 +317,7 @@
 
 <style scoped>
 	:global(.marketplace-install-dialog) {
-		block-size: 420px;
+		block-size: 460px;
 	}
 
 	:global(.marketplace-install-dialog .ui-dialog__footer) {
@@ -277,57 +331,201 @@
 		min-block-size: 0;
 	}
 
-	.install-stages {
+	.install-overview-frame {
+		flex: none;
+		padding: 0 var(--ui-dialog-padding, 26px) 14px;
+	}
+
+	.install-overview {
+		overflow: hidden;
+		border: 1px solid var(--ui-border);
+		border-radius: 12px;
+	}
+
+	.install-target {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-width: 0;
+		padding: 8px 12px;
+		border-bottom: 1px solid var(--ui-border);
+		background: color-mix(in srgb, var(--ui-primary) 4%, var(--ui-surface));
+	}
+
+	.install-target strong {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		font-size: 14px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.install-target__icon {
 		display: grid;
 		flex: none;
+		width: 32px;
+		height: 32px;
+		place-items: center;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+		color: var(--ui-primary);
+	}
+
+	.install-target__version {
+		flex: none;
+		max-inline-size: 48%;
+		overflow: hidden;
+		font-variant-numeric: tabular-nums;
+		text-overflow: ellipsis;
+	}
+
+	.install-stages {
+		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 8px;
-		margin: 0 0 16px;
-		padding: 0 var(--ui-dialog-padding, 26px);
+		margin: 0;
+		padding: 12px 0;
 		list-style: none;
 	}
 
 	.install-stages li {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 8px 0;
-		border-bottom: 2px solid var(--ui-border);
+		--step-size: 28px;
+		position: relative;
+		display: grid;
+		grid-template-rows: var(--step-size) auto;
+		justify-items: center;
+		align-content: start;
+		gap: 5px;
+		min-width: 0;
+		padding-inline: 4px;
 		color: var(--ui-muted);
-		font-size: 12px;
 	}
 
-	.install-stages li[aria-current] {
-		border-color: var(--ui-primary);
-		color: var(--ui-text);
+	.install-stages li:not(:last-child)::after {
+		position: absolute;
+		inset-block-start: calc((var(--step-size) - 2px) / 2);
+		inset-inline-start: 50%;
+		inline-size: 100%;
+		block-size: 2px;
+		background: var(--ui-border);
+		content: '';
 	}
 
-	.install-stages li[data-complete='true'] {
-		border-color: var(--ui-success);
-		color: var(--ui-success);
+	.install-stages li[data-state='complete']::after {
+		background: var(--ui-primary);
 	}
 
 	.install-stages__marker {
+		z-index: 1;
 		display: grid;
 		place-items: center;
-		flex: none;
-		width: 20px;
-		height: 20px;
+		inline-size: var(--step-size);
+		block-size: var(--step-size);
+		border: 1px solid var(--ui-border);
 		border-radius: 50%;
-		background: color-mix(in srgb, currentColor 12%, transparent);
+		background: var(--ui-surface);
+		font-size: 12px;
+		font-weight: 650;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.install-stages li:is([data-state='current'], [data-state='complete']) {
+		color: var(--ui-primary);
+	}
+
+	.install-stages li[data-state='current'] .install-stages__marker {
+		border-color: transparent;
+		background: var(--ui-primary);
+		color: var(--ui-primary-text, #fff);
+	}
+
+	.install-stages li[data-state='failed'] {
+		color: var(--ui-danger);
+	}
+
+	.install-stages li:is([data-state='complete'], [data-state='failed']) .install-stages__marker {
+		border-color: currentColor;
+	}
+
+	.install-stages__label {
+		font-size: 12px;
+		font-weight: 600;
+		line-height: 1.35;
+		text-align: center;
+		overflow-wrap: anywhere;
 	}
 
 	.install-stage-body {
 		display: grid;
 		flex: 1 1 auto;
 		align-content: start;
-		gap: 12px;
-		padding: 0 var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px);
+		gap: 8px;
+		min-block-size: 0;
+		padding: 0 var(--ui-dialog-padding, 26px) 10px;
+	}
+
+	.install-stage-body h3 {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 650;
 	}
 
 	.install-stage-body p {
 		margin: 0;
 		font-size: 13px;
 		color: var(--ui-muted);
+	}
+
+	.install-stage-body :deep(.ui-list-item) {
+		--ui-list-item-padding: 9px 12px;
+		min-block-size: 52px;
+	}
+
+	.install-progress:not(ul),
+	.install-progress > li {
+		padding: 9px 12px;
+	}
+
+	.install-progress:not(ul) {
+		border: 1px solid var(--ui-border);
+		border-radius: 14px;
+	}
+
+	.install-progress > li + li {
+		border-top: 1px solid var(--ui-border);
+	}
+
+	.install-progress > li {
+		min-block-size: 52px;
+	}
+
+	.install-progress :deep(.ui-progress-row__label) {
+		font-weight: 600;
+	}
+
+	.install-progress :deep(.ui-progress-row__status:not(:empty)) {
+		justify-self: end;
+		max-inline-size: 100%;
+		padding: 4px 8px;
+		border-radius: 7px;
+		background: color-mix(in srgb, currentColor 10%, transparent);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	.install-progress :deep([data-state='pending'] .ui-progress-row__status) {
+		color: var(--ui-muted);
+	}
+
+	.install-progress :deep([data-state='running'] .ui-progress-row__status) {
+		color: var(--ui-primary);
+	}
+
+	.install-stage-body .install-error {
+		padding: 8px 12px;
+		border: 1px solid color-mix(in srgb, var(--ui-danger) 25%, var(--ui-border));
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--ui-danger) 6%, var(--ui-surface));
+		color: var(--ui-danger);
 	}
 </style>

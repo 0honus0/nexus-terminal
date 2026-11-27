@@ -245,7 +245,8 @@
 							:loading="loading === 'inspect'"
 							:disabled="busy || !file || !restorePassword"
 							@click="inspect"
-							><template #leading><ShieldCheck :size="17" /></template>{{ t('backup.inspect') }}</UiButton
+							><template #leading><ShieldCheck :size="17" /></template
+							>{{ t('backup.tile.restore') }}</UiButton
 						>
 					</div>
 				</UiField>
@@ -255,9 +256,9 @@
 		<UiDialog
 			v-model:open="dialog"
 			class="backup-dialog"
-			:title="t('backup.inspect')"
+			:title="t('backup.tile.restore')"
 			:description="t('backup.restoreWarning')"
-			:close-label="t('backup.closePreview')"
+			:close-label="t('backup.closeRestore')"
 			:close-disabled="loading === 'restore'"
 			persistence-key="backup.preview"
 		>

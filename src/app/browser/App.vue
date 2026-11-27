@@ -168,6 +168,14 @@
 	);
 
 	watch(
+		() => settings.value.wallpaper,
+		(wallpaper) => {
+			document.documentElement.dataset.uiWallpaper = wallpaper;
+		},
+		{ immediate: true },
+	);
+
+	watch(
 		() => settings.value.locale,
 		(language) => {
 			locale.value = language;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 	import {
 		Globe,
+		Image,
 		Keyboard,
 		KeyRound,
 		LogOut,
@@ -8,6 +9,7 @@
 		Moon,
 		Palette,
 		ShieldCheck,
+		SlidersHorizontal,
 		Sparkles,
 		Sun,
 		UserRound,
@@ -28,7 +30,7 @@
 		UiSwitch,
 	} from '../../ui/browser/ui-components-api.js';
 	import { useUiThemes } from '../../ui/browser/ui-theme-api.js';
-	import { AnimationSpeedSchema } from '../settings-types.js';
+	import { AnimationSpeedSchema, type DesktopWallpaper } from '../settings-types.js';
 	import type { SettingsPreferencesApi } from './settings-preferences-api.js';
 
 	const { auth, preferences, log, minimized } = defineProps<{
@@ -56,6 +58,7 @@
 		{ value: 'dark', icon: Moon },
 		{ value: 'system', icon: Monitor },
 	] as const;
+	const wallpapers: readonly DesktopWallpaper[] = ['silk', 'grid', 'dunes', 'minimal'];
 	const themeOptions = computed(() => {
 		const options = [
 			{ value: 'builtin', label: t('desktop.builtinTheme') },
@@ -115,10 +118,7 @@
 
 <template>
 	<div class="settings-app">
-		<header class="app-page-heading">
-			<h1>{{ t('settings') }}</h1>
-		</header>
-		<UiSection class="settings-section" :title="t('desktop.appearance.title')" :icon="Palette">
+		<UiSection class="settings-card" :title="t('desktop.appearance.title')" :icon="Palette">
 			<UiSelect
 				:model-value="state.themeId || 'builtin'"
 				:options="themeOptions"
@@ -139,12 +139,33 @@
 						><span /><span
 					/></span>
 					<span class="theme-option__label"
-						><component :is="icon" :size="15" />{{ t('desktop.appearance.' + value) }}</span
+						><component :is="icon" :size="14" />{{ t('desktop.appearance.' + value) }}</span
 					>
 				</button>
 			</div>
+			<div class="wallpaper-group">
+				<div class="wallpaper-group__heading">
+					<Image :size="14" aria-hidden="true" />
+					<span>{{ t('desktop.appearance.wallpaper') }}</span>
+				</div>
+				<div class="wallpaper-options">
+					<button
+						v-for="preset in wallpapers"
+						:key="preset"
+						class="wallpaper-option"
+						type="button"
+						:aria-pressed="state.wallpaper === preset"
+						:data-wallpaper-option="preset"
+						@click="preferences.update({ wallpaper: preset })"
+					>
+						<span class="wallpaper-sample" :class="'wallpaper-sample--' + preset" aria-hidden="true" />
+						<span class="wallpaper-option__label">{{ t('desktop.appearance.wallpapers.' + preset) }}</span>
+					</button>
+				</div>
+			</div>
 		</UiSection>
-		<UiSection class="settings-section" :title="t('desktop.animationTitle')" :icon="Sparkles">
+
+		<UiSection class="settings-card" :title="t('desktop.animationTitle')" :icon="Sparkles">
 			<UiFormRow
 				:label="t('desktop.motionEffects')"
 				:description="reducedMotion === 'reduce' ? t('desktop.systemReducedMotion') : undefined"
@@ -182,47 +203,50 @@
 				</div>
 			</div>
 		</UiSection>
-		<UiSection class="settings-section">
-			<UiFormRow
-				class="settings-compact-control"
-				:label="t('desktop.escapeAction')"
-				:icon="Keyboard"
-				v-slot="field"
-			>
-				<UiSelect
-					:id="field.id"
-					:aria-describedby="field.describedby"
-					:model-value="state.escapeAction"
-					:aria-label="t('desktop.escapeAction')"
-					:options="[
-						{ value: 'minimize', label: t('desktop.minimize') },
-						{ value: 'close', label: t('closeApplication') },
-					]"
-					@update:model-value="
-						(escapeAction) =>
-							(escapeAction === 'close' || escapeAction === 'minimize') &&
-							preferences.update({ escapeAction })
-					"
-				/>
-			</UiFormRow>
+
+		<UiSection class="settings-card" :title="t('desktop.general')" :icon="SlidersHorizontal">
+			<div class="settings-rows">
+				<UiFormRow
+					class="settings-compact-control"
+					:label="t('desktop.escapeAction')"
+					:icon="Keyboard"
+					v-slot="field"
+				>
+					<UiSelect
+						:id="field.id"
+						:aria-describedby="field.describedby"
+						:model-value="state.escapeAction"
+						:aria-label="t('desktop.escapeAction')"
+						:options="[
+							{ value: 'minimize', label: t('desktop.minimize') },
+							{ value: 'close', label: t('closeApplication') },
+						]"
+						@update:model-value="
+							(escapeAction) =>
+								(escapeAction === 'close' || escapeAction === 'minimize') &&
+								preferences.update({ escapeAction })
+						"
+					/>
+				</UiFormRow>
+				<div class="settings-row-divider" aria-hidden="true" />
+				<UiFormRow class="settings-compact-control" :label="t('language')" :icon="Globe" v-slot="field">
+					<UiSelect
+						:id="field.id"
+						:aria-describedby="field.describedby"
+						:model-value="state.locale"
+						:options="languages"
+						:aria-label="t('language')"
+						@update:model-value="
+							(locale) => (locale === 'zh' || locale === 'en') && preferences.update({ locale })
+						"
+					/>
+				</UiFormRow>
+			</div>
 		</UiSection>
-		<UiSection class="settings-section">
-			<UiFormRow class="settings-compact-control" :label="t('language')" :icon="Globe" v-slot="field">
-				<UiSelect
-					:id="field.id"
-					:aria-describedby="field.describedby"
-					:model-value="state.locale"
-					:options="languages"
-					:aria-label="t('language')"
-					@update:model-value="
-						(locale) => (locale === 'zh' || locale === 'en') && preferences.update({ locale })
-					"
-				/>
-			</UiFormRow>
-		</UiSection>
-		<UiSection class="settings-section" :title="t('desktop.account')" :icon="ShieldCheck">
+
+		<UiSection class="settings-card" :title="t('desktop.account')" :icon="ShieldCheck">
 			<div class="account-identity">
-				<span class="account-avatar" aria-hidden="true"><UserRound :size="22" /></span>
+				<span class="account-avatar" aria-hidden="true"><UserRound :size="20" /></span>
 				<div class="account-name">
 					<span>{{ t('auth.username') }}</span>
 					<strong data-ui-selection="text">{{ auth.state.value?.account?.username }}</strong>
@@ -234,7 +258,7 @@
 					loading-animation="spinner"
 					@click="emit('logout')"
 				>
-					<template #leading><LogOut :size="16" /></template>
+					<template #leading><LogOut :size="15" /></template>
 					{{ t('auth.logout') }}
 				</UiButton>
 			</div>
@@ -290,7 +314,7 @@
 						:disabled="signingOut || !current || !next"
 						loading-animation="spinner"
 					>
-						<template #leading><KeyRound :size="16" /></template>
+						<template #leading><KeyRound :size="15" /></template>
 						{{ t('desktop.savePassword') }}
 					</UiButton>
 				</div>
@@ -300,58 +324,66 @@
 </template>
 
 <style scoped>
-	.app-page-heading h1 {
-		margin: 14px 0 9px;
-		font-size: 25px;
-		font-weight: 600;
-		letter-spacing: -0.7px;
-	}
-
 	.settings-app {
 		container-type: inline-size;
-		max-width: 820px;
-		padding: clamp(20px, 4vw, 32px);
+		max-width: 780px;
+		padding: clamp(16px, 3vw, 26px);
 		margin: auto;
+		display: grid;
+		gap: 14px;
 	}
-	.settings-section {
-		margin-top: 28px;
-		padding-bottom: 26px;
-		border-bottom: 1px solid var(--ui-border);
+	.settings-card {
+		padding: 18px 20px;
+		border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+		border-radius: 16px;
+		background: color-mix(in srgb, var(--ui-surface) 92%, transparent);
+		box-shadow: 0 2px 10px color-mix(in srgb, #241b35 4%, transparent);
+	}
+	.settings-rows {
+		display: grid;
+		gap: 12px;
+	}
+	.settings-row-divider {
+		height: 1px;
+		background: color-mix(in srgb, var(--ui-border) 55%, transparent);
 	}
 	.settings-compact-control {
 		--ui-form-control-width: 150px;
 		--ui-control-gap: 6px;
 	}
-	.settings-section:last-of-type {
-		border: 0;
-	}
 	p {
 		color: var(--ui-muted);
 		font-size: 13px;
-		line-height: 1.8;
+		line-height: 1.7;
 	}
 	.theme-options {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 12px;
-		margin-top: 20px;
+		gap: 10px;
+		margin-top: 14px;
 	}
 	.theme-option {
-		padding: 9px;
-		border: 1px solid var(--ui-border);
+		padding: 8px;
+		border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
 		border-radius: 13px;
 		background: var(--ui-background);
 		color: var(--ui-text);
 		cursor: pointer;
+		transition:
+			border-color var(--ui-motion-duration, 140ms) ease,
+			box-shadow var(--ui-motion-duration, 140ms) ease;
+	}
+	.theme-option:hover {
+		border-color: color-mix(in srgb, var(--ui-primary) 45%, var(--ui-border));
 	}
 	.theme-option[aria-pressed='true'] {
 		border-color: var(--ui-primary);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-primary) 12%, transparent);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-primary) 16%, transparent);
 	}
 	.theme-sample {
-		height: 70px;
-		border-radius: 7px;
-		padding: 10px;
+		height: 62px;
+		border-radius: 8px;
+		padding: 9px;
 		display: flex;
 		align-items: stretch;
 		gap: 6px;
@@ -382,13 +414,89 @@
 	.theme-option__label {
 		display: flex;
 		justify-content: center;
-		gap: 7px;
+		gap: 6px;
 		align-items: center;
-		padding: 12px 0 3px;
+		padding: 9px 0 2px;
 		font-size: 12px;
+		font-weight: 500;
+	}
+	.wallpaper-group {
+		margin-top: 16px;
+		padding-top: 14px;
+		border-top: 1px solid color-mix(in srgb, var(--ui-border) 55%, transparent);
+		display: grid;
+		gap: 10px;
+	}
+	.wallpaper-group__heading {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 12.5px;
+		font-weight: 550;
+		color: var(--ui-muted);
+	}
+	.wallpaper-options {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.wallpaper-option {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+		padding: 6px;
+		border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
+		border-radius: 12px;
+		background: var(--ui-background);
+		color: var(--ui-text);
+		cursor: pointer;
+		transition:
+			border-color var(--ui-motion-duration, 140ms) ease,
+			box-shadow var(--ui-motion-duration, 140ms) ease;
+	}
+	.wallpaper-option:hover {
+		border-color: color-mix(in srgb, var(--ui-primary) 45%, var(--ui-border));
+	}
+	.wallpaper-option[aria-pressed='true'] {
+		border-color: var(--ui-primary);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-primary) 16%, transparent);
+	}
+	.wallpaper-sample {
+		display: block;
+		width: 100%;
+		height: 44px;
+		border-radius: 7px;
+		border: 1px solid color-mix(in srgb, var(--ui-border) 45%, transparent);
+	}
+	.wallpaper-sample--silk {
+		background: var(--ui-wallpaper-silk);
+	}
+	.wallpaper-sample--grid {
+		background: var(--ui-wallpaper-grid);
+		background-size:
+			10px 10px,
+			cover,
+			cover,
+			cover;
+	}
+	.wallpaper-sample--dunes {
+		background: var(--ui-wallpaper-dunes);
+		background-size: cover;
+	}
+	.wallpaper-sample--minimal {
+		background: var(--ui-wallpaper-minimal);
+	}
+	.wallpaper-option__label {
+		font-size: 11.5px;
+		font-weight: 500;
+		text-align: center;
+		line-height: 1.25;
+		padding-bottom: 1px;
 	}
 	.animation-speed {
-		margin-top: 22px;
+		margin-top: 16px;
+		padding-top: 14px;
+		border-top: 1px solid color-mix(in srgb, var(--ui-border) 55%, transparent);
 	}
 	.animation-speed.is-disabled {
 		opacity: 0.5;
@@ -407,15 +515,14 @@
 	}
 	.animation-speed__heading output {
 		color: var(--ui-primary);
+		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
 	.animation-speed__scale {
 		color: var(--ui-muted);
 		font-size: 11px;
 	}
-
 	.account-identity {
-		margin-top: 18px;
 		display: flex;
 		align-items: center;
 		gap: 12px;
@@ -423,45 +530,46 @@
 	.account-avatar {
 		display: grid;
 		place-items: center;
-		width: 44px;
-		height: 44px;
+		width: 42px;
+		height: 42px;
 		flex: none;
-		border-radius: 14px;
+		border-radius: 13px;
 		color: var(--ui-primary);
-		background: color-mix(in srgb, var(--ui-primary) 10%, var(--ui-surface));
+		background: color-mix(in srgb, var(--ui-primary) 11%, var(--ui-surface));
 	}
 	.account-name {
 		display: grid;
-		gap: 4px;
+		gap: 3px;
 		flex: 1;
 		min-width: 0;
 	}
 	.account-name span {
 		color: var(--ui-muted);
-		font-size: 12px;
+		font-size: 11.5px;
 	}
 	.account-name strong {
 		font-size: 14px;
+		font-weight: 600;
 		overflow-wrap: anywhere;
 	}
 	.account-password {
-		margin-top: 6px;
-		padding-top: 18px;
-		border-top: 1px solid var(--ui-border);
+		margin-top: 14px;
+		padding-top: 16px;
+		border-top: 1px solid color-mix(in srgb, var(--ui-border) 55%, transparent);
 		display: grid;
-		gap: 16px;
+		gap: 14px;
 		position: relative;
 	}
 	.account-password p {
 		margin: 0;
 		font-size: 12px;
-		line-height: 1.8;
+		line-height: 1.65;
 		color: var(--ui-muted);
 	}
 	.account-fields {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 14px;
+		gap: 12px;
 	}
 	.account-password-actions {
 		display: flex;
@@ -481,7 +589,10 @@
 		overflow: hidden;
 		clip-path: inset(50%);
 	}
-	@container (max-width: 420px) {
+	@container (max-width: 460px) {
+		.settings-card {
+			padding: 14px 15px;
+		}
 		.account-fields {
 			grid-template-columns: minmax(0, 1fr);
 		}
@@ -492,8 +603,11 @@
 			gap: 8px;
 		}
 		.theme-sample {
-			height: 55px;
+			height: 52px;
 			padding: 7px;
+		}
+		.wallpaper-options {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 </style>

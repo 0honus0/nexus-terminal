@@ -28,7 +28,13 @@ export function useUiMotion() {
 	});
 	const active = new Map<AnimationPlaybackControls, () => void>();
 
-	function play(element: HTMLElement, frames: Keyframe[], duration: number, done: () => void = () => {}) {
+	function play(
+		element: HTMLElement,
+		frames: Keyframe[],
+		duration: number,
+		done: () => void = () => {},
+		ease: [number, number, number, number] = [0.22, 1, 0.36, 1],
+	) {
 		const properties = Object.keys(frames.at(-1) ?? {}).filter(
 			(key) => !['offset', 'easing', 'composite'].includes(key),
 		);
@@ -58,8 +64,7 @@ export function useUiMotion() {
 		) as DOMKeyframesDefinition;
 		const animation = animateMini(element, keyframes, {
 			duration: duration / 1000,
-			// Avoid spending a large fraction of the distance in the first 60 Hz frame.
-			ease: [0.25, 0.1, 0.25, 1],
+			ease,
 		});
 		animation.speed = settings.speed.value;
 		let finished = false;

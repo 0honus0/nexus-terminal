@@ -378,8 +378,8 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 			buffer: Buffer.from('{'),
 		});
 		const importPanel = backup.locator('.nexus-backup__sections').getByRole('region', { name: 'Import' });
-		const previewButton = importPanel.getByRole('button', { name: 'Preview restore' });
-		const preview = page.getByRole('dialog', { name: 'Preview restore' });
+		const previewButton = importPanel.getByRole('button', { name: 'Restore', exact: true });
+		const preview = page.getByRole('dialog', { name: 'Restore', exact: true });
 		const toast = page.locator('[data-ui="toast"]');
 
 		await importPanel.getByLabel('Password').fill('wrong-password');
@@ -509,6 +509,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 			motionEffects: false,
 			animationSpeed: 1.3,
 			escapeAction: 'close',
+			wallpaper: 'silk',
 		});
 		const secondTab = await page.context().newPage();
 		try {
@@ -817,9 +818,10 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 		await repositories.getByRole('button', { name: 'Add repository' }).click();
 
 		const initial = market.getByRole('button', { name: 'View Repository Fixture', exact: true });
+		const discover = market.getByRole('button', { name: 'Discover', exact: true });
 
 		async function showVersion(expected: string) {
-			await manage.click();
+			await discover.click();
 			await expect(initial.getByText('v' + expected)).toBeVisible();
 			await manage.click();
 		}
@@ -851,14 +853,14 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 		await expect(edit).toHaveCount(0);
 		await expect(repositories.getByText('Local fixtures', { exact: true })).toBeVisible();
 		const replacement = market.getByRole('button', { name: 'View Replacement Fixture', exact: true });
-		await manage.click();
+		await discover.click();
 		await expect(initial).toHaveCount(0);
 		await expect(replacement).toHaveCount(0);
 		await manage.click();
 		const refreshReplacement = repositories.getByRole('button', { name: 'Refresh Local fixtures', exact: true });
 		await refreshReplacement.click();
 		await expect(refreshReplacement).toBeEnabled();
-		await manage.click();
+		await discover.click();
 		await expect(replacement).toBeVisible();
 		await manage.click();
 
@@ -867,7 +869,7 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 		await removal.getByRole('contentinfo').getByRole('button', { name: 'Remove repository', exact: true }).click();
 		await expect(removal).toHaveCount(0);
 		await expect(repositories.getByText('Local fixtures')).toHaveCount(0);
-		await manage.click();
+		await discover.click();
 		await expect(replacement).toHaveCount(0);
 		expect(requests).toEqual(['/catalog.json', '/catalog.json', '/catalog.json', '/replacement.json']);
 	} finally {
@@ -976,12 +978,13 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
 	const manage = market.getByRole('button', { name: 'Manage installed plugins', exact: true });
+	const discover = market.getByRole('button', { name: 'Discover', exact: true });
 	await manage.click();
 	const repositories = market.getByRole('region', { name: 'Repositories', exact: true });
 	await repositories.getByRole('textbox', { name: 'Repository catalog URL' }).fill(source + '/catalog.json');
 	await repositories.getByRole('button', { name: 'Add repository' }).click();
 	await expect(repositories.getByText(source + '/catalog.json', { exact: true })).toBeVisible();
-	await manage.click();
+	await discover.click();
 	const listing = market.getByRole('button', { name: 'View Lifecycle Fixture', exact: true });
 	await listing.click();
 	await page.getByRole('button', { name: 'Preview installation', exact: true }).click();
@@ -995,7 +998,7 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 		.filter({ has: page.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true }) });
 	await expect(card).toContainText('1.0.0');
 	await expect(card.getByRole('status')).toHaveText('Available');
-	await manage.click();
+	await discover.click();
 	await listing.focus();
 	await listing.press('Enter');
 	const discoveryDetail = page.getByRole('dialog', { name: 'Plugin details', exact: true });

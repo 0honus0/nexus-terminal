@@ -18,6 +18,7 @@
     "build:frontend": "vite build",
     "build:sdk": "node scripts/sdk/build.mjs",
     "pack:sdk": "pnpm build:sdk && pnpm --dir dist/sdk pack --pack-destination ..",
+    "pack:format": "pnpm --dir scripts/format pack --pack-destination ../../dist",
     "preview:frontend": "vite preview",
     "test:sdk": "pnpm pack:sdk && tsx --test tests/integration/sdk/sdk-delivery.test.ts",
     "test:backend": "tsx --test \"tests/integration/backend/*.test.ts\"",

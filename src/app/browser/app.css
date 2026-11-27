@@ -6,9 +6,56 @@
 }
 
 :root {
-	--ui-tile-shadow: 0 3px 10px light-dark(#3730500b, #00000012), 0 1px 2px #37305008;
-	--ui-desktop-background:
-		radial-gradient(ellipse at 86% 12%, light-dark(#bcaacf66, #66429155), transparent 56%),
-		radial-gradient(ellipse at 9% 88%, light-dark(#a4c1c94d, #28596855), transparent 58%),
-		radial-gradient(ellipse at 50% 58%, light-dark(#d2bfce4d, #5d354433), transparent 64%), var(--ui-background);
+	--ui-tile-shadow: 0 4px 14px light-dark(#3730500e, #00000024), 0 1px 2px light-dark(#3730500a, #00000018);
+
+	/* 预设 1：晨雾丝绸 — 清透温润的柔光底色，与淡紫/马卡龙桌面磁贴和谐呼应 */
+	--ui-wallpaper-silk:
+		radial-gradient(ellipse 68% 54% at 14% 14%, light-dark(#c7b8f04a, #5c3c9448), transparent 60%),
+		radial-gradient(ellipse 62% 52% at 88% 18%, light-dark(#b7dcf248, #1e567242), transparent 58%),
+		radial-gradient(ellipse 60% 54% at 78% 88%, light-dark(#f0cadc40, #6834543c), transparent 60%),
+		radial-gradient(ellipse 56% 48% at 16% 86%, light-dark(#c2e5dc38, #1c58543a), transparent 58%),
+		linear-gradient(158deg, light-dark(#f7f5fb, #14121d), light-dark(#eef1f9, #1b1828));
+
+	/* 预设 2：极简点阵 — 细腻暖紫微点阵，干净克制的工作台画布 */
+	--ui-wallpaper-grid:
+		radial-gradient(circle, light-dark(rgba(82, 65, 118, 0.12), rgba(196, 181, 224, 0.14)) 1px, transparent 1px) 0
+			0 / 24px 24px,
+		radial-gradient(ellipse 66% 52% at 50% 0%, light-dark(#c9baf22a, #63429a36), transparent 64%),
+		radial-gradient(ellipse 56% 46% at 88% 92%, light-dark(#b8dcf024, #2659762e), transparent 62%),
+		linear-gradient(180deg, light-dark(#f8f6fc, #14121c), light-dark(#f1eff8, #191624));
+
+	/* 预设 3：柔光层峦 — 柔雅紫蓝层叠丝带曲线 */
+	--ui-wallpaper-dunes-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 900' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='g1' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0%25' stop-color='%237752b4' stop-opacity='0.14'/%3E%3Cstop offset='100%25' stop-color='%239b84d4' stop-opacity='0.08'/%3E%3C/linearGradient%3E%3ClinearGradient id='g2' x1='1' y1='0' x2='0' y2='1'%3E%3Cstop offset='0%25' stop-color='%236ea8c9' stop-opacity='0.13'/%3E%3Cstop offset='100%25' stop-color='%23b59ad6' stop-opacity='0.11'/%3E%3C/linearGradient%3E%3ClinearGradient id='g3' x1='0' y1='0' x2='1' y2='0.6'%3E%3Cstop offset='0%25' stop-color='%23c48aa8' stop-opacity='0.10'/%3E%3Cstop offset='100%25' stop-color='%237752b4' stop-opacity='0.13'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 530 C 310 390, 580 615, 960 445 C 1180 345, 1340 425, 1440 375 L 1440 900 L 0 900 Z' fill='url(%23g1)'/%3E%3Cpath d='M0 530 C 310 390, 580 615, 960 445 C 1180 345, 1340 425, 1440 375' fill='none' stroke='%23ffffff' stroke-opacity='0.26' stroke-width='1.5'/%3E%3Cpath d='M0 645 C 280 545, 620 715, 1020 565 C 1220 490, 1360 545, 1440 505 L 1440 900 L 0 900 Z' fill='url(%23g2)'/%3E%3Cpath d='M0 645 C 280 545, 620 715, 1020 565 C 1220 490, 1360 545, 1440 505' fill='none' stroke='%23ffffff' stroke-opacity='0.22' stroke-width='1.5'/%3E%3Cpath d='M0 765 C 360 665, 740 815, 1140 695 C 1290 650, 1380 685, 1440 665 L 1440 900 L 0 900 Z' fill='url(%23g3)'/%3E%3Cpath d='M0 765 C 360 665, 740 815, 1140 695 C 1290 650, 1380 685, 1440 665' fill='none' stroke='%23ffffff' stroke-opacity='0.18' stroke-width='1.5'/%3E%3C/svg%3E");
+	--ui-wallpaper-dunes:
+		var(--ui-wallpaper-dunes-svg) center / cover no-repeat,
+		radial-gradient(ellipse 68% 50% at 22% 16%, light-dark(#c9baf22e, #63429a36), transparent 62%),
+		radial-gradient(ellipse 56% 44% at 82% 20%, light-dark(#b7dcf228, #245a7830), transparent 60%),
+		linear-gradient(165deg, light-dark(#f7f5fb, #14121d), light-dark(#efeef7, #1b1728));
+
+	/* 预设 4：纯净雾面 — 柔和工作室素色画布 */
+	--ui-wallpaper-minimal:
+		radial-gradient(
+			ellipse 80% 58% at 50% 0%,
+			light-dark(rgba(255, 255, 255, 0.78), rgba(185, 155, 234, 0.08)),
+			transparent 70%
+		),
+		linear-gradient(180deg, light-dark(#f8f7fb, #171520), light-dark(#efecf6, #13111a));
+
+	--ui-desktop-background: var(--ui-wallpaper-silk);
+}
+
+:root[data-ui-wallpaper='silk'] {
+	--ui-desktop-background: var(--ui-wallpaper-silk);
+}
+
+:root[data-ui-wallpaper='grid'] {
+	--ui-desktop-background: var(--ui-wallpaper-grid);
+}
+
+:root[data-ui-wallpaper='dunes'] {
+	--ui-desktop-background: var(--ui-wallpaper-dunes);
+}
+
+:root[data-ui-wallpaper='minimal'] {
+	--ui-desktop-background: var(--ui-wallpaper-minimal);
 }

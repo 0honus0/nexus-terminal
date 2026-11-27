@@ -88,7 +88,7 @@ export class SettingsStorage {
 		const row = rows[0];
 		if (rows.length !== 1 || row?.id !== owner || typeof row.value !== 'string')
 			throw new CodedError('BACKUP_SETTINGS_INVALID');
-		SettingsPreferencesSchema.parse(JSON.parse(row.value));
+		parseStoredPreferences(row.value);
 	}
 
 	/** 使用恢复事务提供的连接，确保修订号随设置数据一起提交。 */
@@ -103,6 +103,15 @@ export class SettingsStorage {
 			.where('id', '=', owner)
 			.executeTakeFirst();
 		if (!row) return { revision: 0, preferences: defaultSettings };
-		return SettingsSnapshotSchema.parse({ revision: row.revision, preferences: JSON.parse(row.value) });
+		return SettingsSnapshotSchema.parse({ revision: row.revision, preferences: parseStoredPreferences(row.value) });
 	}
+}
+
+/** 兼容尚未记录 `wallpaper` 字段的旧版偏好数据与备份快照。 */
+function parseStoredPreferences(raw: string): SettingsPreferences {
+	const parsed: unknown = JSON.parse(raw);
+	if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && !('wallpaper' in parsed)) {
+		return SettingsPreferencesSchema.parse({ wallpaper: defaultSettings.wallpaper, ...parsed });
+	}
+	return SettingsPreferencesSchema.parse(parsed);
 }

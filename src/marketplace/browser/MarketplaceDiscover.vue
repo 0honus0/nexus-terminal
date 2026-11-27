@@ -142,7 +142,7 @@
 	.catalog-loading {
 		--ui-loading-tile-size: 40px;
 		--ui-loading-tile-gap: 9px;
-		--ui-loading-tile-radius: 12px;
+		--ui-loading-tile-radius: var(--marketplace-card-radius);
 		--ui-loading-icon-size: 20px;
 		--ui-loading-caption-size: 12px;
 	}
@@ -156,7 +156,7 @@
 		margin-bottom: 28px;
 		overflow: hidden;
 		border: 1px solid color-mix(in srgb, var(--ui-primary) 10%, transparent);
-		border-radius: 22px;
+		border-radius: var(--marketplace-card-radius);
 		background: linear-gradient(115deg, light-dark(#e5ddec, #30273f), light-dark(#f3edf5, #272331));
 	}
 	h1 {
@@ -219,7 +219,7 @@
 		text-align: start;
 		padding: 0;
 		border: 1px solid var(--ui-border);
-		border-radius: 18px;
+		border-radius: var(--marketplace-card-radius);
 		background: color-mix(in srgb, var(--ui-surface) 72%, transparent);
 		color: var(--ui-text);
 		overflow: hidden;

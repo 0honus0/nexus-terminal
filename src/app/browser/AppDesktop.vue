@@ -97,6 +97,7 @@
 			key: application.key,
 			label: application.label(),
 			icon: application.icon,
+			color: application.color,
 			version: hostVersion,
 			visible: desktop.isTileVisible(application.key),
 			description: application.description(),

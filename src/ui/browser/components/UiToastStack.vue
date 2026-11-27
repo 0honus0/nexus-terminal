@@ -1,14 +1,16 @@
 <script setup lang="ts">
 	import { computed, nextTick, ref, watch } from 'vue';
-	import { useEventListener, usePointerSwipe, useResizeObserver } from '@vueuse/core';
+	import { useEventListener, useMediaQuery, usePointerSwipe, useResizeObserver } from '@vueuse/core';
 	import { CircleCheck, CircleAlert, Info, X, ChevronUp, ChevronDown } from '@lucide/vue';
 	import { ToastProvider, ToastRoot, ToastDescription, ToastClose, ToastViewport, VisuallyHidden } from 'reka-ui';
 	import type { UiToastStackProps } from '../ui-component-types.js';
 	import { useUiMotion } from '../ui-motion-api.js';
+	import { LayoutProfiles } from '../../../layout/layout-api.js';
 
 	defineOptions({ inheritAttrs: false });
 	const props = withDefaults(defineProps<UiToastStackProps>(), { duration: 5000 });
 	const emit = defineEmits<{ dismiss: [id: string | number] }>();
+	const compact = useMediaQuery(`(width < ${LayoutProfiles.wide.minWidth}px)`);
 	const activeId = ref<string | number>();
 	const expanded = ref(false);
 	const card = ref<HTMLElement>();
@@ -21,6 +23,7 @@
 	const { play } = useUiMotion();
 	let dragging = false;
 	let dragId: string | number | undefined;
+	let transitionDirection = 0;
 
 	let stopAnimation = () => {};
 
@@ -41,37 +44,85 @@
 		() => props.items.map((item) => item.id),
 		(ids, previous = []) => {
 			const added = ids.at(-1);
-			if (added !== undefined && !previous.includes(added)) activeId.value = added;
-			else if (!ids.includes(activeId.value!)) {
+			if (added !== undefined && !previous.includes(added)) {
+				transitionDirection = 0;
+				activeId.value = added;
+			} else if (!ids.includes(activeId.value!)) {
 				const index = previous.indexOf(activeId.value!);
+				transitionDirection = 0;
 				activeId.value = ids[Math.max(0, Math.min(index - 1, ids.length - 1))];
 			}
 		},
 		{ immediate: true, flush: 'sync' },
 	);
 
-	watch(activeId, async (id) => {
+	watch(activeId, async () => {
 		stopAnimation();
 		dragging = false;
 		expanded.value = false;
 		truncated.value = false;
 		await nextTick();
 		measureText();
-		if (card.value && activeId.value === id)
-			stopAnimation = play(
-				card.value,
-				[
-					{ opacity: 0, transform: 'translateY(-6px)' },
-					{ opacity: 1, transform: 'translateY(0)' },
-				],
-				160,
-			);
 	});
+
+	function enterToast(target: Element, done: () => void) {
+		const element = target as HTMLElement;
+		const direction = transitionDirection;
+		transitionDirection = 0;
+		stopAnimation =
+			direction === 0
+				? play(
+						element,
+						[
+							{ opacity: 0, transform: 'translateY(var(--toast-enter-y, -24px)) scale(0.86)' },
+							{
+								opacity: 1,
+								transform: 'translateY(var(--toast-bounce-y, 3px)) scale(1.018)',
+								offset: 0.66,
+							},
+							{ opacity: 1, transform: 'translateY(0) scale(1)' },
+						],
+						320,
+						done,
+						[0.22, 1, 0.36, 1],
+					)
+				: play(
+						element,
+						[
+							{ opacity: 0, transform: `translateY(${direction > 0 ? -12 : 12}px) scale(0.95)` },
+							{ opacity: 1, transform: 'translateY(0) scale(1)' },
+						],
+						200,
+						done,
+						[0.22, 1, 0.36, 1],
+					);
+	}
+
+	function leaveToast(target: Element, done: () => void) {
+		const element = target as HTMLElement;
+		const direction = transitionDirection;
+		play(
+			element,
+			direction === 0
+				? [
+						{ opacity: 1, transform: 'translateY(0) scale(1)' },
+						{ opacity: 0, transform: 'translateY(var(--toast-leave-y, -16px)) scale(0.92)' },
+					]
+				: [
+						{ opacity: 1, transform: 'translateY(0) scale(1)' },
+						{ opacity: 0, transform: `translateY(${direction > 0 ? 10 : -10}px) scale(0.95)` },
+					],
+			direction === 0 ? 190 : 130,
+			done,
+			[0.4, 0, 1, 1],
+		);
+	}
 
 	function select(direction: number) {
 		if (props.items.length < 2) return;
 		const index = (activeIndex.value + direction + props.items.length) % props.items.length;
 		const focused = card.value?.contains(document.activeElement);
+		transitionDirection = direction;
 		activeId.value = props.items[index]!.id;
 		if (focused) void nextTick(() => card.value?.focus({ preventScroll: true }));
 	}
@@ -79,6 +130,7 @@
 	function dismiss() {
 		if (!active.value) return;
 		const focused = card.value?.contains(document.activeElement);
+		transitionDirection = 0;
 		emit('dismiss', active.value.id);
 		if (focused && props.items.length) void nextTick(() => card.value?.focus({ preventScroll: true }));
 	}
@@ -186,60 +238,65 @@
 
 <template>
 	<ToastProvider :duration="expanded ? Infinity : duration" :label="label" disable-swipe>
-		<ToastRoot
-			v-if="active"
-			:key="active.id"
-			as-child
-			:open="true"
-			@update:open="
-				(open) => {
-					if (!open) dismiss();
-				}
-			"
-		>
-			<li
-				ref="card"
-				class="ui-toast"
-				data-ui="toast"
-				:data-tone="active.tone"
-				:data-expanded="expanded || undefined"
-				@keydown="keyboard"
+		<Transition mode="out-in" appear :css="false" @enter="enterToast" @leave="leaveToast">
+			<ToastRoot
+				v-if="active"
+				:key="active.id"
+				as-child
+				:open="true"
+				@update:open="
+					(open) => {
+						if (!open) dismiss();
+					}
+				"
 			>
-				<div class="ui-toast__icon"><component :is="icons[active.tone]" :size="18" aria-hidden="true" /></div>
-				<div class="ui-toast__content">
-					<ToastDescription as-child
-						><p ref="message" class="ui-toast__message" :class="{ 'is-expanded': expanded }">
-							{{ active.message }}
-						</p></ToastDescription
-					>
-					<div v-if="truncated || expanded" class="ui-toast__footer">
-						<button
-							class="ui-toast__expand"
-							type="button"
-							:aria-expanded="expanded"
-							@click="toggleExpanded"
-						>
-							{{ expanded ? collapseLabel : expandLabel }}
-							<ChevronUp v-if="expanded" :size="12" aria-hidden="true" />
-							<ChevronDown v-else :size="12" aria-hidden="true" />
-						</button>
+				<li
+					ref="card"
+					class="ui-toast"
+					data-ui="toast"
+					:data-tone="active.tone"
+					:data-expanded="expanded || undefined"
+					@keydown="keyboard"
+				>
+					<div class="ui-toast__icon">
+						<component :is="icons[active.tone]" :size="17" aria-hidden="true" />
 					</div>
-				</div>
-				<div class="ui-toast__controls">
-					<ToastClose class="ui-toast__close" :aria-label="closeLabel"
-						><X :size="15" aria-hidden="true"
-					/></ToastClose>
-					<span v-if="items.length > 1" class="ui-toast__page">
-						<VisuallyHidden>{{ positionLabel(position, items.length) }}</VisuallyHidden>
-						<span aria-hidden="true">{{ position }}/{{ items.length }}</span>
-					</span>
-				</div>
-			</li>
-		</ToastRoot>
+					<div class="ui-toast__content">
+						<ToastDescription as-child
+							><p ref="message" class="ui-toast__message" :class="{ 'is-expanded': expanded }">
+								{{ active.message }}
+							</p></ToastDescription
+						>
+						<div v-if="truncated || expanded" class="ui-toast__footer">
+							<button
+								class="ui-toast__expand"
+								type="button"
+								:aria-expanded="expanded"
+								@click="toggleExpanded"
+							>
+								{{ expanded ? collapseLabel : expandLabel }}
+								<ChevronUp v-if="expanded" :size="12" aria-hidden="true" />
+								<ChevronDown v-else :size="12" aria-hidden="true" />
+							</button>
+						</div>
+					</div>
+					<div class="ui-toast__controls">
+						<ToastClose class="ui-toast__close" :aria-label="closeLabel"
+							><X :size="14" aria-hidden="true"
+						/></ToastClose>
+						<span v-if="items.length > 1" class="ui-toast__page">
+							<VisuallyHidden>{{ positionLabel(position, items.length) }}</VisuallyHidden>
+							<span aria-hidden="true">{{ position }}/{{ items.length }}</span>
+						</span>
+					</div>
+				</li>
+			</ToastRoot>
+		</Transition>
 		<ToastViewport
 			v-bind="$attrs"
 			class="ui-toast-stack"
 			data-ui="toast-stack"
+			:data-compact="compact || undefined"
 			:data-count="Math.min(items.length, 3)"
 			:label="label"
 			@wheel="wheel"
@@ -254,10 +311,13 @@
 	.ui-toast-stack {
 		position: fixed;
 		z-index: 1000;
-		top: max(20px, env(safe-area-inset-top));
-		right: max(20px, env(safe-area-inset-right));
+		top: max(16px, env(safe-area-inset-top));
+		left: 50%;
+		transform: translateX(-50%);
 		isolation: isolate;
-		width: min(400px, calc(100vw - 32px));
+		width: fit-content;
+		min-width: min(260px, calc(100vw - 32px));
+		max-width: min(440px, calc(100vw - 32px));
 		margin: 0;
 		padding: 0;
 		list-style: none;
@@ -269,46 +329,59 @@
 	.ui-toast-stack::after {
 		position: absolute;
 		z-index: -1;
-		inset: 8px 7px -7px;
-		border: 1px solid var(--ui-border);
-		border-radius: 14px;
-		background: color-mix(in srgb, var(--ui-surface) 80%, transparent);
-		backdrop-filter: blur(14px);
+		inset: 7px 14px -6px;
+		border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
+		border-radius: 24px;
+		background: color-mix(in srgb, var(--ui-surface) 82%, transparent);
+		backdrop-filter: blur(18px) saturate(140%);
+		-webkit-backdrop-filter: blur(18px) saturate(140%);
+		box-shadow: 0 8px 20px color-mix(in srgb, #241b35 10%, transparent);
 		content: '';
 		opacity: 0;
+		transform: translateY(-4px) scale(0.96);
 		pointer-events: none;
+		transition:
+			opacity var(--ui-motion-duration, 180ms) ease,
+			transform var(--ui-motion-duration, 220ms) cubic-bezier(0.22, 1, 0.36, 1);
 	}
 	.ui-toast-stack::before {
-		inset: 16px 12px -14px;
+		inset: 14px 26px -12px;
+		border-radius: 20px;
 	}
 	.ui-toast-stack[data-count='2']::after,
 	.ui-toast-stack[data-count='3']::after {
-		opacity: 0.9;
+		opacity: 0.92;
+		transform: translateY(0) scale(1);
 	}
 	.ui-toast-stack[data-count='3']::before {
 		opacity: 0.65;
+		transform: translateY(0) scale(1);
 	}
 	.ui-toast {
 		--toast-accent: var(--ui-primary);
 		position: relative;
 		box-sizing: border-box;
 		display: grid;
-		grid-template-columns: 34px minmax(0, 1fr) 26px;
+		grid-template-columns: 28px minmax(0, 1fr) auto;
 		align-items: center;
-		column-gap: 12px;
-		min-height: 68px;
-		padding: 13px 14px;
-		border: 1px solid color-mix(in srgb, var(--toast-accent) 14%, transparent);
-		border-radius: 20px;
-		background: color-mix(in srgb, color-mix(in srgb, var(--ui-surface) 93%, var(--toast-accent)) 94%, transparent);
-		backdrop-filter: blur(20px) saturate(1.15);
+		column-gap: 11px;
+		min-height: 58px;
+		padding: 9px 12px 9px 10px;
+		border: 1px solid color-mix(in srgb, var(--toast-accent) 22%, var(--ui-border));
+		border-radius: 26px;
+		background: color-mix(in srgb, color-mix(in srgb, var(--ui-surface) 95%, var(--toast-accent)) 92%, transparent);
+		backdrop-filter: blur(22px) saturate(150%);
+		-webkit-backdrop-filter: blur(22px) saturate(150%);
 		color: var(--ui-text);
 		box-shadow:
-			0 12px 36px color-mix(in srgb, black 12%, transparent),
-			0 2px 5px color-mix(in srgb, black 4%, transparent);
+			0 14px 36px -8px color-mix(in srgb, #241b35 16%, transparent),
+			0 3px 10px -2px color-mix(in srgb, #241b35 8%, transparent),
+			inset 0 1px 0 color-mix(in srgb, #ffffff 48%, transparent);
 		outline: none;
 		touch-action: none !important;
 		pointer-events: auto;
+		will-change: transform, opacity;
+		transition: border-radius var(--ui-motion-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1);
 	}
 	.ui-toast[data-tone='error'] {
 		--toast-accent: var(--ui-danger);
@@ -320,17 +393,36 @@
 		--toast-accent: var(--ui-success);
 	}
 	.ui-toast[data-expanded] {
+		border-radius: 20px;
+		align-items: start;
+		padding: 12px 14px;
 		touch-action: pan-y !important;
+	}
+	@keyframes ui-toast-icon-pop {
+		0% {
+			transform: scale(0.62) rotate(-10deg);
+			opacity: 0.4;
+		}
+		65% {
+			transform: scale(1.1) rotate(3deg);
+			opacity: 1;
+		}
+		100% {
+			transform: scale(1) rotate(0deg);
+			opacity: 1;
+		}
 	}
 	.ui-toast__icon {
 		display: grid;
 		place-items: center;
 		align-self: center;
-		width: 34px;
-		height: 34px;
-		border-radius: 12px;
+		width: 28px;
+		height: 28px;
+		border-radius: 50%;
 		color: var(--toast-accent);
-		background: color-mix(in srgb, var(--toast-accent) 12%, transparent);
+		background: color-mix(in srgb, var(--toast-accent) 14%, transparent);
+		animation: ui-toast-icon-pop calc(340ms * var(--ui-motion-factor, 1) / var(--ui-motion-speed, 1))
+			cubic-bezier(0.22, 1, 0.36, 1) both;
 	}
 	.ui-toast__content {
 		min-width: 0;
@@ -344,7 +436,7 @@
 		overflow: hidden;
 		font-size: 13px;
 		font-weight: 500;
-		line-height: 1.55;
+		line-height: 1.5;
 		overflow-wrap: anywhere;
 	}
 	.ui-toast__message.is-expanded {
@@ -355,7 +447,7 @@
 	.ui-toast__footer {
 		display: flex;
 		align-items: center;
-		margin-top: 7px;
+		margin-top: 5px;
 	}
 	.ui-toast__close,
 	.ui-toast__expand {
@@ -370,27 +462,31 @@
 		background: transparent;
 		color: var(--ui-muted);
 		cursor: pointer;
+		transition:
+			background-color var(--ui-motion-duration, 140ms) ease,
+			color var(--ui-motion-duration, 140ms) ease;
 	}
 	.ui-toast__expand {
 		display: inline-flex;
 		gap: 3px;
 		width: auto;
 		height: 22px;
-		padding-inline: 5px;
-		margin-left: -5px;
+		padding-inline: 6px;
+		margin-left: -6px;
 		color: var(--ui-muted);
 		font-size: 11px;
+		font-weight: 500;
 	}
 	.ui-toast__close {
 		align-self: center;
-		width: 26px;
-		height: 26px;
+		width: 24px;
+		height: 24px;
 		border-radius: 50%;
-		background: color-mix(in srgb, var(--ui-text) 4%, transparent);
+		background: color-mix(in srgb, var(--ui-text) 5%, transparent);
 	}
 	.ui-toast__close:hover,
 	.ui-toast__expand:hover {
-		background: color-mix(in srgb, var(--ui-text) 7%, transparent);
+		background: color-mix(in srgb, var(--ui-text) 10%, transparent);
 		color: var(--ui-text);
 	}
 	.ui-toast:focus-visible,
@@ -403,40 +499,47 @@
 		flex-direction: column;
 		align-self: stretch;
 		align-items: center;
-		justify-content: space-evenly;
-		margin-block: -6px;
+		justify-content: center;
+		gap: 4px;
+		min-width: 26px;
 	}
 	.ui-toast__page {
 		color: var(--ui-muted);
 		font-size: 10px;
 		font-variant-numeric: lining-nums tabular-nums;
-		line-height: 10px;
+		line-height: 1;
 		white-space: nowrap;
 		pointer-events: none;
 	}
-	html[data-layout-profile='compact'] .ui-toast-stack {
-		top: max(10px, env(safe-area-inset-top));
-		right: auto;
-		left: 50%;
-		width: min(360px, calc(100vw - 24px));
-		transform: translateX(-50%);
+	.ui-toast-stack[data-compact] {
+		--toast-enter-y: 24px;
+		--toast-bounce-y: -3px;
+		--toast-leave-y: 16px;
+		top: auto;
+		bottom: calc(72px + env(safe-area-inset-bottom));
+		width: fit-content;
+		min-width: min(220px, calc(100vw - 24px));
+		max-width: min(360px, calc(100vw - 24px));
 	}
-	html[data-layout-profile='compact'] .ui-toast {
-		grid-template-columns: 30px minmax(0, 1fr) 26px;
-		min-height: 58px;
+	body:has([data-ui='dialog-overlay']) .ui-toast-stack[data-compact] {
+		bottom: max(8px, env(safe-area-inset-bottom));
+	}
+	.ui-toast-stack[data-compact] .ui-toast {
+		grid-template-columns: 26px minmax(0, 1fr) auto;
+		min-height: 54px;
 		column-gap: 9px;
-		padding: 10px 11px;
+		padding: 7px 11px 7px 8px;
+		border-radius: 22px;
 	}
-	html[data-layout-profile='compact'] .ui-toast__icon {
-		width: 30px;
-		height: 30px;
-		border-radius: 10px;
+	.ui-toast-stack[data-compact] .ui-toast__icon {
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
 	}
-	html[data-layout-profile='compact'] .ui-toast__message {
-		font-size: 12px;
+	.ui-toast-stack[data-compact] .ui-toast__message {
+		font-size: 12.5px;
 	}
-	html[data-layout-profile='compact'] .ui-toast__page {
-		font-size: 9px;
-		line-height: 9px;
+	.ui-toast-stack[data-compact] .ui-toast__page {
+		font-size: 9.5px;
 	}
 </style>

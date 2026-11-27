@@ -150,6 +150,48 @@
 			font-size: clamp(14px, min(24cqmin, calc(40cqi / max(2, var(--count-characters)))), 28px);
 		}
 	}
+	@container (max-width: 150px) and (max-height: 130px) {
+		.marketplace-tile :deep(.ui-action-card__content) {
+			display: flex;
+			flex-direction: column;
+			justify-content: space-between;
+			gap: 4px;
+			padding: 8px;
+		}
+		.marketplace-tile__heading,
+		.marketplace-tile__summary {
+			position: relative;
+			inset: auto;
+			max-width: 100%;
+		}
+		.marketplace-tile__heading {
+			overflow: hidden;
+			font-size: clamp(10px, 11cqi, 12px);
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.marketplace-tile__title {
+			display: none;
+		}
+		.marketplace-tile__short-title {
+			display: inline;
+		}
+		.marketplace-tile__summary {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 2px;
+		}
+		.marketplace-tile__primary > span {
+			font-size: clamp(9px, 10cqi, 10px);
+		}
+		.marketplace-tile__notice {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		strong {
+			font-size: clamp(14px, min(24cqmin, calc(110cqi / max(2, var(--count-characters)))), 28px);
+		}
+	}
 	@container (max-width: 109px) and (min-height: 131px) {
 		.marketplace-tile__heading {
 			left: 10px;

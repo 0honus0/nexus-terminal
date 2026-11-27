@@ -27,7 +27,7 @@ const ProfileSchema = z.strictObject({
 	current: z.string(),
 });
 
-const DesktopLayoutSchema = z.record(LayoutProfileSchema, ProfileSchema);
+const DesktopLayoutSchema = z.object({ compact: ProfileSchema, wide: ProfileSchema });
 
 export type DesktopTile = z.infer<typeof TileSchema>;
 
@@ -49,7 +49,7 @@ const desktopRows = 5;
 function emptyLayout(): DesktopLayout {
 	const empty = () => ({ pages: [{ id: 'home', tiles: [] }], hidden: [], current: 'home' });
 
-	return { compact: empty(), medium: empty(), wide: empty() };
+	return { compact: empty(), wide: empty() };
 }
 
 function findPosition(tiles: readonly DesktopTile[], size: Pick<DesktopTile, 'w' | 'h'>, columns: number) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-	import { Package, RotateCw, Search, SlidersHorizontal } from '@lucide/vue';
-	import { computed, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
+	import { Package, RotateCw, Search } from '@lucide/vue';
+	import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { LogApi } from '../../log/browser/log-api.js';
 	import type { z } from 'zod';
@@ -29,6 +29,7 @@
 		UiSwitch,
 	} from '../../ui/browser/ui-components-api.js';
 
+	import MarketplaceActionDialog from './MarketplaceActionDialog.vue';
 	import MarketplaceDiscover from './MarketplaceDiscover.vue';
 	import MarketplaceInstalledCard from './MarketplaceInstalledCard.vue';
 	import MarketplaceInstallDialog from './MarketplaceInstallDialog.vue';
@@ -36,8 +37,11 @@
 	import MarketplaceRepositories from './MarketplaceRepositories.vue';
 	import {
 		isMarketplaceUpdate,
+		marketplaceDescription,
 		marketplaceInstalledStatus,
 		marketplaceInstalledName,
+		marketplaceLabel,
+		marketplacePackageName,
 		marketplacePluginRuntime,
 		marketplaceStatusTones,
 		sortMarketplacePlugins,
@@ -73,6 +77,7 @@
 			label: string;
 			description: string;
 			icon?: Component;
+			color?: string;
 			visible: boolean;
 			version: string;
 		}[];
@@ -84,7 +89,7 @@
 		showApplication: [key: string, visible: boolean];
 		openApplication: [key: string];
 	}>();
-	const { t, locale } = useI18n({ useScope: 'global' });
+	const { t, n, locale } = useI18n({ useScope: 'global' });
 	const root = ref<HTMLElement>();
 	const catalog = shallowRef<readonly MarketplaceCatalogPlugin[]>();
 	const repositories = shallowRef<readonly MarketplaceRepository[]>([]);
@@ -105,6 +110,9 @@
 	const managed = computed(() => installed?.find(({ pluginId }) => pluginId === managedId.value));
 	const managedStatus = computed(() => (managed.value ? installedStatus(managed.value) : 'unavailable'));
 	const managedEntries = computed(() => applications.filter(({ pluginId }) => pluginId === managedId.value));
+	const managedName = computed(() =>
+		managed.value ? marketplaceInstalledName(managed.value, locale.value, managedEntries.value[0]?.label) : '',
+	);
 	const managedBuiltinKey = ref<string>();
 	const managedBuiltin = computed(() => builtins.find(({ key }) => key === managedBuiltinKey.value));
 	const builtinOpen = ref(false);
@@ -115,7 +123,16 @@
 		);
 	});
 	const uninstallPlan = shallowRef<z.infer<typeof MarketplaceUninstallPlanSchema>>();
-	const uninstallOpen = ref(false);
+	const confirmingUninstall = ref(false);
+	const uninstallLoading = ref(false);
+	const uninstallTrigger = ref<InstanceType<typeof UiButton>>();
+	const uninstallBody = ref<HTMLElement>();
+	const currentUninstallPlan = computed(() =>
+		uninstallPlan.value?.pluginId === managed.value?.pluginId &&
+		uninstallPlan.value?.version === managed.value?.version
+			? uninstallPlan.value
+			: undefined,
+	);
 	const runtimeChange = shallowRef<
 		{ action: 'set-enabled'; pluginId: string; enabled: false } | { action: 'reload'; pluginId: string }
 	>();
@@ -131,18 +148,19 @@
 		{ flush: 'sync' },
 	);
 	let runtimeChangeTrigger: HTMLElement | undefined;
-	const runtimeChangeTitle = computed(() =>
-		t(
-			runtimeChange.value?.action === 'reload'
-				? 'marketplace.reloadConfirmTitle'
-				: 'marketplace.disableConfirmTitle',
-		),
-	);
+	const runtimeReload = computed(() => runtimeChange.value?.action === 'reload');
 	const runtimeImpactMatches = computed(
 		() =>
 			runtimeImpact.value?.pluginId === managed.value?.pluginId &&
 			runtimeImpact.value?.version === managed.value?.version &&
 			!!runtimeImpact.value,
+	);
+	const runtimeDependents = computed(() =>
+		(runtimeImpact.value?.dependents ?? []).map((id) => {
+			const item = installed?.find(({ pluginId }) => pluginId === id);
+			const application = applications.find(({ pluginId }) => pluginId === id);
+			return { id, name: item ? marketplaceInstalledName(item, locale.value, application?.label) : id };
+		}),
 	);
 	const runtimeChangeAllowed = computed(
 		() =>
@@ -157,6 +175,11 @@
 
 	const clearOnUninstall = ref(false);
 	const clearTarget = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items'][number]>();
+	const clearPackage = computed(() => {
+		const target = clearTarget.value;
+		const versions = catalog.value?.find(({ id }) => id === target?.pluginId)?.versions;
+		return (versions?.find(({ package: item }) => item.version === target?.version) ?? versions?.[0])?.package;
+	});
 	const clearOpen = ref(false);
 	const retained = shallowRef<z.infer<typeof MarketplaceRetainedDataListSchema>['items']>([]);
 	const operations = api.operations;
@@ -196,6 +219,15 @@
 	const catalogFailed = ref(false);
 	const scope = new AbortController();
 	let catalogRead: AbortController | undefined;
+	const catalogDescriptions = computed(() => {
+		const map = new Map<string, string>();
+		for (const plugin of catalog.value ?? []) {
+			const pack = plugin.versions[0]?.package;
+			const desc = pack ? marketplaceDescription(pack, locale.value) : undefined;
+			if (desc) map.set(plugin.id, desc);
+		}
+		return map;
+	});
 	const results = computed(() => {
 		const filter = query.value.trim().toLowerCase();
 		return installed?.flatMap((item) => {
@@ -203,7 +235,15 @@
 			const name = marketplaceInstalledName(item, locale.value, entries[0]?.label);
 			const kind = t('marketplace.kind.' + (item.kind ?? 'unknown'));
 			return `${name} ${item.pluginId} ${kind}`.toLowerCase().includes(filter)
-				? [{ item, name, entries, status: installedStatus(item), update: updates.value.get(item.pluginId) }]
+				? [
+						{
+							item,
+							name,
+							entries,
+							status: installedStatus(item),
+							update: updates.value.get(item.pluginId),
+						},
+					]
 				: [];
 		});
 	});
@@ -229,7 +269,6 @@
 				managedOpen.value = false;
 				builtinOpen.value = false;
 				dismissInstallation();
-				uninstallOpen.value = false;
 				runtimeChangeOpen.value = false;
 				clearOpen.value = false;
 			}
@@ -341,7 +380,7 @@
 		managedFocusId = undefined;
 		if (minimized || !managing.value || scope.signal.aborted) return;
 		const button = root.value?.querySelector<HTMLButtonElement>(
-			`[data-marketplace-plugin="${CSS.escape(id)}"] > .ui-card__main`,
+			`[data-marketplace-plugin="${CSS.escape(id)}"] .ui-card__main`,
 		);
 		if (!button?.isConnected || button.disabled) return;
 		event.preventDefault();
@@ -408,9 +447,11 @@
 	}
 
 	function finishInstallation(): void {
+		const fromDiscover = !managing.value;
 		dismissInstallation();
 		managing.value = true;
 		query.value = '';
+		if (fromDiscover) root.value?.closest('.application-window__body')?.scrollTo(0, 0);
 		void readManagement();
 	}
 
@@ -443,9 +484,8 @@
 				if (plan.value === command.plan) installOperation.value = operation;
 				return;
 			}
-			if (command.action === 'uninstall' && uninstallPlan.value === command.plan) uninstallOpen.value = false;
+			if (command.action === 'uninstall' && uninstallPlan.value === command.plan) managedOpen.value = false;
 			if (command.action === 'clear-data' && clearTarget.value?.pluginId === pluginId) clearOpen.value = false;
-			if (managedId.value === pluginId) managedOpen.value = false;
 
 			managing.value = true;
 			query.value = '';
@@ -514,29 +554,49 @@
 	}
 
 	async function prepareUninstall(item: MarketplacePlugin): Promise<void> {
-		if (planning.value || activeIds.value.has(item.pluginId)) return;
+		if (uninstallLoading.value || activeIds.value.has(item.pluginId)) return;
+		if (!confirmingUninstall.value) {
+			confirmingUninstall.value = true;
+			clearOnUninstall.value = false;
+			void nextTick(() => uninstallBody.value?.focus());
+		}
 		const request = new AbortController();
-		uninstallRequest?.abort();
 		uninstallRequest = request;
 		const signal = AbortSignal.any([request.signal, scope.signal]);
-		planning.value = true;
+		uninstallLoading.value = true;
+		uninstallPlan.value = undefined;
 		try {
 			const result = await api.previewUninstall(item.pluginId, signal);
-			if (signal.aborted || !managedOpen.value || managedId.value !== item.pluginId) return;
+			if (signal.aborted || !managedOpen.value || !confirmingUninstall.value) return;
 			uninstallPlan.value = result;
-			clearOnUninstall.value = false;
-			uninstallOpen.value = true;
 		} catch (cause) {
 			if (!signal.aborted) reportFailure(cause);
 		} finally {
-			if (!scope.signal.aborted && uninstallRequest === request) planning.value = false;
+			if (uninstallRequest === request) {
+				uninstallRequest = undefined;
+				uninstallLoading.value = false;
+			}
 		}
+	}
+
+	function resetUninstall(): void {
+		uninstallRequest?.abort();
+		uninstallRequest = undefined;
+		uninstallLoading.value = false;
+		uninstallPlan.value = undefined;
+		confirmingUninstall.value = false;
+	}
+
+	function cancelUninstall(event?: KeyboardEvent): void {
+		if (!confirmingUninstall.value) return;
+		event?.preventDefault();
+		resetUninstall();
+		void nextTick(() => uninstallTrigger.value?.$el.focus());
 	}
 
 	watch(managedOpen, (open) => {
 		if (!open) {
-			uninstallRequest?.abort();
-			uninstallOpen.value = false;
+			resetUninstall();
 			runtimeChangeOpen.value = false;
 		}
 	});
@@ -552,8 +612,9 @@
 		if (managing.value) refreshManagement();
 	}
 
-	function toggle(): void {
-		managing.value = !managing.value;
+	function setManaging(next: boolean): void {
+		if (managing.value === next) return;
+		managing.value = next;
 		query.value = '';
 		if (managing.value) refreshManagement();
 		root.value?.closest('.application-window__body')?.scrollTo(0, 0);
@@ -573,6 +634,26 @@
 			</UiInput>
 			<template #actions>
 				<div class="marketplace-actions">
+					<div class="marketplace-nav" role="group" :aria-label="t('market')">
+						<button
+							type="button"
+							class="marketplace-nav__item"
+							:aria-pressed="!managing"
+							@click="setManaging(false)"
+						>
+							{{ t('marketplace.discover') }}
+						</button>
+						<button
+							type="button"
+							class="marketplace-nav__item"
+							:aria-label="t('marketplaceTile.manage')"
+							:aria-pressed="managing"
+							@click="setManaging(true)"
+						>
+							<span>{{ t('marketplace.installed') }}</span>
+							<span class="marketplace-nav__count">{{ n(installed?.length ?? 0) }}</span>
+						</button>
+					</div>
 					<UiButton
 						appearance="ghost"
 						icon-only
@@ -580,15 +661,6 @@
 						:loading="refreshing || (managing && loading)"
 						@click="refresh()"
 						><RotateCw :size="17"
-					/></UiButton>
-					<UiButton
-						class="marketplace-manage-entry"
-						icon-only
-						:tone="managing ? 'primary' : 'neutral'"
-						:aria-label="t('marketplaceTile.manage')"
-						:aria-pressed="managing"
-						@click="toggle"
-						><SlidersHorizontal :size="18"
 					/></UiButton>
 				</div>
 			</template>
@@ -605,7 +677,7 @@
 				@inspect="inspect"
 			/>
 			<template v-else>
-				<UiSection :title="t('desktop.installed')">
+				<div>
 					<UiEmptyState
 						v-if="results?.length === 0 && !builtinResults.length"
 						:icon="Package"
@@ -613,34 +685,23 @@
 					/>
 					<template v-for="group in installedGroups" :key="group.kind ?? 'unknown'">
 						<section
-							v-if="group.items.length || (group.kind === 'application' && builtinResults.length)"
+							v-if="group.items.length"
 							class="marketplace-installed-group"
+							:data-kind="group.kind ?? 'unknown'"
 						>
-							<h3>{{ t('marketplace.installedGroup.' + (group.kind ?? 'unknown')) }}</h3>
-							<div class="marketplace-cards">
-								<template v-if="group.kind === 'application'">
-									<MarketplaceInstalledCard
-										v-for="item in builtinResults"
-										:key="item.key"
-										:name="item.label"
-										:icon="item.icon"
-										:version="item.version"
-										kind="application"
-										status="available"
-										builtin
-										openable
-										@manage="
-											managedBuiltinKey = item.key;
-											builtinOpen = true;
-										"
-										@open="emit('openApplication', item.key)"
-									/>
-								</template>
+							<header class="marketplace-installed-group__heading">
+								<h3>
+									{{ t('marketplace.installedGroup.' + (group.kind ?? 'unknown')) }}
+									<span>{{ n(group.items.length) }}</span>
+								</h3>
+							</header>
+							<ul class="marketplace-installed-cards">
 								<MarketplaceInstalledCard
 									v-for="{ item, name, entries, status, update } in group.items"
 									:key="item.pluginId"
 									:data-marketplace-plugin="item.pluginId"
 									:name="name"
+									:description="catalogDescriptions.get(item.pluginId)"
 									:icon="resolvePluginIcon(item.icon) ?? entries[0]?.icon"
 									:kind="item.kind"
 									:version="item.version"
@@ -652,17 +713,45 @@
 									@open="entries[0] && emit('openApplication', entries[0].key)"
 									@update="update && preview(update)"
 								/>
-							</div>
+							</ul>
 						</section>
 					</template>
-				</UiSection>
-				<MarketplaceRepositories
-					:api="api"
-					:repositories="repositories"
-					:minimized="minimized"
-					:log="log"
-					@changed="discover"
-				/>
+					<section v-if="builtinResults.length" class="marketplace-installed-group">
+						<header class="marketplace-installed-group__heading">
+							<h3>
+								{{ t('marketplace.builtin') }} <span>{{ n(builtinResults.length) }}</span>
+							</h3>
+						</header>
+						<ul class="marketplace-installed-cards">
+							<MarketplaceInstalledCard
+								v-for="item in builtinResults"
+								:key="item.key"
+								:name="item.label"
+								:description="item.description"
+								:icon="item.icon"
+								:accent="item.color"
+								:version="item.version"
+								kind="application"
+								status="available"
+								openable
+								@manage="
+									managedBuiltinKey = item.key;
+									builtinOpen = true;
+								"
+								@open="emit('openApplication', item.key)"
+							/>
+						</ul>
+					</section>
+				</div>
+				<div class="marketplace-management-section">
+					<MarketplaceRepositories
+						:api="api"
+						:repositories="repositories"
+						:minimized="minimized"
+						:log="log"
+						@changed="discover"
+					/>
+				</div>
 				<UiSection
 					v-if="attempts.length"
 					class="marketplace-management-section"
@@ -773,15 +862,18 @@
 		</UiDialog>
 		<UiDialog
 			v-model:open="managedOpen"
+			:class="{ 'marketplace-uninstall-dialog': confirmingUninstall }"
 			@close-auto-focus="restoreManagedFocus"
-			:title="t('marketplace.manageInstalled')"
+			@escape-key-down="cancelUninstall"
+			:title="t(confirmingUninstall ? 'marketplace.uninstall' : 'marketplace.manageInstalled')"
 			size="md"
 			:close-label="t('closeApplication')"
+			:close-disabled="confirmingUninstall && !!managed && submittingIds.has(managed.pluginId)"
 		>
 			<template v-if="managed">
-				<div class="marketplace-managed-summary">
+				<div v-if="!confirmingUninstall" class="marketplace-managed-summary">
 					<div class="marketplace-managed-heading">
-						<h3>{{ marketplaceInstalledName(managed, locale, managedEntries[0]?.label) }}</h3>
+						<h3>{{ managedName }}</h3>
 						<UiBadge :tone="marketplaceStatusTones[managedStatus]" dot>{{
 							t('marketplace.status.' + managedStatus)
 						}}</UiBadge>
@@ -790,8 +882,73 @@
 						<span>{{ managed.pluginId }}</span>
 						<span class="marketplace-managed-version">{{ managed.version }}</span>
 					</div>
+					<p v-if="catalogDescriptions.has(managed.pluginId)" data-ui-selection="text">
+						{{ catalogDescriptions.get(managed.pluginId) }}
+					</p>
 				</div>
-				<UiList>
+				<div v-if="confirmingUninstall" ref="uninstallBody" class="marketplace-uninstall" tabindex="-1">
+					<div class="marketplace-uninstall-target">
+						<div class="marketplace-uninstall-target__heading">
+							<span class="marketplace-uninstall-target__icon" aria-hidden="true">
+								<component
+									:is="resolvePluginIcon(managed.icon) ?? managedEntries[0]?.icon ?? Package"
+									:size="20"
+								/>
+							</span>
+							<h3 data-ui-selection="text">{{ managedName }}</h3>
+						</div>
+						<dl class="marketplace-uninstall-target__details">
+							<div>
+								<dt>{{ t('marketplace.packageName') }}</dt>
+								<dd data-ui-selection="text">{{ managed.pluginId }}</dd>
+							</div>
+							<div>
+								<dt>{{ t('marketplace.packageVersion') }}</dt>
+								<dd class="marketplace-uninstall-target__version" data-ui-selection="text">
+									{{ managed.version }}
+								</dd>
+							</div>
+						</dl>
+					</div>
+					<p v-if="uninstallLoading" role="status">{{ t('marketplace.loadingImpact') }}</p>
+					<template v-else-if="currentUninstallPlan">
+						<UiSection
+							v-if="currentUninstallPlan.dependents.length"
+							class="marketplace-uninstall-dependents"
+							:title="t('marketplace.affected')"
+							:description="t('marketplace.uninstallDependents')"
+						>
+							<UiList>
+								<UiListItem v-for="id in currentUninstallPlan.dependents" :key="id" :title="id" />
+							</UiList>
+						</UiSection>
+						<p v-if="currentUninstallPlan.required">{{ t('notices.MARKETPLACE_PLUGIN_REQUIRED') }}</p>
+						<UiList v-else class="marketplace-uninstall-data">
+							<UiListItem
+								:title="t('marketplace.clearOnUninstall')"
+								:description="t('marketplace.uninstallDataHint')"
+							>
+								<template #actions>
+									<UiSwitch
+										v-model="clearOnUninstall"
+										:aria-label="t('marketplace.clearOnUninstall')"
+										:disabled="activeIds.has(managed.pluginId)"
+									/>
+								</template>
+							</UiListItem>
+						</UiList>
+					</template>
+					<p v-else role="status">
+						{{
+							t(
+								uninstallPlan
+									? 'notices.MARKETPLACE_INSTALL_PLAN_CHANGED'
+									: 'notices.MARKETPLACE_REQUEST_FAILED',
+							)
+						}}
+					</p>
+				</div>
+				<UiList v-else>
 					<UiListItem :title="t('marketplace.enablePlugin')">
 						<template #actions>
 							<UiSwitch
@@ -840,40 +997,79 @@
 				</UiList>
 			</template>
 			<template v-if="managed" #footer>
-				<UiButton
-					v-if="managed.enabled"
-					:disabled="activeIds.has(managed.pluginId)"
-					@click="prepareRuntimeChange(managed, 'reload')"
-				>
-					{{ t('marketplace.reload') }}
-				</UiButton>
-				<UiButton
-					tone="danger"
-					:disabled="activeIds.has(managed.pluginId)"
-					:aria-disabled="planning || undefined"
-					@click="prepareUninstall(managed)"
-				>
-					{{ t('marketplace.uninstall') }}
-				</UiButton>
+				<template v-if="confirmingUninstall">
+					<UiButton
+						appearance="ghost"
+						:disabled="submittingIds.has(managed.pluginId)"
+						@click="cancelUninstall()"
+					>
+						{{ t('marketplace.cancel') }}
+					</UiButton>
+					<UiButton v-if="!currentUninstallPlan && !uninstallLoading" @click="prepareUninstall(managed)">{{
+						t('marketplace.retryInstallation')
+					}}</UiButton>
+					<UiButton
+						v-else-if="!currentUninstallPlan?.required"
+						tone="danger"
+						:loading="submittingIds.has(managed.pluginId)"
+						:disabled="!currentUninstallPlan || activeIds.has(managed.pluginId)"
+						@click="
+							currentUninstallPlan &&
+							submit({
+								action: 'uninstall',
+								plan: currentUninstallPlan,
+								data: clearOnUninstall ? 'clear' : 'keep',
+							})
+						"
+						>{{ t('marketplace.uninstall') }}</UiButton
+					>
+				</template>
+				<template v-else>
+					<UiButton
+						v-if="managed.enabled"
+						:disabled="activeIds.has(managed.pluginId)"
+						@click="prepareRuntimeChange(managed, 'reload')"
+					>
+						{{ t('marketplace.reload') }}
+					</UiButton>
+					<UiButton
+						ref="uninstallTrigger"
+						tone="danger"
+						:disabled="activeIds.has(managed.pluginId)"
+						@click="prepareUninstall(managed)"
+					>
+						{{ t('marketplace.uninstall') }}
+					</UiButton>
+				</template>
 			</template>
 		</UiDialog>
-		<UiDialog
+		<MarketplaceActionDialog
+			v-if="runtimeChange"
 			v-model:open="runtimeChangeOpen"
-			:title="runtimeChangeTitle"
-			:description="t('marketplace.runtimeChangeWarning')"
-			:close-label="t('closeApplication')"
+			:title="t(runtimeReload ? 'marketplace.reloadConfirmTitle' : 'marketplace.disableConfirmTitle')"
+			:name="managedName || marketplaceLabel(runtimeChange.pluginId)"
+			:plugin-id="runtimeChange.pluginId"
+			:version="managed?.version"
+			:icon="resolvePluginIcon(managed?.icon) ?? managedEntries[0]?.icon"
+			:notice="t('marketplace.runtimeChangeWarning')"
+			:tone="runtimeReload ? 'warning' : 'danger'"
 			@close-auto-focus="restoreRuntimeChangeFocus"
 		>
-			<p v-if="runtimeChange">{{ runtimeChange.pluginId }}</p>
-			<p v-if="runtimeImpactLoading" role="status">{{ t('marketplace.loadingImpact') }}</p>
-			<template v-else-if="runtimeImpact && runtimeImpactMatches">
-				<UiSection v-if="runtimeImpact.dependents.length" :title="t('marketplace.affected')">
-					<UiList><UiListItem v-for="id in runtimeImpact.dependents" :key="id" :title="id" /></UiList>
-				</UiSection>
-				<p v-else>{{ t('marketplace.noDependents') }}</p>
-			</template>
-			<template v-else>
-				<p role="status">
+			<section class="marketplace-runtime-impact" :aria-label="t('marketplace.affected')">
+				<h3>{{ t('marketplace.affected') }}</h3>
+				<p v-if="runtimeImpactLoading" role="status">{{ t('marketplace.loadingImpact') }}</p>
+				<template v-else-if="runtimeImpactMatches">
+					<UiList v-if="runtimeDependents.length">
+						<UiListItem
+							v-for="{ id, name } in runtimeDependents"
+							:key="id"
+							:title="name"
+							:description="name === id ? undefined : id"
+						/>
+					</UiList>
+					<p v-else>{{ t('marketplace.noDependents') }}</p>
+				</template>
+				<p v-else role="status">
 					{{
 						t(
 							runtimeImpact
@@ -882,54 +1078,44 @@
 						)
 					}}
 				</p>
-				<UiButton @click="readRuntimeImpact">{{ t('marketplace.retryInstallation') }}</UiButton>
-			</template>
+			</section>
 			<template #footer>
-				<UiButton @click="runtimeChangeOpen = false">{{ t('marketplace.cancel') }}</UiButton>
-				<UiButton tone="danger" :disabled="!runtimeChangeAllowed" @click="confirmRuntimeChange">
-					{{ t(runtimeChange?.action === 'reload' ? 'marketplace.reload' : 'marketplace.disable') }}
-				</UiButton>
-			</template>
-		</UiDialog>
-		<UiDialog v-model:open="uninstallOpen" :title="t('marketplace.uninstall')" :close-label="t('closeApplication')">
-			<template v-if="uninstallPlan">
-				<p>{{ uninstallPlan.pluginId }} · {{ uninstallPlan.version }}</p>
-				<template v-if="uninstallPlan.dependents.length">
-					<p>{{ t('marketplace.uninstallDependents') }}</p>
-					<UiList>
-						<UiListItem v-for="id in uninstallPlan.dependents" :key="id" :title="id" />
-					</UiList>
-				</template>
-				<p v-if="uninstallPlan.required">{{ t('notices.MARKETPLACE_PLUGIN_REQUIRED') }}</p>
-				<label v-else class="marketplace-uninstall-data">
-					<span>{{ t('marketplace.clearOnUninstall') }}</span>
-					<UiSwitch v-model="clearOnUninstall" :aria-label="t('marketplace.clearOnUninstall')" />
-				</label>
-			</template>
-			<template v-if="uninstallPlan" #footer>
-				<UiButton :disabled="submittingIds.has(uninstallPlan.pluginId)" @click="uninstallOpen = false">
-					{{ t('marketplace.cancel') }}
+				<UiButton appearance="ghost" @click="runtimeChangeOpen = false">{{ t('marketplace.cancel') }}</UiButton>
+				<UiButton v-if="!runtimeImpactLoading && !runtimeImpactMatches" @click="readRuntimeImpact">
+					{{ t('marketplace.retryInstallation') }}
 				</UiButton>
 				<UiButton
-					v-if="!uninstallPlan.required"
-					tone="danger"
-					:loading="submittingIds.has(uninstallPlan.pluginId)"
-					:disabled="activeIds.has(uninstallPlan.pluginId)"
-					@click="
-						submit({ action: 'uninstall', plan: uninstallPlan, data: clearOnUninstall ? 'clear' : 'keep' })
-					"
+					appearance="solid"
+					:tone="runtimeReload ? 'primary' : 'danger'"
+					:disabled="!runtimeChangeAllowed"
+					@click="confirmRuntimeChange"
 				>
-					{{ t('marketplace.uninstall') }}
+					{{ t(runtimeReload ? 'marketplace.reload' : 'marketplace.disable') }}
 				</UiButton>
 			</template>
-		</UiDialog>
-		<UiDialog v-model:open="clearOpen" :title="t('marketplace.clearData')" :close-label="t('closeApplication')">
-			<p v-if="clearTarget">{{ t('marketplace.clearConfirm', { name: clearTarget.pluginId }) }}</p>
-			<template v-if="clearTarget" #footer>
-				<UiButton :disabled="submittingIds.has(clearTarget.pluginId)" @click="clearOpen = false">
+		</MarketplaceActionDialog>
+		<MarketplaceActionDialog
+			v-if="clearTarget"
+			v-model:open="clearOpen"
+			:title="t('marketplace.clearData')"
+			:name="clearPackage ? marketplacePackageName(clearPackage, locale) : marketplaceLabel(clearTarget.pluginId)"
+			:plugin-id="clearTarget.pluginId"
+			:version="clearTarget.version"
+			:icon="resolvePluginIcon(clearPackage?.nexus.icon)"
+			:notice="t('marketplace.clearConfirm')"
+			:close-disabled="submittingIds.has(clearTarget.pluginId)"
+			tone="danger"
+		>
+			<template #footer>
+				<UiButton
+					appearance="ghost"
+					:disabled="submittingIds.has(clearTarget.pluginId)"
+					@click="clearOpen = false"
+				>
 					{{ t('marketplace.cancel') }}
 				</UiButton>
 				<UiButton
+					appearance="solid"
 					tone="danger"
 					:loading="submittingIds.has(clearTarget.pluginId)"
 					:disabled="activeIds.has(clearTarget.pluginId)"
@@ -938,10 +1124,19 @@
 					{{ t('marketplace.clearData') }}
 				</UiButton>
 			</template>
-		</UiDialog>
+		</MarketplaceActionDialog>
 		<MarketplaceInstallDialog
 			v-if="installTarget"
 			:open="planOpen"
+			:target="installTarget"
+			:target-package="
+				catalog
+					?.find(({ id }) => id === installTarget?.pluginId)
+					?.versions.find(
+						({ package: item, repositoryId }) =>
+							item.version === installTarget?.version && repositoryId === installTarget?.repositoryId,
+					)?.package
+			"
 			:plan="plan"
 			:planning="planning"
 			:operation="installOperation"
@@ -961,6 +1156,7 @@
 </template>
 <style scoped>
 	.marketplace-app {
+		--marketplace-card-radius: 12px;
 		display: flex;
 		flex-direction: column;
 		min-height: 100%;
@@ -971,12 +1167,76 @@
 		--ui-toolbar-content-basis: 0px;
 		position: sticky;
 		top: 0;
-		z-index: 2;
+		z-index: 5;
 		align-items: center;
-		gap: 12px;
-		padding: 22px 28px;
+		gap: 10px;
+		padding: 16px 28px;
 		background: color-mix(in srgb, var(--ui-surface) 92%, transparent);
 		backdrop-filter: blur(16px);
+	}
+	.marketplace-toolbar :deep(.ui-toolbar__content) {
+		flex: 1 1 0;
+		min-width: 0;
+	}
+	.marketplace-toolbar :deep(.ui-toolbar__content > [data-ui='input']) {
+		width: 100%;
+	}
+	.marketplace-toolbar :deep(.ui-toolbar__actions) {
+		flex: none;
+		margin-inline-start: 0;
+	}
+	.marketplace-nav {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		padding: 3px;
+		flex: none;
+		border-radius: 11px;
+		background: color-mix(in srgb, var(--ui-text) 5%, transparent);
+		border: 1px solid color-mix(in srgb, var(--ui-border) 60%, transparent);
+	}
+	.marketplace-nav__item {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 30px;
+		padding: 0 12px;
+		border: 0;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--ui-muted);
+		font: inherit;
+		font-size: 13px;
+		font-weight: 520;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			background-color var(--ui-motion-duration, 140ms) ease,
+			color var(--ui-motion-duration, 140ms) ease,
+			box-shadow var(--ui-motion-duration, 140ms) ease;
+	}
+	.marketplace-nav__item:hover:not([aria-pressed='true']) {
+		color: var(--ui-text);
+	}
+	.marketplace-nav__item[aria-pressed='true'] {
+		background: var(--ui-surface);
+		color: var(--ui-primary);
+		font-weight: 600;
+		box-shadow: 0 1px 4px color-mix(in srgb, #241b35 10%, transparent);
+	}
+	.marketplace-nav__count {
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--ui-text) 6%, transparent);
+		color: var(--ui-muted);
+		font-size: 11px;
+		font-weight: 550;
+		font-variant-numeric: tabular-nums;
+		line-height: 15px;
+	}
+	.marketplace-nav__item[aria-pressed='true'] .marketplace-nav__count {
+		background: color-mix(in srgb, var(--ui-primary) 13%, transparent);
+		color: var(--ui-primary);
 	}
 	.marketplace-actions {
 		display: flex;
@@ -988,22 +1248,23 @@
 		--ui-button-background: var(--ui-surface);
 		box-shadow: 0 3px 12px color-mix(in srgb, var(--ui-text) 5%, transparent);
 	}
-	.marketplace-manage-entry {
-		--ui-button-radius: 12px;
-		--ui-button-background: color-mix(in srgb, var(--ui-primary) 9%, var(--ui-surface));
-		--ui-button-text: var(--ui-primary);
-		--ui-button-border: color-mix(in srgb, var(--ui-primary) 15%, var(--ui-border));
-	}
 	.marketplace-content {
 		display: flex;
 		flex: 1;
 		flex-direction: column;
 		padding: 0 28px 34px;
 	}
-	@container (max-width: 699px) {
+	@container (max-width: 560px) {
 		.marketplace-toolbar {
-			padding: 18px 16px;
+			flex-wrap: wrap;
+			padding: 14px 16px;
 			gap: 8px;
+		}
+		.marketplace-toolbar :deep(.ui-toolbar__content) {
+			flex-basis: 100%;
+		}
+		.marketplace-toolbar :deep(.ui-toolbar__actions) {
+			margin-inline-start: auto;
 		}
 		.marketplace-content {
 			padding: 0 16px 28px;
@@ -1051,24 +1312,159 @@
 	.marketplace-management-section {
 		margin-top: 28px;
 	}
-	.marketplace-uninstall-data {
+	:global(.marketplace-uninstall-dialog) {
+		--ui-dialog-width: 460px;
+		--ui-dialog-radius: 16px;
+		--ui-dialog-padding: 20px;
+	}
+	:global(.marketplace-uninstall-dialog .ui-dialog__footer) {
+		padding-block: 12px 16px;
+		border-block-start: 1px solid var(--ui-border);
+	}
+	.marketplace-uninstall {
+		display: grid;
+		gap: 12px;
+	}
+	.marketplace-uninstall-target {
+		container-type: inline-size;
+		min-width: 0;
+		border: 1px solid var(--ui-border);
+		border-radius: 10px;
+	}
+	.marketplace-uninstall-target__heading {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
+		gap: 10px;
+		padding: 10px 12px;
+		border-radius: 9px 9px 0 0;
+		background: color-mix(in srgb, var(--ui-primary) 4%, var(--ui-surface));
+	}
+	.marketplace-uninstall-target__heading h3 {
+		min-width: 0;
+		margin: 0;
+		font-size: 16px;
+		font-weight: 650;
+		overflow-wrap: anywhere;
+	}
+	.marketplace-uninstall-target__icon {
+		display: grid;
+		flex: none;
+		inline-size: 34px;
+		block-size: 34px;
+		place-items: center;
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
+		color: var(--ui-primary);
+	}
+	.marketplace-uninstall-target__details {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 34%);
+		margin: 0;
+		border-block-start: 1px solid var(--ui-border);
+	}
+	.marketplace-uninstall-target__details > div {
+		display: grid;
+		align-content: start;
+		gap: 4px;
+		min-width: 0;
+		padding: 9px 12px 10px;
+	}
+	.marketplace-uninstall-target__details > div + div {
+		border-inline-start: 1px solid var(--ui-border);
+	}
+	.marketplace-uninstall-target__details dt {
+		color: var(--ui-muted);
+		font-size: 11px;
+	}
+	.marketplace-uninstall-target__details dd {
+		margin: 0;
+		font-size: 12px;
+		overflow-wrap: anywhere;
+	}
+	.marketplace-uninstall-target__version {
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	@container (max-width: 300px) {
+		.marketplace-uninstall-target__details {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.marketplace-uninstall-target__details > div {
+			grid-template-columns: 60px minmax(0, 1fr);
+			align-items: baseline;
+			gap: 8px;
+		}
+		.marketplace-uninstall-target__details > div + div {
+			border-inline-start: 0;
+			border-block-start: 1px solid var(--ui-border);
+		}
+	}
+	.marketplace-uninstall p {
+		margin: 0;
+		color: var(--ui-muted);
+		font-size: 13px;
+	}
+	.marketplace-uninstall :deep(.ui-list-item__description) {
+		white-space: normal;
+	}
+	.marketplace-uninstall-dependents {
+		--ui-layout-gap: 8px;
+		--ui-section-title-size: 13px;
+	}
+	.marketplace-uninstall-data {
+		--ui-list-radius: 10px;
+		--ui-list-item-padding: 10px 12px;
+	}
+	.marketplace-runtime-impact {
+		display: grid;
+		gap: 6px;
+	}
+	.marketplace-runtime-impact h3,
+	.marketplace-runtime-impact p {
+		margin: 0;
+		font-size: 12px;
+	}
+	.marketplace-runtime-impact p {
+		color: var(--ui-muted);
+	}
+	.marketplace-runtime-impact :deep(.ui-list-item) {
+		--ui-list-item-padding: 7px 10px;
+	}
+	.marketplace-runtime-impact :deep(.ui-list-item__description) {
+		overflow-wrap: anywhere;
+		white-space: normal;
 	}
 	.marketplace-installed-group + .marketplace-installed-group {
 		margin-top: 22px;
 	}
-	.marketplace-installed-group > h3 {
-		margin: 0 0 10px;
+	.marketplace-installed-group__heading {
+		margin-bottom: 10px;
+		padding-inline: 2px;
+	}
+	.marketplace-installed-group__heading > h3 {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0;
 		color: var(--ui-text);
-		font-size: 14px;
+		font-size: 14.5px;
 		font-weight: 600;
 	}
-	.marketplace-cards {
+	.marketplace-installed-group__heading > h3 > span {
+		font-size: 10.5px;
+		font-weight: 550;
+		font-variant-numeric: tabular-nums;
+		color: var(--ui-muted);
+		background: color-mix(in srgb, var(--ui-text) 6%, transparent);
+		border-radius: 6px;
+		padding: 2px 6px;
+	}
+	.marketplace-installed-cards {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
-		gap: 14px;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 252px), 1fr));
+		gap: 10px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 </style>

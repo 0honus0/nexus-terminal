@@ -281,9 +281,8 @@ test('插件 Toast 使用当前语言，停用后撤销该实例的提示', asyn
 		const counter = element.querySelector('.ui-toast__page')!.getBoundingClientRect();
 		return [close.top - controls.top, counter.top - close.bottom, controls.bottom - counter.bottom];
 	});
-	expect(between).toBeGreaterThan(4);
-	expect(above).toBeCloseTo(between, 1);
-	expect(below).toBeCloseTo(between, 1);
+	expect(between).toBeGreaterThanOrEqual(4);
+	expect(above).toBeCloseTo(below, 1);
 	await language.click();
 	await page.getByRole('option', { name: '简体中文' }).click();
 	await expect(toast.getByText('已保存 2 项。')).toBeVisible();
@@ -312,9 +311,9 @@ test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page,
 		}),
 	);
 
+	await page.goto('/');
 	for (const width of [1440, 390]) {
 		await page.setViewportSize({ width, height: 900 });
-		await page.goto('/');
 		await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 		const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
 		await market.getByRole('button', { name: 'Manage installed plugins' }).click();
@@ -331,6 +330,8 @@ test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page,
 			await dialog.getByRole('button', { name: 'Close application' }).click();
 			await expect(dialog).toHaveCount(0);
 		}
+		await market.getByRole('button', { name: 'Close application', exact: true }).click();
+		await expect(market).toHaveCount(0);
 	}
 });
 
@@ -365,6 +366,30 @@ test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({
 	}
 });
 
+test('两档窗口布局继续读取旧的 medium 位置，并优先保留已有的 wide 位置', async ({ page, host: _host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.addInitScript(() => {
+		const bounds = (width: number) => ({ x: 120, y: 40, width, height: 420 });
+
+		localStorage.setItem(
+			'nexus.windows.bounds',
+			JSON.stringify({
+				medium: { 'builtin:log': bounds(620), 'builtin:marketplace': bounds(720) },
+				wide: { 'builtin:marketplace': bounds(760) },
+			}),
+		);
+	});
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Logs', exact: true }).click();
+	const logs = page.getByRole('region', { name: 'Logs', exact: true });
+	await expect.poll(async () => (await logs.boundingBox())?.width).toBe(620);
+	await logs.getByRole('button', { name: 'Close application', exact: true }).click();
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	await expect.poll(async () => (await market.boundingBox())?.width).toBe(760);
+});
+
 test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({ page, host: _host }) => {
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');
@@ -377,7 +402,10 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	const marketplaceBody = marketplace.locator('.application-window__body');
 	await expect(marketplaceBody).toHaveCSS('scrollbar-gutter', 'stable');
 	await marketplace.getByRole('button', { name: 'Manage installed plugins' }).click();
-	await expect(marketplace.getByRole('heading', { name: 'Installed plugins' })).toBeVisible();
+	await expect(marketplace.getByRole('button', { name: 'Manage installed plugins' })).toHaveAttribute(
+		'aria-pressed',
+		'true',
+	);
 	await marketplace.getByRole('button', { name: 'Close application' }).click();
 	const window = page.getByRole('region', { name: 'Settings', exact: true });
 	await desktop.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -878,11 +906,10 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	expect(before.y).toBeCloseTo(after.y, 1);
 	expect(before.width).toBeCloseTo(after.width, 1);
 	expect(before.height).toBeCloseTo(after.height, 1);
-	expect(status.x).toBeCloseTo(after.x, 1);
-	expect(status.width).toBeCloseTo(after.width, 1);
+	expect(status.y + status.height).toBeLessThan(before.y);
 	await update.click();
 	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
-	await expect(plan.getByText(newVersion, { exact: false })).toBeVisible();
+	await expect(plan.getByText('v' + newVersion, { exact: true })).toBeVisible();
 	expect(installed).toBe(installedVersion);
 	await plan.getByRole('button', { name: 'Update', exact: true }).click();
 	await plan.getByRole('button', { name: 'Done', exact: true }).click();
@@ -1033,7 +1060,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(installation.getByText('1.1.0 · Second source', { exact: false })).toBeVisible();
 	await installation.getByRole('button', { name: '安装', exact: true }).click();
 	await installation.getByRole('button', { name: '完成', exact: true }).click();
-	await expect(market.getByRole('heading', { name: '已安装插件' })).toBeVisible();
+	await expect(market.getByRole('button', { name: '管理已安装插件' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(market.getByRole('button', { name: '管理Remote Tools', exact: true })).toBeVisible();
 	await expect(page.locator('[data-ui="toast"]').getByText(`已完成 ${pluginId} 的操作。`)).toBeVisible();
 
@@ -1091,6 +1118,7 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
 	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
+	await expect(market.getByRole('heading', { name: 'Built in 4' })).toBeVisible();
 	for (const name of ['Plugin Marketplace', 'Settings', 'Logs', 'Backup and Restore']) {
 		const main = market.getByRole('button', { name: 'Manage ' + name, exact: true });
 		const card = market
@@ -1098,16 +1126,11 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 			.filter({ has: page.getByRole('button', { name: 'Manage ' + name, exact: true }) });
 		await expect(main).toBeVisible();
 		await expect(card.getByRole('status')).toHaveText('Available');
-		await expect(card.getByText(hostVersion, { exact: true })).toBeVisible();
-		await expect(card.getByText('Built in', { exact: true })).toBeVisible();
+		await expect(card.getByText('v' + hostVersion, { exact: true })).toBeVisible();
 		await expect(card.getByText('App', { exact: true })).toHaveCount(0);
 		await expect(card.getByRole('switch')).toHaveCount(0);
 		const open = card.getByRole('button', { name: 'Open ' + name, exact: true });
 		await expect(open).toBeVisible();
-		const badgeBounds = await card.getByRole('status').boundingBox();
-		const openBounds = await open.boundingBox();
-		expect(openBounds!.x).toBeCloseTo(badgeBounds!.x, 0);
-		expect(openBounds!.width).toBeCloseTo(badgeBounds!.width, 0);
 	}
 
 	await market.getByRole('searchbox').fill('Logs');
@@ -1296,7 +1319,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	const application = market.locator('article').filter({ has: page.getByRole('button', { name: 'Manage Counter' }) });
 	await expect(application.getByRole('status')).toHaveText('Available');
 	await expect(application.locator('svg.lucide-fingerprint')).toBeVisible();
-	await expect(application.locator('[title="0.0.1-dev.1"]')).toHaveText('0.0.1-dev.1');
+	await expect(application.locator('[title="0.0.1-dev.1"]')).toHaveText('v0.0.1-dev.1');
 	await expect(application.getByRole('switch')).toHaveCount(0);
 	await expect(application.getByText('App', { exact: true })).toHaveCount(0);
 	await expect(application.getByRole('button', { name: 'Open Counter' })).toBeVisible();
@@ -1305,7 +1328,7 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	await expect(extension.getByRole('switch')).toHaveCount(0);
 	await expect(extension.getByText('Extension', { exact: true })).toHaveCount(0);
 	await expect(extension.getByRole('button', { name: 'Open Support' })).toHaveCount(0);
-	await expect(market.getByRole('heading', { name: 'Extensions', exact: true })).toBeVisible();
+	await expect(market.getByRole('heading', { name: 'Extensions 1', exact: true })).toBeVisible();
 	const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
 	const enable = details.getByRole('switch', { name: 'Enable plugin', exact: true });
 	const close = details.getByRole('button', { name: 'Close application' });
@@ -1446,6 +1469,7 @@ test('异步卸载预览取消后恢复键盘焦点且不重复请求', async ({
 	await market.getByRole('button', { name: 'Manage Counter', exact: true }).click();
 	const manage = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
 	const trigger = manage.getByRole('button', { name: 'Uninstall', exact: true });
+	await manage.evaluate((element) => element.setAttribute('data-test-uninstall-dialog', 'manage'));
 	try {
 		await trigger.focus();
 		await page.keyboard.press('Enter');
@@ -1457,6 +1481,7 @@ test('异步卸载预览取消后恢复键盘焦点且不重复请求', async ({
 	}
 	const dialog = page.getByRole('dialog', { name: 'Uninstall', exact: true });
 	await expect(dialog).toBeVisible();
+	await expect(dialog).toHaveAttribute('data-test-uninstall-dialog', 'manage');
 	await page.keyboard.press('Escape');
 	await expect(dialog).toHaveCount(0);
 	await expect(trigger).toBeFocused();

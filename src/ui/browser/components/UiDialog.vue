@@ -44,7 +44,11 @@
 				? translate('desktop.resize', { title: props.title })
 				: 'Resize ' + props.title),
 	);
-	const emit = defineEmits<{ storageError: [cause: unknown]; closeAutoFocus: [event: Event] }>();
+	const emit = defineEmits<{
+		storageError: [cause: unknown];
+		closeAutoFocus: [event: Event];
+		escapeKeyDown: [event: KeyboardEvent];
+	}>();
 	const element = shallowRef<HTMLElement>();
 	const geometry = useDialogGeometry(props, open, element, (cause) => emit('storageError', cause));
 	defineSlots<{
@@ -61,6 +65,11 @@
 	function updateOpen(value: boolean) {
 		if (!value && props.closeDisabled) return;
 		open.value = value;
+	}
+
+	function escapeKeyDown(event: KeyboardEvent): void {
+		if (props.closeDisabled || !props.closeOnEscape) event.preventDefault();
+		else emit('escapeKeyDown', event);
 	}
 </script>
 
@@ -80,16 +89,19 @@
 					force-mount
 					as-child
 					@close-auto-focus="emit('closeAutoFocus', $event)"
-					@escape-key-down="
-						(event) => (props.closeDisabled || !props.closeOnEscape) && event.preventDefault()
-					"
+					@escape-key-down="escapeKeyDown"
 					@interact-outside="
 						(event) => (props.closeDisabled || !props.closeOnInteractOutside) && event.preventDefault()
 					"
 				>
 					<div
 						ref="element"
-						v-bind="{ ...$attrs, ...(!props.description ? { 'aria-describedby': undefined } : {}) }"
+						v-bind="{
+							...$attrs,
+							...(!props.description && !('aria-describedby' in $attrs)
+								? { 'aria-describedby': undefined }
+								: {}),
+						}"
 						data-ui="dialog"
 						:data-size="props.size"
 						:data-geometry="geometry.enabled.value || undefined"

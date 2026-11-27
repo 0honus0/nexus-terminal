@@ -1,7 +1,7 @@
 import { computed, shallowReactive, shallowRef, type Component } from 'vue';
 import { useStorage } from '@vueuse/core';
 import { z } from 'zod';
-import { LayoutProfileSchema, resolveLayoutProfile } from '../../layout/layout-api.js';
+import { resolveLayoutProfile } from '../../layout/layout-api.js';
 import type { LogApi } from '../../log/browser/log-api.js';
 import { PluginViewScope } from '../../plugin/browser/plugin-view-api.js';
 import type { PluginComponentEntry } from '../../plugin/plugin-api.browser.js';
@@ -18,7 +18,11 @@ const BoundsSchema = z.strictObject({
 	height: z.number().positive(),
 });
 
-const PlacementsSchema = z.partialRecord(LayoutProfileSchema, z.record(z.string(), BoundsSchema));
+const ProfilePlacementsSchema = z.record(z.string(), BoundsSchema).optional();
+
+const PlacementsSchema = z
+	.object({ compact: ProfilePlacementsSchema, medium: ProfilePlacementsSchema, wide: ProfilePlacementsSchema })
+	.transform(({ compact, medium, wide }) => ({ compact, wide: { ...medium, ...wide } }));
 
 export type WindowBounds = z.infer<typeof BoundsSchema>;
 
@@ -218,15 +222,22 @@ export class WindowApi {
 
 	#initialBounds(application: WindowApplication): WindowBounds {
 		const saved = this.#positions.value[this.profile.value]?.[application.key];
-		const offset = (this.#items.value.length % 6) * 26;
-		return (
-			saved ?? {
-				x: 70 + offset,
-				y: 24 + offset,
-				width: application.size?.width ?? 880,
-				height: application.size?.height ?? 600,
-			}
-		);
+		if (saved) return saved;
+		const offset = (this.#items.value.length % 6) * 24;
+		const viewport = this.#viewport.value;
+		const width = application.size?.width ?? 900;
+		const height = application.size?.height ?? 620;
+		if (viewport.width <= 0 || viewport.height <= 0) {
+			return { x: 70 + offset, y: 24 + offset, width, height };
+		}
+		const fittedWidth = Math.min(viewport.width - 96, width);
+		const fittedHeight = Math.min(viewport.height - 64, height);
+		return {
+			x: Math.max(82, Math.round((viewport.width + 64 - fittedWidth) / 2) + offset - 24),
+			y: Math.max(20, Math.round((viewport.height - fittedHeight) / 2) + offset - 24),
+			width: Math.max(320, fittedWidth),
+			height: Math.max(240, fittedHeight),
+		};
 	}
 
 	#fit(bounds: WindowBounds): WindowBounds {
