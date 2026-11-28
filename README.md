@@ -13,7 +13,7 @@ NEXUS_IMAGE_TAG=latest docker compose up -d
 浏览器打开 `http://localhost:18111`，首次访问时创建管理员账户。对外使用时，通过支持 WebSocket 的 HTTPS 反向代理提供访问。
 
 - 正式版镜像使用 `latest` 和版本号标签，由 `main` 的正式标签发布。
-- 测试版镜像使用 `dev` 和带 `-dev` 的版本标签，由 `dev` 的测试标签发布。
+- 测试版镜像使用 `dev` 和版本标签，由 `dev` 分支的 `vMAJOR.MINOR.PATCH-dev` 或 `vMAJOR.MINOR.PATCH-dev.N` 发布。测试版镜像标签与 SDK 包版本独立。
 - 每次发布另外生成 `sha-<commit>` 镜像。部署或测试需要固定本体时，使用这个标签。
 
 当前安装文档面向新架构和全新数据目录。旧架构的数据目录与备份升级流程未验证。

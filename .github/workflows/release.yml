@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ endsWith(github.ref_name, '-dev') && 'dev' || 'stable' }}
+  group: release-${{ contains(github.ref_name, '-dev') && 'dev' || 'stable' }}
   cancel-in-progress: false
 
 jobs:
@@ -33,10 +33,10 @@ jobs:
         run: |
           set -euo pipefail
           version=${RELEASE_TAG#v}
-          if [[ "$RELEASE_TAG" == v*-dev ]]; then
+          if [[ "$version" =~ -dev(\.[1-9][0-9]*)?$ ]]; then
             channel=dev
             branch=dev
-            version=${version%-dev}
+            version=${version%-dev*}
             platforms=linux/amd64
           else
             channel=latest
@@ -45,7 +45,7 @@ jobs:
           fi
 
           if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "Expected vMAJOR.MINOR.PATCH-dev or vMAJOR.MINOR.PATCH." >&2
+            echo "Expected vMAJOR.MINOR.PATCH, vMAJOR.MINOR.PATCH-dev or vMAJOR.MINOR.PATCH-dev.N." >&2
             exit 1
           fi
           if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "refs/remotes/origin/$branch")" ]]; then
@@ -134,6 +134,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_CHANNEL: ${{ needs.prepare.outputs.channel }}
         shell: bash
         run: |
           set -euo pipefail
@@ -145,6 +146,6 @@ jobs:
             fi
           else
             flags=()
-            if [[ "$RELEASE_TAG" == *-dev ]]; then flags+=(--prerelease --latest=false); fi
+            if [[ "$RELEASE_CHANNEL" == dev ]]; then flags+=(--prerelease --latest=false); fi
             gh release create "$RELEASE_TAG" "${artifact[0]}" --verify-tag --generate-notes "${flags[@]}"
           fi
