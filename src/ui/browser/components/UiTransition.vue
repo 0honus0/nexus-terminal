@@ -6,6 +6,10 @@
 	const hidden = new WeakMap<HTMLElement, string | null>();
 
 	function frames(leaving = false): Keyframe[] {
+		if (props.preset === 'sheet') {
+			const entering = [{ translate: '0 100%' }, { translate: '0 0' }];
+			return leaving ? entering.reverse() : entering;
+		}
 		if (props.preset === 'drop') {
 			const visible = { opacity: 1, clipPath: 'inset(-16px)' };
 			return leaving
@@ -35,7 +39,7 @@
 			done();
 			return;
 		}
-		play(element, frames(), props.preset === 'context-menu' ? 90 : 200, done);
+		play(element, frames(), props.preset === 'sheet' ? 220 : props.preset === 'context-menu' ? 90 : 200, done);
 	}
 
 	function leave(target: Element, done: () => void) {
@@ -48,7 +52,13 @@
 			done();
 			return;
 		}
-		play(element, frames(true), props.preset === 'context-menu' ? 60 : 140, done);
+		play(
+			element,
+			frames(true),
+			props.preset === 'sheet' ? 175 : props.preset === 'context-menu' ? 60 : 140,
+			done,
+			props.preset === 'sheet' ? [0.4, 0, 1, 1] : undefined,
+		);
 	}
 </script>
 

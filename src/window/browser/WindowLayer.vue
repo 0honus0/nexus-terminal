@@ -13,6 +13,22 @@
 	const layer = ref<HTMLElement>();
 	const { width, height } = useElementSize(layer);
 	watch([width, height], ([w, h]) => windows.resize(w, h), { immediate: true });
+	const visualViewport = window.visualViewport;
+	const viewportTop = ref(0);
+	const viewportBottom = ref(0);
+
+	function syncVisibleViewport(): void {
+		// A browser that resizes the layout viewport already leaves no hidden area.
+		const unzoomed = visualViewport?.scale === 1 && visualViewport.height > 0;
+		const top = unzoomed ? Math.max(0, visualViewport.offsetTop) : 0;
+		viewportTop.value = top;
+		viewportBottom.value = unzoomed ? Math.max(0, window.innerHeight - visualViewport.height - top) : 0;
+	}
+
+	useEventListener(visualViewport, ['resize', 'scroll'], syncVisibleViewport);
+	useEventListener(window, 'resize', syncVisibleViewport);
+	syncVisibleViewport();
+
 	useEventListener('keydown', (event) => {
 		const active = windows.active.value;
 		if (!active || event.defaultPrevented || event.key !== 'Escape') return;
@@ -31,7 +47,11 @@
 </script>
 
 <template>
-	<div ref="layer" class="window-layer">
+	<div
+		ref="layer"
+		class="window-layer"
+		:style="{ '--visible-viewport-top': viewportTop + 'px', '--visible-viewport-bottom': viewportBottom + 'px' }"
+	>
 		<WindowFrame v-for="item in windows.items.value" :key="item.id" :item="item" :windows="windows" :log="log">
 			<slot :application="item.application" :minimized="item.minimized" />
 		</WindowFrame>
@@ -47,7 +67,7 @@
 	}
 	@media (max-width: 699px) {
 		.window-layer {
-			inset: 0;
+			inset: var(--visible-viewport-top) 0 var(--visible-viewport-bottom);
 		}
 	}
 </style>

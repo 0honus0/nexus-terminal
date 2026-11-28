@@ -88,6 +88,8 @@ export interface UiDialogProps {
 	/** 调用方提供本地化的关闭按钮名称。 */
 	closeLabel: string;
 	size?: UiDialogSize;
+	/** Presence motion for the panel. Bottom-aligned dialogs can use the sheet preset. */
+	transitionPreset?: UiTransitionProps['preset'];
 	showClose?: boolean;
 	/** 暂时禁止用户关闭，保留关闭按钮的位置；宿主仍可主动更新 open。 */
 	closeDisabled?: boolean;
@@ -262,7 +264,7 @@ export interface UiProgressRowProps {
 
 /** Shared transform/opacity presence transition, using host motion preferences. */
 export interface UiTransitionProps {
-	preset?: 'none' | 'fade' | 'drop' | 'panel' | 'context-menu';
+	preset?: 'none' | 'fade' | 'drop' | 'panel' | 'sheet' | 'context-menu';
 	appear?: boolean;
 }
 

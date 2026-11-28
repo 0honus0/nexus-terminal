@@ -85,9 +85,10 @@
 					v-if="props.modal && open"
 					force-mount
 					data-ui="dialog-overlay"
+					:data-sheet="props.transitionPreset === 'sheet' || undefined"
 					class="ui-dialog-overlay"
 			/></UiTransition>
-			<UiTransition
+			<UiTransition :preset="props.transitionPreset"
 				><DialogContent
 					v-if="open"
 					force-mount
@@ -172,6 +173,9 @@
 		z-index: var(--ui-dialog-z-index, 100);
 		background: var(--ui-dialog-overlay, #17152b55);
 		backdrop-filter: var(--ui-dialog-overlay-filter, blur(7px));
+	}
+	.ui-dialog-overlay[data-sheet] {
+		backdrop-filter: none;
 	}
 	.ui-dialog {
 		--_dialog-section-padding: clamp(10px, calc(var(--ui-dialog-padding, 26px) - 10px), 16px);

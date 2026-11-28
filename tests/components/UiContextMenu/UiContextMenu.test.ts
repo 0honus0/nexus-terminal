@@ -78,33 +78,44 @@ it('does not select a menu item when the opening right-click releases over it', 
 	}
 });
 
-it('keeps a touch long-press menu open when focus returns to its trigger on release', async () => {
-	vi.useFakeTimers();
+it('consumes the click following a touch long press and preserves ordinary taps', async () => {
+	const clicked = vi.fn();
 	const wrapper = mount(UiContextMenu, {
 		attachTo: document.body,
 		props: { items: [{ id: 'pin', label: 'Pin' }] },
 		slots: { default: '<button>Application</button>' },
 	});
 	try {
-		wrapper.find('button').element.dispatchEvent(
-			new PointerEvent('pointerdown', {
-				bubbles: true,
-				pointerType: 'touch',
-				clientX: 50,
-				clientY: 40,
-			}),
-		);
-		await nextTick();
-		await vi.advanceTimersByTimeAsync(701);
+		const button = wrapper.find('button').element;
+		button.addEventListener('click', clicked);
+		const touch = {
+			bubbles: true,
+			cancelable: true,
+			pointerType: 'touch',
+			pointerId: 4,
+			isPrimary: true,
+			clientX: 50,
+			clientY: 40,
+		};
+		button.dispatchEvent(new PointerEvent('pointerdown', touch));
+		await wrapper.find('button').trigger('contextmenu', { clientX: 50, clientY: 40 });
+		await flushPromises();
 		expect(document.querySelector('[role="menu"]')).not.toBeNull();
-		wrapper
-			.find('button')
-			.element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerType: 'touch' }));
-		wrapper.find('button').element.focus();
+		button.dispatchEvent(new PointerEvent('pointerup', touch));
+		const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+		button.dispatchEvent(mouseDown);
+		expect(mouseDown.defaultPrevented).toBe(true);
+		button.dispatchEvent(new PointerEvent('click', { ...touch, detail: 1 }));
+		expect(clicked).not.toHaveBeenCalled();
 		await nextTick();
-		expect(document.querySelector('[role="menu"]')).not.toBeNull();
+		const item = document.querySelector<HTMLElement>('[role="menuitem"]')!;
+		item.click();
+		expect(wrapper.emitted('select')).toEqual([['pin']]);
+		button.dispatchEvent(new PointerEvent('pointerdown', touch));
+		button.dispatchEvent(new PointerEvent('pointerup', touch));
+		button.dispatchEvent(new PointerEvent('click', { ...touch, detail: 1 }));
+		expect(clicked).toHaveBeenCalledOnce();
 	} finally {
 		wrapper.unmount();
-		vi.useRealTimers();
 	}
 });

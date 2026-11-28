@@ -574,6 +574,47 @@ test('窗口尺寸、最大化、最小化和分档恢复不丢失应用状态',
 	expect(await readBounds()).toEqual(saved);
 });
 
+test('窄屏窗口跟随键盘遮挡后的可视区域并在收起时恢复', async ({ page, host: _host }) => {
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+		'content',
+		/interactive-widget=resizes-content/u,
+	);
+	await page.getByRole('button', { name: 'Counter', exact: true }).click();
+	const counter = page.getByRole('region', { name: 'Counter', exact: true });
+
+	const bounds = () => counter.boundingBox();
+
+	await expect.poll(bounds).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+
+	async function setVisualViewport(height: number, offsetTop: number, scale: number) {
+		await page.evaluate(
+			(values) => {
+				const viewport = window.visualViewport!;
+				for (const [key, value] of Object.entries(values))
+					Object.defineProperty(viewport, key, { configurable: true, value });
+				viewport.dispatchEvent(new Event(values.offsetTop ? 'scroll' : 'resize'));
+			},
+			{ height, offsetTop, scale },
+		);
+	}
+
+	await setVisualViewport(520, 0, 1);
+	await expect.poll(bounds).toEqual({ x: 0, y: 0, width: 390, height: 520 });
+	await setVisualViewport(520, 30, 1);
+	await expect.poll(bounds).toEqual({ x: 0, y: 30, width: 390, height: 520 });
+	await setVisualViewport(520, 30, 1.5);
+	await expect.poll(bounds).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+	await setVisualViewport(520, 0, 1);
+	await page.setViewportSize({ width: 390, height: 520 });
+	await expect.poll(bounds).toEqual({ x: 0, y: 0, width: 390, height: 520 });
+	await setVisualViewport(844, 0, 1);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect.poll(bounds).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+});
+
 test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩放', async ({ page, host: _host }) => {
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');
