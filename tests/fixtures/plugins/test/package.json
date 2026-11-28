@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "peerDependencies": {
-    "nexus-terminal": "^1.0.0"
+    "nexus-terminal": "*"
   },
   "nexus": {
     "kind": "extension",

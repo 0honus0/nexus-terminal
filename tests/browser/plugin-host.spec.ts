@@ -843,7 +843,7 @@ test('市场先显示缓存，官方仓库刷新后显示新目录', async ({ pa
 									version: refreshed ? '1.1.0' : '1.0.0',
 									description: refreshed ? 'Refreshed catalog' : 'Cached catalog',
 									type: 'module',
-									peerDependencies: { 'nexus-terminal': '^1.0.0' },
+									peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 									nexus: { kind: 'extension', entry: { backend: 'index.mjs' } },
 								},
 							},
@@ -896,7 +896,7 @@ test('发现仅显示未安装的应用和扩展', async ({ page, host: _host })
 								description: name + ' description',
 								version: '1.0.0',
 								type: 'module',
-								peerDependencies: { 'nexus-terminal': '^1.0.0' },
+								peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 								nexus: { kind, entry },
 							},
 						},
@@ -952,7 +952,7 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 		name: pluginId,
 		displayName: 'Counter',
 		type: 'module',
-		peerDependencies: { 'nexus-terminal': '^1.0.0' },
+		peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 		nexus: { kind: 'application', entry: { frontend: 'index.js' } },
 	};
 	let installed = installedVersion;
@@ -1087,7 +1087,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 		version: '1.1.0',
 		description: 'Manage remote files and processes.',
 		type: 'module',
-		peerDependencies: { 'nexus-terminal': '^1.0.0' },
+		peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 		nexus: {
 			kind: 'extension',
 			icon: 'wrench',
@@ -1781,7 +1781,7 @@ for (const later of [false, true]) {
 			official: true,
 		};
 		const target = { kind: 'repository', repositoryId: repository.id, pluginId, version };
-		const manifest = { version, type: 'module', peerDependencies: { 'nexus-terminal': '^1.0.0' } };
+		const manifest = { version, type: 'module', peerDependencies: { 'nexus-terminal': '^' + hostVersion } };
 		const pack = {
 			...manifest,
 			name: pluginId,

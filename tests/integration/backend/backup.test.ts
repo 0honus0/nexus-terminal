@@ -1,3 +1,4 @@
+import { version as hostVersion } from '../../../package.json' with { type: 'json' };
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { on, once } from 'node:events';
@@ -57,7 +58,7 @@ test('备份已停用插件，跨宿主重加密密文，恢复完成后重新�
 			name: pluginId,
 			version: '1.0.0',
 			type: 'module',
-			peerDependencies: { 'nexus-terminal': '^1.0.0' },
+			peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 			nexus: { kind: 'extension', entry: { backend: 'index.mjs' } },
 		}),
 	);
@@ -355,7 +356,7 @@ test('缺少插件时预览只读，确认后安装准确版本并在数据写�
 			name,
 			type: 'module',
 			version: '1.0.0',
-			peerDependencies: { 'nexus-terminal': '^1.0.0' },
+			peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 			nexus: { kind: 'extension', entry: { backend: 'index.mjs' }, dependsOn },
 		};
 		await Promise.all([

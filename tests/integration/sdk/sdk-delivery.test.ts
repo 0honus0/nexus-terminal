@@ -92,6 +92,7 @@ async function buildPlugin(directory: string): Promise<{ archive: Buffer; manife
 	const installedSdk = JSON.parse(
 		await readFile(join(directory, 'node_modules/nexus-terminal/package.json'), 'utf8'),
 	);
+	assert.equal(installedSdk.version, pkg.version);
 	assert.deepEqual(Object.keys(installedSdk.exports), Object.keys(pkg.exports));
 	assert.ok(installedSdk.exports['./browser/ui'].types.endsWith('.d.ts'));
 	await command(

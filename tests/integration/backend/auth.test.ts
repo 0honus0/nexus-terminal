@@ -1,3 +1,4 @@
+import { version as hostVersion } from '../../../package.json' with { type: 'json' };
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { get, type IncomingMessage } from 'node:http';
@@ -155,7 +156,7 @@ test('登录扩展按实例和就绪状态登记，登录沿用宿主会话', { 
 				name: pluginId,
 				version: '1.0.0',
 				type: 'module',
-				peerDependencies: { 'nexus-terminal': '^1.0.0' },
+				peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 				nexus: { kind: 'extension', entry: { backend: 'index.mjs' }, authMethods: true },
 			}),
 		),

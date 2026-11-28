@@ -1,3 +1,4 @@
+import { version as hostVersion } from '../../../package.json' with { type: 'json' };
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { on, once } from 'node:events';
@@ -149,7 +150,7 @@ async function writePlugin(
 				version,
 				displayName,
 				type: 'module',
-				peerDependencies: { 'nexus-terminal': '^1.0.0' },
+				peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 				nexus: {
 					kind: 'extension',
 					icon,
@@ -246,7 +247,14 @@ function catalogEntry(
 	return {
 		id,
 		versions: versions.map(
-			({ version = '1.0.0', dependsOn, requiredFor, kind = 'extension', sdk = '^1.0.0', distributions }) => ({
+			({
+				version = '1.0.0',
+				dependsOn,
+				requiredFor,
+				kind = 'extension',
+				sdk = '^' + hostVersion,
+				distributions,
+			}) => ({
 				repositoryId: 'publisher-controlled-id',
 				package: {
 					name: id,

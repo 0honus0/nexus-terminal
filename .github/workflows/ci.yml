@@ -49,11 +49,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:browser
-      - run: pnpm test:sdk
+      - name: Test and locate the SDK for the host version
+        id: sdk
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm test:sdk
+          version=$(node -p "require('./package.json').version")
+          echo "artifact=dist/nexus-terminal-$version.tgz" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nexus-terminal-sdk
-          path: dist/nexus-terminal-*.tgz
+          path: ${{ steps.sdk.outputs.artifact }}
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

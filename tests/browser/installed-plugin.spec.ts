@@ -1,3 +1,4 @@
+import { version as hostVersion } from '../../package.json' with { type: 'json' };
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { create as createArchive } from 'tar';
@@ -48,7 +49,7 @@ async function buildPlugin(directory: string, version: string): Promise<void> {
 			name: pluginId,
 			version,
 			type: 'module',
-			peerDependencies: { 'nexus-terminal': '^1.0.0' },
+			peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 			nexus: { kind: 'extension', entry: { frontend: 'dist/browser/index.mjs' } },
 		}),
 	);
@@ -601,7 +602,7 @@ test('匿名阶段只加载就绪的登录插件和依赖，登录复用实例�
 					name,
 					version: '1.0.0',
 					type: 'module',
-					peerDependencies: { 'nexus-terminal': '^1.0.0' },
+					peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 					nexus: {
 						kind: 'extension',
 						entry: { backend: 'backend.mjs', frontend: 'browser/index.mjs' },
@@ -752,7 +753,7 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 											name: id,
 											version,
 											type: 'module',
-											peerDependencies: { 'nexus-terminal': '^1.0.0' },
+											peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 											nexus: { kind: 'extension', entry: { backend: 'index.mjs' } },
 										},
 										distributions: [
@@ -929,7 +930,7 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 				version,
 				displayName: name === id ? 'Lifecycle Fixture' : 'Lifecycle Support',
 				type: 'module',
-				peerDependencies: { 'nexus-terminal': '^1.0.0' },
+				peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 				nexus: { kind: 'extension', entry: { backend: 'index.mjs' }, dependsOn },
 			}),
 		);

@@ -1,3 +1,4 @@
+import { version as hostVersion } from '../../../package.json' with { type: 'json' };
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -48,7 +49,7 @@ async function writePlugin(
 				name,
 				version,
 				type: 'module',
-				peerDependencies: { 'nexus-terminal': '^1.0.0' },
+				peerDependencies: { 'nexus-terminal': '^' + hostVersion },
 				nexus: { kind: 'extension', entry: { backend: 'index.mjs' }, dependsOn },
 			}),
 		),
