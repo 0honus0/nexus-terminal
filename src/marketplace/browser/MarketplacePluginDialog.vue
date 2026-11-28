@@ -57,7 +57,8 @@
 		},
 		{ immediate: true },
 	);
-	const selected = computed(() => versions.value.find((option) => option.value === selection.value)?.version);
+	const selectedOption = computed(() => versions.value.find((option) => option.value === selection.value));
+	const selected = computed(() => selectedOption.value?.version);
 	const selectedUpdate = computed(() =>
 		props.installed && selected.value && isMarketplaceUpdate(props.installed, selected.value)
 			? selected.value
@@ -84,27 +85,24 @@
 <template>
 	<UiDialog v-model:open="open" :title="t('marketplace.pluginDetails')" :close-label="t('closeApplication')">
 		<template v-if="plugin && displayPackage">
-			<div class="catalog-detail__hero" :data-kind="displayPackage.nexus.kind">
-				<div class="catalog-detail__top">
-					<span class="catalog-detail__icon"
-						><component
-							:is="
-								resolvePluginIcon(displayPackage.nexus.icon) ??
-								(displayPackage.nexus.kind === 'application' ? AppWindow : Puzzle)
-							"
-							:size="30"
-							:stroke-width="1.5"
-					/></span>
-					<span class="catalog-detail__kind">{{
-						t(
-							displayPackage.nexus.kind === 'application'
-								? 'marketplace.application'
-								: 'marketplace.plugin',
-						)
-					}}</span>
+			<div class="catalog-detail__summary" :data-kind="displayPackage.nexus.kind">
+				<span class="catalog-detail__icon" aria-hidden="true">
+					<component
+						:is="
+							resolvePluginIcon(displayPackage.nexus.icon) ??
+							(displayPackage.nexus.kind === 'application' ? AppWindow : Puzzle)
+						"
+						:size="24"
+						:stroke-width="1.65"
+					/>
+				</span>
+				<div class="catalog-detail__identity" data-ui-selection="text">
+					<h2>{{ marketplacePackageName(displayPackage, locale) }}</h2>
+					<small>{{ plugin.id }}</small>
 				</div>
-				<h2>{{ marketplacePackageName(displayPackage, locale) }}</h2>
-				<small data-ui-selection="text">{{ plugin.id }}</small>
+				<span class="catalog-detail__kind">{{
+					t(displayPackage.nexus.kind === 'application' ? 'marketplace.application' : 'marketplace.plugin')
+				}}</span>
 			</div>
 			<p
 				v-if="marketplaceDescription(displayPackage, locale)"
@@ -114,24 +112,35 @@
 				{{ marketplaceDescription(displayPackage, locale) }}
 			</p>
 			<div class="catalog-detail__version">
-				<span>{{ t('marketplace.versionSource') }}</span>
+				<div v-if="installed" class="catalog-detail__installed">
+					<span>{{ t('marketplace.installed') }}</span>
+					<strong data-ui-selection="text">{{ installed.version }}</strong>
+				</div>
 				<div class="catalog-detail__version-controls">
-					<UiSelect
-						v-model="selection"
-						:options="versions"
-						:disabled="installing"
-						block
-						:aria-label="t('marketplace.versionSource')"
-						:placeholder="t('marketplace.noReleaseVersions')"
-					/>
-					<UiSelect
-						v-model="release"
-						:options="releaseOptions"
-						:disabled="installing"
-						block
-						:aria-label="t('marketplace.releaseChannel')"
-						content-align="end"
-					/>
+					<div class="catalog-detail__field">
+						<span aria-hidden="true">{{ t('marketplace.releaseChannel') }}</span>
+						<UiSelect
+							v-model="release"
+							:options="releaseOptions"
+							:disabled="installing"
+							block
+							:aria-label="t('marketplace.releaseChannel')"
+							content-align="start"
+						/>
+					</div>
+					<div class="catalog-detail__field catalog-detail__field--version">
+						<span aria-hidden="true">{{ t('marketplace.versionSource') }}</span>
+						<UiSelect
+							v-model="selection"
+							:options="versions"
+							:disabled="installing"
+							block
+							:aria-label="t('marketplace.versionSource')"
+							:placeholder="t('marketplace.noReleaseVersions')"
+							:title="selectedOption?.label"
+							content-align="start"
+						/>
+					</div>
 				</div>
 			</div>
 		</template>
@@ -158,7 +167,7 @@
 				>{{
 					selectedUpdate
 						? t('marketplace.updateVersion', { version: selectedUpdate.package.version })
-						: t('marketplace.previewInstall')
+						: t('marketplace.confirmInstall')
 				}}
 			</UiButton>
 		</template>
@@ -200,68 +209,95 @@
 </template>
 
 <style scoped>
-	.catalog-detail__hero {
+	.catalog-detail__summary {
 		--detail-accent: var(--ui-primary);
-		padding: 22px;
-		border: 1px solid color-mix(in srgb, var(--detail-accent) 16%, var(--ui-border));
-		border-radius: 20px;
-		background: linear-gradient(
-			125deg,
-			color-mix(in srgb, var(--detail-accent) 15%, var(--ui-surface)),
-			color-mix(in srgb, var(--detail-accent) 4%, var(--ui-surface))
-		);
-	}
-	.catalog-detail__hero[data-kind='extension'] {
-		--detail-accent: var(--ui-success);
-	}
-	.catalog-detail__top {
+
 		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 14px;
+		align-items: center;
+		gap: 12px;
+	}
+	.catalog-detail__summary[data-kind='extension'] {
+		--detail-accent: var(--ui-success);
 	}
 	.catalog-detail__icon {
 		color: var(--detail-accent);
 		display: grid;
+		flex: none;
 		place-items: center;
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: color-mix(in srgb, var(--ui-surface) 75%, transparent);
+		width: 44px;
+		height: 44px;
+		border-radius: 11px;
+		background: color-mix(in srgb, var(--detail-accent) 12%, var(--ui-surface));
+	}
+	.catalog-detail__identity {
+		flex: 1;
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 	.catalog-detail__kind {
-		padding: 6px 11px;
+		flex: none;
+		padding: 3px 8px;
 		border-radius: 8px;
 		color: var(--detail-accent);
-		background: color-mix(in srgb, var(--detail-accent) 12%, var(--ui-surface));
+		background: color-mix(in srgb, var(--detail-accent) 9%, var(--ui-surface));
 		font-size: 11px;
 		font-weight: 600;
 	}
 	h2 {
-		font-size: 25px;
-		font-weight: 600;
-		margin: 20px 0 8px;
+		font-size: 19px;
+		font-weight: 650;
+		line-height: 1.3;
+		margin: 0;
 	}
 	small {
 		font-size: 11px;
 		color: var(--ui-muted);
-		overflow-wrap: anywhere;
 	}
 	.catalog-detail__description {
 		color: var(--ui-muted);
 		font-size: 13px;
 		line-height: 1.8;
-		margin: 22px 0;
+		margin: 12px 0 0;
 	}
 	.catalog-detail__version {
 		display: grid;
-		gap: 10px;
+		gap: 12px;
+		margin-top: 16px;
+		padding: 12px;
+		border: 1px solid var(--ui-border);
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--ui-text) 2%, var(--ui-surface));
 		font-size: 12px;
 	}
+	.catalog-detail__installed {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		padding-bottom: 10px;
+		border-bottom: 1px solid var(--ui-border);
+		color: var(--ui-muted);
+	}
+	.catalog-detail__installed strong {
+		min-width: 0;
+		color: var(--ui-text);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		overflow-wrap: anywhere;
+	}
 	.catalog-detail__version-controls {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) 118px;
+		display: flex;
+		flex-wrap: wrap;
 		gap: 10px;
+	}
+	.catalog-detail__field {
+		flex: 1 0 min(100%, 120px);
+		display: grid;
+		gap: 5px;
+		min-width: 0;
+		color: var(--ui-muted);
+	}
+	.catalog-detail__field--version {
+		flex: 2 0 min(100%, 180px);
 	}
 	.catalog-dependencies__section + .catalog-dependencies__section {
 		margin-top: 24px;

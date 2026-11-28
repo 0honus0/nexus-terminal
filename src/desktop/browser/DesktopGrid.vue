@@ -1,7 +1,7 @@
 <script setup lang="ts">
 	import { GridStack, type GridItemHTMLElement } from 'gridstack';
 	import 'gridstack/dist/gridstack.min.css';
-	import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+	import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 	import { useRafFn, useResizeObserver } from '@vueuse/core';
 	import type { DesktopPage, DesktopTile } from './desktop-api.js';
 
@@ -14,16 +14,21 @@
 	const emit = defineEmits<{ layout: [tiles: DesktopTile[]] }>();
 	const canvas = ref<HTMLElement>();
 	const root = ref<HTMLElement>();
+	const pageRows = computed(() => (editing ? rows : Math.max(1, ...page.tiles.map((tile) => tile.y + tile.h))));
 	let grid: GridStack | undefined;
 	let availableHeight = 0;
 
-	// Keep cards legible when zoom or a short viewport leaves fewer visible rows.
-	const cellHeight = (available: number) => Math.max(108, Math.min(132, Math.floor(available / Math.max(1, rows))));
+	const cellHeight = (available: number) => Math.max(1, Math.min(132, Math.floor(available / pageRows.value)));
 
-	const { resume: resizeGrid } = useRafFn(() => grid?.cellHeight(cellHeight(availableHeight)), {
-		immediate: false,
-		once: true,
-	});
+	const cellMargin = (height: number) => `${Math.min(9, Math.floor(height / 12))}px 9px`;
+
+	const { resume: resizeGrid } = useRafFn(
+		() => {
+			const height = cellHeight(availableHeight);
+			grid?.updateOptions({ cellHeight: height, margin: cellMargin(height), minRow: pageRows.value });
+		},
+		{ immediate: false, once: true },
+	);
 
 	function sync(): void {
 		if (!grid || !root.value) return;
@@ -87,6 +92,8 @@
 
 	onMounted(() => {
 		if (!root.value || !canvas.value) return;
+		availableHeight = canvas.value.clientHeight;
+		const height = cellHeight(availableHeight);
 		grid =
 			GridStack.init(
 				{
@@ -95,9 +102,9 @@
 					mode: 'float',
 					animate: false,
 					staticGrid: !editing,
-					cellHeight: cellHeight(canvas.value.getBoundingClientRect().height),
-					margin: 9,
-					minRow: rows,
+					cellHeight: height,
+					margin: cellMargin(height),
+					minRow: pageRows.value,
 					maxRow: rows,
 					draggable: { handle: '.desktop-tile__move' },
 					resizable: { handles: 'se', element: '.desktop-tile__resize' },
@@ -109,6 +116,7 @@
 	});
 
 	watch(() => page.tiles, sync, { flush: 'post' });
+	watch(pageRows, resizeGrid, { flush: 'post' });
 	watch(
 		() => editing,
 		(value) => grid?.setStatic(!value),
@@ -142,8 +150,7 @@
 		touch-action: pan-y;
 		flex: 1;
 		min-height: 0;
-		overflow: hidden auto;
-		overscroll-behavior-y: contain;
+		overflow: clip;
 	}
 	.desktop-grid {
 		isolation: isolate;

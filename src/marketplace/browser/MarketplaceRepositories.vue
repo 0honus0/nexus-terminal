@@ -116,7 +116,6 @@
 		collapsible
 		:title="t('marketplace.repositories')"
 		:aria-label="t('marketplace.repositories')"
-		:description="t('marketplace.repositoriesHint')"
 		:icon="Globe"
 	>
 		<form class="repository-add" @submit.prevent="add">

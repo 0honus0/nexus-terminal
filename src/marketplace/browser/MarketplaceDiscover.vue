@@ -1,17 +1,15 @@
 <script setup lang="ts">
 	import { computed } from 'vue';
-	import { AppWindow, Puzzle, ArrowUp, ArrowUpRight, Check, Boxes, PackageOpen } from '@lucide/vue';
+	import { AppWindow, Puzzle, Boxes, PackageOpen } from '@lucide/vue';
 	import { useI18n } from 'vue-i18n';
 	import { resolvePluginIcon } from '../../plugin/plugin-api.browser.js';
 	import { UiEmptyState, UiLoadingTiles, vSelectableAction } from '../../ui/browser/ui-components-api.js';
 	import type { MarketplaceCatalogPlugin } from '../marketplace-catalog-types.js';
-	import type { MarketplaceRepositorySource } from '../marketplace-install-types.js';
 	import type { MarketplacePlugin } from '../marketplace-types.js';
 	import { marketplaceDescription, marketplacePackageName } from './marketplace-presentation.js';
 	const props = defineProps<{
 		plugins: readonly MarketplaceCatalogPlugin[];
-		installed: readonly MarketplacePlugin[];
-		updates: ReadonlyMap<string, MarketplaceRepositorySource>;
+		installed?: readonly MarketplacePlugin[];
 		query: string;
 		refreshing: boolean;
 		failed: boolean;
@@ -19,13 +17,15 @@
 	const emit = defineEmits<{ inspect: [pluginId: string] }>();
 	const { t, n, locale } = useI18n({ useScope: 'global' });
 	const loadingIcons = [AppWindow, PackageOpen, Boxes, Puzzle];
+	const installedIds = computed(() => new Set(props.installed?.map(({ pluginId }) => pluginId)));
+	const searchQuery = computed(() => props.query.trim().toLowerCase());
 	const groups = computed(() =>
 		(['application', 'extension'] as const)
 			.map((kind) => ({
 				kind,
 				plugins: props.plugins.flatMap((plugin) => {
 					const pack = plugin.versions[0]?.package;
-					if (pack?.nexus.kind !== kind) return [];
+					if (pack?.nexus.kind !== kind || installedIds.value.has(plugin.id)) return [];
 
 					const name = marketplacePackageName(pack, locale.value);
 					const search = [
@@ -40,13 +40,17 @@
 					]
 						.join(' ')
 						.toLowerCase();
-					return search.includes(props.query.trim().toLowerCase())
+					return search.includes(searchQuery.value)
 						? [{ plugin, pack, name, icon: resolvePluginIcon(pack.nexus.icon) }]
 						: [];
 				}),
 			}))
-			.filter(({ plugins }) => (!props.refreshing && !props.query.trim()) || plugins.length),
+			.filter(
+				({ kind, plugins }) =>
+					kind === 'application' || (!props.refreshing && !searchQuery.value) || plugins.length,
+			),
 	);
+	const noMatches = computed(() => !!searchQuery.value && groups.value.every(({ plugins }) => !plugins.length));
 </script>
 
 <template>
@@ -59,26 +63,23 @@
 				<AppWindow :size="40" :stroke-width="1.3" /><Puzzle :size="26" :stroke-width="1.4" />
 			</div>
 		</div>
-		<div v-if="refreshing && !plugins.length" class="catalog-placeholder">
+		<div v-if="refreshing && (!plugins.length || installed === undefined)" class="catalog-placeholder">
 			<UiLoadingTiles class="catalog-loading" :icons="loadingIcons" :label="t('marketplace.loadingCatalog')" />
 		</div>
-		<UiEmptyState v-else-if="failed" :icon="Puzzle" :title="t('marketplace.catalogUnavailable')" />
+		<UiEmptyState
+			v-else-if="failed || installed === undefined"
+			:icon="Puzzle"
+			:title="t('marketplace.catalogUnavailable')"
+		/>
 		<template v-else>
-			<UiEmptyState
-				v-if="query.trim() && !groups.length"
-				:icon="Puzzle"
-				:title="t('marketplace.noMatchingPlugins')"
-			/>
 			<section v-for="group in groups" :key="group.kind" class="catalog-section" :data-kind="group.kind">
 				<header class="catalog-heading">
-					<div>
-						<h2>
-							{{ t(group.kind === 'application' ? 'applications' : 'marketplace.extensions')
-							}}<span>{{ n(group.plugins.length) }}</span>
-						</h2>
-					</div>
+					<h2>
+						{{ t(group.kind === 'application' ? 'applications' : 'marketplace.extensions')
+						}}<span>{{ n(group.plugins.length) }}</span>
+					</h2>
 				</header>
-				<div class="catalog-grid">
+				<div v-if="group.plugins.length" class="catalog-grid">
 					<button
 						v-selectable-action
 						v-for="{ plugin, pack, name, icon } in group.plugins"
@@ -88,37 +89,36 @@
 						:aria-label="t('marketplace.viewPlugin', { name: name })"
 						@click="emit('inspect', plugin.id)"
 					>
-						<div class="catalog-card__art" aria-hidden="true">
-							<component
-								:is="icon ?? (group.kind === 'application' ? AppWindow : Puzzle)"
-								:size="icon ? 36 : group.kind === 'application' ? 30 : 24"
-								:stroke-width="1.5"
-							/><span v-if="!icon && group.kind === 'application'">{{ name.slice(0, 1) }}</span>
+						<div class="catalog-card__head">
+							<span class="catalog-card__icon" aria-hidden="true">
+								<component
+									:is="icon ?? (group.kind === 'application' ? AppWindow : Puzzle)"
+									:size="25"
+									:stroke-width="1.6"
+								/>
+							</span>
+							<h3 class="catalog-card__name" data-ui-selection="text">{{ name }}</h3>
 						</div>
-						<div class="catalog-card__body" data-ui-selection="text">
-							<div class="catalog-card__title">
-								<h3>{{ name }}</h3>
-								<ArrowUpRight :size="15" aria-hidden="true" />
-							</div>
-							<p v-if="marketplaceDescription(pack, locale)">
-								{{ marketplaceDescription(pack, locale) }}
-							</p>
-							<footer>
-								<span class="catalog-card__package">{{ plugin.id }}</span>
-								<span v-if="updates.has(plugin.id)" class="catalog-card__update">
-									<ArrowUp :size="12" aria-hidden="true" />{{ t('marketplace.updateAvailable') }}
-								</span>
-								<span
-									v-else-if="installed.some((item) => item.pluginId === plugin.id)"
-									class="catalog-card__installed"
-									><Check :size="12" />{{ t('marketplace.installed') }}</span
-								><span v-else>v{{ pack.version }}</span>
-							</footer>
-						</div>
+						<p
+							v-if="marketplaceDescription(pack, locale)"
+							class="catalog-card__description"
+							data-ui-selection="text"
+						>
+							{{ marketplaceDescription(pack, locale) }}
+						</p>
+						<span
+							v-if="group.kind === 'extension'"
+							class="catalog-card__package"
+							data-ui-selection="text"
+							:title="plugin.id"
+						>
+							{{ plugin.id }}
+						</span>
 					</button>
 				</div>
+				<UiEmptyState v-else-if="noMatches" :icon="Puzzle" :title="t('marketplace.noMatchingPlugins')" />
 				<UiEmptyState
-					v-if="!group.plugins.length"
+					v-else-if="!searchQuery"
 					:icon="group.kind === 'application' ? AppWindow : Puzzle"
 					:title="t(`marketplace.empty${group.kind === 'application' ? 'Applications' : 'Extensions'}`)"
 				/>
@@ -198,7 +198,7 @@
 		display: flex;
 		align-items: center;
 		gap: 9px;
-		margin: 0 0 5px;
+		margin: 0;
 		font-size: 17px;
 		font-weight: 600;
 	}
@@ -211,13 +211,16 @@
 	}
 	.catalog-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
 		gap: 14px;
 	}
 	.catalog-card {
+		display: grid;
+		grid-template-rows: auto 1fr;
 		min-width: 0;
 		text-align: start;
 		padding: 0;
+		font: inherit;
 		border: 1px solid var(--ui-border);
 		border-radius: var(--marketplace-card-radius);
 		background: color-mix(in srgb, var(--ui-surface) 72%, transparent);
@@ -232,124 +235,97 @@
 		border-color: color-mix(in srgb, var(--ui-primary) 60%, var(--ui-border));
 		background: var(--ui-surface);
 	}
-	.catalog-card__art {
+	.catalog-card__head {
+		--catalog-accent: var(--ui-primary);
+
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		height: 100px;
-		padding: 20px 24px;
+		gap: 14px;
+		padding: 18px 20px;
+		min-height: 100px;
+		border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 65%, transparent);
+		background: linear-gradient(
+			130deg,
+			color-mix(in srgb, var(--catalog-accent) 13%, var(--ui-surface)),
+			color-mix(in srgb, var(--catalog-accent) 3%, var(--ui-surface))
+		);
+	}
+	.catalog-card:nth-child(3n + 2) .catalog-card__head {
+		--catalog-accent: var(--ui-success);
+	}
+	.catalog-card:nth-child(3n) .catalog-card__head {
+		--catalog-accent: var(--ui-warning);
+	}
+	.catalog-card__icon {
+		display: grid;
+		flex: none;
+		place-items: center;
+		width: 42px;
+		height: 42px;
+		border-radius: 10px;
 		color: var(--ui-primary);
-		background: linear-gradient(
-			130deg,
-			color-mix(in srgb, var(--ui-primary) 13%, var(--ui-surface)),
-			color-mix(in srgb, var(--ui-primary) 3%, var(--ui-surface))
-		);
+		background: color-mix(in srgb, var(--ui-primary) 13%, var(--ui-surface));
 	}
-	.catalog-card:nth-child(3n + 2) .catalog-card__art {
-		color: var(--ui-success);
-		background: linear-gradient(
-			130deg,
-			color-mix(in srgb, var(--ui-success) 13%, var(--ui-surface)),
-			var(--ui-surface)
-		);
+	[data-kind='application'] .catalog-card__icon {
+		width: 52px;
+		height: 52px;
+		border-radius: 12px;
+		color: var(--catalog-accent);
+		background: color-mix(in srgb, var(--catalog-accent) 13%, var(--ui-surface));
 	}
-	.catalog-card:nth-child(3n) .catalog-card__art {
-		color: var(--ui-warning);
-		background: linear-gradient(
-			130deg,
-			color-mix(in srgb, var(--ui-warning) 12%, var(--ui-surface)),
-			var(--ui-surface)
-		);
-	}
-	.catalog-card__art span {
-		font-size: 62px;
-		line-height: 1;
-		font-weight: 600;
-		opacity: 0.16;
-	}
-	.catalog-card__body {
-		padding: 17px;
+	.catalog-card__name {
 		min-width: 0;
-	}
-	.catalog-card__title {
-		display: flex;
-		gap: 8px;
-		align-items: center;
-		justify-content: space-between;
-	}
-	h3 {
 		margin: 0;
-		font-size: 15px;
-		font-weight: 600;
+		font-size: 18px;
+		font-weight: 650;
+		line-height: 1.25;
 		overflow-wrap: anywhere;
 	}
-	.catalog-card__title > svg {
-		flex: none;
-		color: var(--ui-muted);
-		opacity: 0.6;
-	}
-	.catalog-card__body > p {
-		color: var(--ui-muted);
-		font-size: 11px;
-		line-height: 1.7;
-		margin: 9px 0 17px;
-		min-height: 3.4em;
+	.catalog-card__description {
 		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
+		align-self: start;
+		margin: 14px 20px 16px;
 		overflow: hidden;
-	}
-	footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 8px;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 3;
+		overflow-wrap: anywhere;
 		color: var(--ui-muted);
-		font-size: 9px;
+		font-size: 13px;
+		line-height: 1.55;
+	}
+	[data-kind='extension'] .catalog-grid {
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+	}
+	[data-kind='extension'] .catalog-card {
+		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-rows: auto 1fr auto;
+		gap: 4px 13px;
+		padding: 14px;
+	}
+	[data-kind='extension'] .catalog-card__head {
+		display: contents;
+	}
+	[data-kind='extension'] .catalog-card__icon {
+		grid-area: 1 / 1 / span 3;
+		align-self: center;
+	}
+	[data-kind='extension'] .catalog-card__name {
+		grid-area: 1 / 2;
+		font-size: 16px;
+	}
+	[data-kind='extension'] .catalog-card__description {
+		grid-area: 2 / 2;
+		margin: 0;
 	}
 	.catalog-card__package {
+		grid-area: 3 / 2;
+		min-width: 0;
+		margin-top: 5px;
+		color: var(--ui-muted);
+		font-size: 11px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	footer > :last-child {
-		flex: none;
-	}
-	.catalog-card__installed,
-	.catalog-card__update {
-		display: inline-flex;
-		align-items: center;
-		gap: 3px;
-	}
-	.catalog-card__installed {
-		color: var(--ui-success);
-	}
-	.catalog-card__update {
-		color: var(--ui-primary);
-	}
-	[data-kind='extension'] .catalog-grid {
-		grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
-	}
-	[data-kind='extension'] .catalog-card {
-		display: flex;
-		align-items: flex-start;
-		padding: 18px;
-		gap: 14px;
-	}
-	[data-kind='extension'] .catalog-card__art {
-		width: 48px;
-		height: 48px;
-		padding: 0;
-		border-radius: 14px;
-		justify-content: center;
-		flex: none;
-	}
-	[data-kind='extension'] .catalog-card__body {
-		flex: 1;
-		padding: 0;
-	}
-	[data-kind='extension'] .catalog-card__body > p {
-		margin-bottom: 13px;
 	}
 	@container (max-width: 699px) {
 		.market-hero {
@@ -358,25 +334,18 @@
 		.market-hero__art {
 			display: none;
 		}
-		.catalog-grid {
+	}
+	@container (max-width: 520px) {
+		.catalog-card__head {
+			min-height: 82px;
+			padding: 12px 16px;
+		}
+		[data-kind='application'] .catalog-card__description {
+			margin-inline: 16px;
+		}
+		.catalog-grid,
+		[data-kind='extension'] .catalog-grid {
 			grid-template-columns: 1fr;
-		}
-		[data-kind='application'] .catalog-card {
-			display: flex;
-			align-items: stretch;
-		}
-		[data-kind='application'] .catalog-card__art {
-			width: 78px;
-			height: auto;
-			flex: none;
-			padding: 16px;
-			justify-content: center;
-		}
-		.catalog-card__art span {
-			display: none;
-		}
-		.catalog-card__body {
-			flex: 1;
 		}
 	}
 </style>

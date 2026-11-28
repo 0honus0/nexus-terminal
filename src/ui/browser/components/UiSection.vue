@@ -56,9 +56,12 @@
 	}
 	.ui-section[data-appearance='panel'] {
 		padding: var(--ui-section-padding, 22px);
-		border: 1px solid var(--ui-border);
+		border: 1px solid var(--ui-section-border, var(--ui-border));
 		border-radius: var(--ui-section-radius, 20px);
-		background: var(--ui-surface);
+		background: var(--ui-section-background, var(--ui-surface));
+		box-shadow:
+			0 1px 2px color-mix(in srgb, var(--ui-text) 5%, transparent),
+			inset 0 1px color-mix(in srgb, white 17%, transparent);
 	}
 	.ui-section__header {
 		display: flex;
@@ -78,6 +81,10 @@
 		font-weight: 600;
 		color: var(--ui-text);
 		overflow-wrap: anywhere;
+	}
+	h2 > svg {
+		flex: none;
+		color: var(--ui-section-icon-color, currentColor);
 	}
 	p {
 		margin: 8px 0 0;

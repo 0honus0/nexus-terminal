@@ -56,10 +56,6 @@ export function useDesktopNavigation(
 			)
 				return;
 			const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
-			const scroller = event.target instanceof Element ? event.target.closest('.desktop-canvas') : null;
-			// With clipped rows, vertical wheel movement belongs to the canvas.
-			// Horizontal gestures and pagination still change pages.
-			if (!horizontal && scroller && scroller.scrollHeight > scroller.clientHeight + 1) return;
 			const delta = horizontal ? event.deltaX : event.deltaY;
 			if (!delta) return;
 			event.preventDefault();

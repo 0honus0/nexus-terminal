@@ -12,7 +12,6 @@
 		PanelsTopLeft,
 		Puzzle,
 		Terminal,
-		ArrowUpRight,
 	} from '@lucide/vue';
 	import type { PluginContributionList, PluginLoginEntry } from '../../plugin/plugin-api.browser.js';
 	import { UiButton, UiInput, UiField } from '../../ui/browser/ui-base-api.js';
@@ -131,7 +130,7 @@
 					<p>{{ t('auth.heroDescription') }}</p>
 				</div>
 				<div class="auth-preview" aria-hidden="true">
-					<div class="auth-preview__bar"><span /><span /><span /><ArrowUpRight :size="17" /></div>
+					<div class="auth-preview__bar"><span /><span /><span /></div>
 					<div class="auth-preview__tiles">
 						<div class="auth-preview__tile auth-preview__tile--main">
 							<PanelsTopLeft :size="30" :stroke-width="1.5" /><span>{{ t('auth.workspace') }}</span>
@@ -338,9 +337,6 @@
 		height: 5px;
 		border-radius: 50%;
 		background: var(--ui-border);
-	}
-	.auth-preview__bar > svg {
-		margin-left: auto;
 	}
 	.auth-preview__tiles {
 		display: grid;

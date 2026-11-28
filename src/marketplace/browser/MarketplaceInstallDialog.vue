@@ -1,5 +1,6 @@
 <script setup lang="ts">
 	import { Check, Package, X } from '@lucide/vue';
+	import { useTimeoutFn } from '@vueuse/core';
 	import { computed, ref, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { PluginManifest } from '../../plugin/plugin-manifest-types.js';
@@ -54,23 +55,49 @@
 	);
 	const targetIcon = computed(() => resolvePluginIcon(targetPackage.value?.nexus.icon));
 	const stages = ['resolve', 'install', 'configure'] as const;
-	const stage = computed(() =>
-		props.operation?.state === 'succeeded'
-			? 'configure'
-			: props.operation || props.submitting
-				? 'install'
-				: 'resolve',
+	const failed = computed(() => props.operation?.state === 'failed');
+	const succeeded = computed(() => props.operation?.state === 'succeeded');
+	const installing = computed(
+		() => props.submitting || props.operation?.state === 'queued' || props.operation?.state === 'running',
 	);
+	// 快速完成时跳过进度页，已展开的进度至少保留到可以看清。
+	const progressVisible = ref(false);
+	const {
+		isPending: holdingProgress,
+		start: holdProgress,
+		stop: stopHoldingProgress,
+	} = useTimeoutFn(() => {}, 320, { immediate: false });
+	const { start: revealProgress, stop: stopRevealingProgress } = useTimeoutFn(
+		() => {
+			progressVisible.value = true;
+			holdProgress();
+		},
+		350,
+		{ immediate: false },
+	);
+	watch([open, installing, succeeded, failed], ([isOpen, running, complete, hasFailed]) => {
+		stopRevealingProgress();
+		if (!isOpen || hasFailed || (!running && !complete)) {
+			progressVisible.value = false;
+			stopHoldingProgress();
+		} else if (running && !complete && !progressVisible.value) {
+			revealProgress();
+		}
+	});
+	const stage = computed(() => {
+		if (succeeded.value) return holdingProgress.value ? 'install' : 'configure';
+		return failed.value || progressVisible.value ? 'install' : 'resolve';
+	});
+	const awaitingProgress = computed(() => stage.value === 'resolve' && installing.value);
 	const stageBody = ref<HTMLElement>();
 	watch(stage, () => stageBody.value?.scrollTo({ top: 0 }), { flush: 'post' });
-	const failed = computed(() => props.operation?.state === 'failed');
 	const canConfirm = computed(() => !!props.plan?.steps.length && !props.plan.blockers.length);
 	const checking = computed(() => !props.installed || props.loadingInstalled);
 
 	const installationRows = computed(() =>
 		(props.plan?.steps ?? []).map<{ id: string; name: string; state: UiProgressState }>(({ package: pack }) => {
 			const { operation } = props;
-			const completed = operation?.completedPackages?.includes(pack.name);
+			const completed = succeeded.value || operation?.completedPackages?.includes(pack.name);
 			const step = operation?.step;
 			const current = step?.pluginId === pack.name && (step.phase === 'download' || step.phase === 'register');
 			const state = completed ? 'succeeded' : current ? (failed.value ? 'failed' : 'running') : 'pending';
@@ -119,7 +146,10 @@
 		const blocked = stage.value === 'resolve' && !props.planning && !canConfirm.value;
 		const currentState = failed.value || blocked ? 'failed' : 'current';
 		return stages.map((id, index) => {
-			const complete = index < current || (id === 'configure' && stage.value === id && configured.value);
+			const complete =
+				index < current ||
+				(id === 'install' && succeeded.value) ||
+				(id === 'configure' && stage.value === id && configured.value);
 			return {
 				id,
 				current: index === current,
@@ -170,7 +200,7 @@
 						class="install-stage-body"
 						role="region"
 						:aria-label="t('marketplace.installFlow.' + stage)"
-						:aria-busy="planning || submitting"
+						:aria-busy="planning || awaitingProgress"
 						tabindex="0"
 					>
 						<h3>{{ t('marketplace.installFlow.' + stage) }}</h3>
@@ -236,7 +266,7 @@
 										status-display="label"
 									/>
 								</li>
-								<li v-if="operation?.step?.phase === 'activate' && !failed">
+								<li v-if="operation?.step?.phase === 'activate' && !failed && !succeeded">
 									<UiProgressRow
 										:label="t('marketplace.installFlow.activating')"
 										state="running"
@@ -282,7 +312,12 @@
 			</div>
 		</template>
 		<template #footer>
-			<UiButton v-if="stage === 'resolve'" appearance="ghost" @click="open = false">
+			<UiButton
+				v-if="stage === 'resolve'"
+				class="install-cancel"
+				:disabled="awaitingProgress"
+				@click="open = false"
+			>
 				{{ t('marketplace.cancel') }}
 			</UiButton>
 			<UiButton
@@ -290,6 +325,7 @@
 				tone="primary"
 				appearance="solid"
 				:disabled="busy"
+				:loading="awaitingProgress"
 				@click="emit('confirm')"
 			>
 				{{
@@ -316,12 +352,14 @@
 </template>
 
 <style scoped>
-	:global(.marketplace-install-dialog) {
-		block-size: 460px;
+	.install-cancel {
+		--ui-button-border: color-mix(in srgb, var(--ui-text) 28%, var(--ui-border));
+		--ui-button-hover-border: color-mix(in srgb, var(--ui-text) 44%, var(--ui-border));
 	}
 
-	:global(.marketplace-install-dialog .ui-dialog__footer) {
-		min-block-size: calc(var(--ui-dialog-action-height, 40px) + var(--ui-dialog-padding, 26px));
+	:global(.marketplace-install-dialog) {
+		--ui-dialog-footer-min-content-height: var(--ui-dialog-action-height, 40px);
+		block-size: 460px;
 	}
 
 	.install-body {

@@ -3,7 +3,13 @@ import type { z } from 'zod';
 import type { StateClient } from '../../state/browser/state-api.js';
 import type { LogApi } from '../../log/browser/log-api.js';
 import { settingsBase, SettingsSnapshotSchema } from '../settings-http-types.js';
-import { SettingsTopic, defaultSettings, type SettingsPatchSchema, type SettingsSnapshot } from '../settings-types.js';
+import {
+	SettingsTopic,
+	defaultSettings,
+	type SettingsPatchSchema,
+	type SettingsPreferences,
+	type SettingsSnapshot,
+} from '../settings-types.js';
 
 type Patch = z.infer<typeof SettingsPatchSchema>;
 
@@ -15,7 +21,9 @@ export class SettingsPreferencesApi {
 	#scope: AbortController | undefined;
 	#unsubscribe: (() => void) | undefined;
 	#task = Promise.resolve();
-	readonly value = computed(() => Object.assign({}, this.#confirmed.value.preferences, ...this.#patches.value));
+	readonly value = computed<SettingsPreferences>(() =>
+		Object.assign({}, this.#confirmed.value.preferences, ...this.#patches.value),
+	);
 
 	constructor({ locale, log }: { locale: 'en' | 'zh'; log: Pick<LogApi, 'report'> }) {
 		this.#confirmed = shallowRef<SettingsSnapshot>({ revision: 0, preferences: { ...defaultSettings, locale } });

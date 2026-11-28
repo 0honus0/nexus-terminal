@@ -335,7 +335,7 @@ test('内置应用与外部插件管理弹窗使用统一宽度', async ({ page,
 	}
 });
 
-test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({ page, host: _host }) => {
+test('桌面随窗口高度缩放，第五行磁贴无需滚动即可访问', async ({ page, host: _host }) => {
 	const saved = Object.fromEntries(
 		['compact', 'medium', 'wide'].map((profile) => [
 			profile,
@@ -352,21 +352,48 @@ test('桌面缩放时保留格位、最小卡片高度与纵向滚动', async ({
 	const canvas = page.locator('.desktop-canvas');
 	const tile = canvas.locator('[data-tile="builtin:log"] .application-tile');
 	await expect(tile).toHaveCount(1);
-	await expect.poll(async () => (await tile.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(90);
-	await expect.poll(() => canvas.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(100);
-	await canvas.hover();
-	await page.mouse.wheel(0, 500);
-	await expect.poll(() => canvas.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
-	await expect(tile).toBeInViewport();
-	for (const width of [720, 1440, 2560, 390]) {
-		await page.setViewportSize({ width, height: 900 });
-		await expect.poll(async () => (await tile.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(90);
-		await expect.poll(async () => (await tile.boundingBox())?.height ?? Infinity).toBeLessThanOrEqual(114);
+	for (const [width, height] of [
+		[390, 340],
+		[1440, 550],
+		[720, 900],
+		[2560, 900],
+		[390, 900],
+	]) {
+		await page.setViewportSize({ width, height });
+		await expect.poll(() => canvas.evaluate((el) => el.scrollHeight - el.clientHeight)).toBe(0);
+		await expect(tile).toBeInViewport({ ratio: 1 });
 		await expect(canvas.locator('[data-tile="builtin:log"]')).toHaveAttribute('gs-y', '4');
 	}
 });
 
-test('两档窗口布局继续读取旧的 medium 位置，并优先保留已有的 wide 位置', async ({ page, host: _host }) => {
+test('全局标题栏高度同时调整系统窗口与插件标签栏', async ({ page, host: _host }) => {
+	await page.setViewportSize({ width: 1440, height: 1000 });
+	await page.goto('/?host-controls');
+	await page.getByRole('button', { name: 'Counter', exact: true }).click();
+	const plugin = page.getByRole('region', { name: 'Counter', exact: true });
+	const pluginBar = plugin.locator('.application-window__titlebar');
+	await expect(pluginBar.locator('.window-tabs')).toBeVisible();
+	await expect(pluginBar).toHaveCSS('height', '44px');
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	const settings = page.getByRole('region', { name: 'Settings', exact: true });
+	const control = settings.getByRole('combobox', { name: 'Window title bar height' });
+	const settingsBar = settings.locator('.application-window__titlebar');
+	for (const [label, height] of [
+		['Compact', '36px'],
+		['Comfortable', '52px'],
+	]) {
+		await control.click();
+		await page.getByRole('option', { name: label, exact: true }).click();
+		await expect(settingsBar).toHaveCSS('height', height);
+		await expect(pluginBar).toHaveCSS('height', height);
+	}
+	await page.reload();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await expect(control).toContainText('Comfortable');
+	await expect(settingsBar).toHaveCSS('height', '52px');
+});
+
+test('窗口布局只读取当前分档的位置', async ({ page, host: _host }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.setViewportSize({ width: 1440, height: 1000 });
 	await page.addInitScript(() => {
@@ -383,7 +410,7 @@ test('两档窗口布局继续读取旧的 medium 位置，并优先保留已有
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Logs', exact: true }).click();
 	const logs = page.getByRole('region', { name: 'Logs', exact: true });
-	await expect.poll(async () => (await logs.boundingBox())?.width).toBe(620);
+	await expect.poll(async () => (await logs.boundingBox())?.width).toBe(900);
 	await logs.getByRole('button', { name: 'Close application', exact: true }).click();
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
@@ -394,8 +421,7 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	await page.goto('/');
 	const desktop = page.locator('.desktop-shell');
 	await expect(desktop.getByRole('button', { name: 'Logs', exact: true })).toBeVisible();
-	await expect(desktop.locator('.desktop-canvas')).toHaveCSS('overflow-x', 'hidden');
-	await expect(desktop.locator('.desktop-canvas')).toHaveCSS('overflow-y', 'auto');
+	await expect(desktop.locator('.desktop-canvas')).toHaveCSS('overflow-y', 'clip');
 	await expect(desktop.getByRole('button', { name: 'Next page' })).toHaveCSS('background-image', 'none');
 	await desktop.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const marketplace = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
@@ -424,6 +450,18 @@ test('恢复归档桌面的分页、跨页移动和内置窗口布局', async ({
 	const backup = page.getByRole('region', { name: 'Backup and Restore', exact: true });
 	await desktop.getByRole('button', { name: 'Backup and Restore', exact: true }).click();
 	await expect(backup.locator('.nexus-backup__sections')).toBeVisible();
+	await expect(backup).toHaveCSS('width', '680px');
+	await expect(backup).toHaveCSS('height', '572px');
+	await expect
+		.poll(() =>
+			backup.evaluate((element) => {
+				const body = element.querySelector<HTMLElement>('.application-window__body')!;
+				const content = element.querySelector<HTMLElement>('.nexus-backup')!;
+				const spare = body.clientHeight - content.offsetHeight;
+				return spare >= 0 && spare <= 8;
+			}),
+		)
+		.toBe(true);
 	await expect(backup.locator('.nexus-backup__intro p, .ui-section__heading p, .ui-field p')).toHaveCount(0);
 	await expect(desktop.locator('.backup-tile__caption')).toHaveCount(0);
 	await expect(backup.getByLabel('Choose a backup file')).toHaveAttribute('accept', '.json');
@@ -590,7 +628,7 @@ test('桌面卡片在编辑模式可以拖动并使用唯一的角落手柄缩�
 	await expect(tile).toHaveAttribute('gs-w', String(width + 1));
 });
 
-test('选择框保留淡入，下拉菜单默认直接展开，兼容旧布局菜单及显式淡入', async ({ page, host: _host }) => {
+test('选择框保留淡入，下拉菜单默认直接展开并支持显式淡入', async ({ page, host: _host }) => {
 	const warnings: string[] = [];
 	page.on('pageerror', (error) => warnings.push(error.stack ?? error.message));
 	page.on('console', (event) => {
@@ -786,6 +824,82 @@ test('市场先显示缓存，官方仓库刷新后显示新目录', async ({ pa
 	await expect(market.getByText('Refreshed catalog')).toBeVisible();
 });
 
+test('发现仅显示未安装的应用和扩展', async ({ page, host: _host }) => {
+	const repository = { id: randomUUID(), url: 'https://example.com/catalog.json', label: 'Catalog', official: true };
+	const application = '@nexus-terminal/test';
+	const extension = '@example/catalog-support';
+	const installedExtension = '@example/catalog-gateway';
+	await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [repository] } }));
+	await page.route('**/api/plugins/*/repositories/*/refresh', (route) => route.fulfill({ status: 204 }));
+	await page.route('**/api/plugins/*/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{
+						id: '@example/catalog-viewer',
+						name: 'Viewer',
+						kind: 'application',
+						entry: { frontend: 'index.js' },
+					},
+					{ id: application, name: 'Counter', kind: 'application', entry: { frontend: 'index.js' } },
+					{ id: extension, name: 'Support', kind: 'extension', entry: { backend: 'index.js' } },
+					{ id: installedExtension, name: 'Gateway', kind: 'extension', entry: { backend: 'index.js' } },
+				].map(({ id, name, kind, entry }) => ({
+					id,
+					versions: [
+						{
+							repositoryId: repository.id,
+							package: {
+								name: id,
+								displayName: name,
+								description: name + ' description',
+								version: '1.0.0',
+								type: 'module',
+								peerDependencies: { 'nexus-terminal': '^1.0.0' },
+								nexus: { kind, entry },
+							},
+						},
+					],
+				})),
+			},
+		}),
+	);
+	await page.route('**/api/plugins/*/manager/plugins', (route) =>
+		route.fulfill({
+			json: {
+				items: [
+					{ pluginId: application, displayName: 'Counter', kind: 'application', enabled: true },
+					{ pluginId: installedExtension, displayName: 'Gateway', kind: 'extension', enabled: false },
+				].map((item) => ({
+					...item,
+					version: '1.0.0',
+					hasBackend: false,
+					source: { kind: 'local' },
+					runtime: null,
+					issue: null,
+				})),
+			},
+		}),
+	);
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
+	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
+	const viewer = market.getByRole('button', { name: 'View Viewer', exact: true });
+	const support = market.getByRole('button', { name: 'View Support', exact: true });
+	await expect(viewer.locator('.catalog-card__head h3')).toHaveText('Viewer');
+	await expect(viewer.locator('.catalog-card__description')).toHaveText('Viewer description');
+	await expect(viewer.locator('.catalog-card__package')).toHaveCount(0);
+	await expect(support.locator('.catalog-card__package')).toHaveText(extension);
+	await expect(market.getByRole('button', { name: 'View Counter', exact: true })).toHaveCount(0);
+	await expect(market.getByRole('button', { name: 'View Gateway', exact: true })).toHaveCount(0);
+	await expect(market.getByRole('combobox', { name: 'Installation status' })).toHaveCount(0);
+	await market.getByRole('searchbox').fill('Counter');
+	await expect(market.getByText('No matching plugins', { exact: true })).toBeVisible();
+	await market.getByRole('button', { name: 'Manage installed plugins', exact: true }).click();
+	await expect(market.getByRole('button', { name: 'Manage Counter', exact: true })).toBeVisible();
+	await expect(market.getByRole('button', { name: 'Manage Gateway', exact: true })).toBeVisible();
+});
+
 test('刷新显示可更新版本，已安装卡片的更新和打开等宽并排', async ({ page, host }) => {
 	const pluginId = '@nexus-terminal/test';
 	const installedVersion = '0.0.1-dev.3';
@@ -802,6 +916,7 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	};
 	let installed = installedVersion;
 	let refreshed = 0;
+	const installGate = Promise.withResolvers<void>();
 	host.setPluginVersion(installedVersion);
 	await page.route('**/api/plugins/*/repositories', (route) => route.fulfill({ json: { items: [official, other] } }));
 	await page.route('**/api/plugins/*/repositories/*/refresh', (route) => {
@@ -855,9 +970,10 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 			},
 		});
 	});
-	await page.route('**/api/plugins/*/manager/install', (route) => {
+	await page.route('**/api/plugins/*/manager/install', async (route) => {
 		const { plan, observationId } = route.request().postDataJSON();
 		expect(plan.target).toEqual(target);
+		await installGate.promise;
 		installed = newVersion;
 		host.setPluginVersion(newVersion);
 		return route.fulfill({
@@ -877,22 +993,11 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	await page.goto('/');
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace', exact: true });
-	const listing = market.getByRole('button', { name: 'View Counter', exact: true });
-	await expect(listing).toContainText('Installed');
+	await expect(market.getByText('No apps to discover yet', { exact: true })).toBeVisible();
 	await expect.poll(() => refreshed).toBe(1);
+	await market.getByRole('button', { name: 'Manage installed plugins', exact: true }).click();
+	await expect(market.getByRole('button', { name: 'Manage Counter', exact: true })).toBeVisible();
 	await market.getByRole('button', { name: 'Refresh', exact: true }).click();
-	await expect(listing).toContainText('Update available');
-	await listing.click();
-	const catalogDetails = page.getByRole('dialog', { name: 'Plugin details' });
-	await expect(catalogDetails.getByRole('combobox', { name: 'Version and source' })).toContainText(
-		`${newVersion} · Official`,
-	);
-	await expect(catalogDetails.getByRole('button', { name: `Update to ${newVersion}` })).toBeEnabled();
-	await catalogDetails.getByRole('button', { name: 'Manage installed plugin', exact: true }).click();
-	const manage = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
-	await expect(manage).toBeVisible();
-	await expect(manage.getByRole('button', { name: /Update/u })).toHaveCount(0);
-	await manage.getByRole('button', { name: 'Close application' }).click();
 
 	const card = market
 		.getByRole('article')
@@ -911,7 +1016,20 @@ test('刷新显示可更新版本，已安装卡片的更新和打开等宽并�
 	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
 	await expect(plan.getByText('v' + newVersion, { exact: true })).toBeVisible();
 	expect(installed).toBe(installedVersion);
-	await plan.getByRole('button', { name: 'Update', exact: true }).click();
+	const clockStart = Date.now();
+	await page.clock.install({ time: clockStart });
+	await page.clock.pauseAt(clockStart + 1000);
+	const confirm = plan.getByRole('button', { name: 'Update', exact: true });
+	try {
+		await confirm.evaluate((button: HTMLButtonElement) => button.click());
+		await expect(confirm).toHaveAttribute('aria-busy', 'true');
+		await expect(plan.locator('[aria-current="step"]')).toHaveText(/Resolve dependencies/u);
+		installGate.resolve();
+		await expect(plan.locator('[aria-current="step"]')).toHaveText(/Check configuration/u);
+	} finally {
+		installGate.resolve();
+		await page.clock.resume();
+	}
 	await plan.getByRole('button', { name: 'Done', exact: true }).click();
 	await expect(card).toContainText(newVersion);
 	await expect(update).toHaveCount(0);
@@ -1055,7 +1173,7 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(details.locator('svg.lucide-wrench')).toBeVisible();
 	await details.getByRole('combobox', { name: '版本与来源' }).click();
 	await page.getByRole('option', { name: '1.1.0 · Second source' }).click();
-	await details.getByRole('button', { name: '预览安装' }).click();
+	await details.getByRole('button', { name: '安装', exact: true }).click();
 	const installation = page.getByRole('dialog', { name: '插件安装' });
 	await expect(installation.getByText('1.1.0 · Second source', { exact: false })).toBeVisible();
 	await installation.getByRole('button', { name: '安装', exact: true }).click();
@@ -1063,6 +1181,9 @@ test('市场卡片恢复本地化介绍，详情按来源和版本预览依赖�
 	await expect(market.getByRole('button', { name: '管理已安装插件' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(market.getByRole('button', { name: '管理Remote Tools', exact: true })).toBeVisible();
 	await expect(page.locator('[data-ui="toast"]').getByText(`已完成 ${pluginId} 的操作。`)).toBeVisible();
+	await market.getByRole('button', { name: '发现', exact: true }).click();
+	await expect(card).toHaveCount(0);
+	await market.getByRole('button', { name: '管理已安装插件', exact: true }).click();
 
 	const repositoriesSection = market.getByRole('region', { name: '插件仓库' });
 	await repositoriesSection.getByRole('textbox', { name: '仓库目录地址' }).fill('https://three.example/catalog.json');
@@ -1118,7 +1239,10 @@ test('市场管理页展示内置应用，隐藏卡片后仍可打开和恢复�
 	await page.getByRole('button', { name: 'Plugin Marketplace', exact: true }).click();
 	const market = page.getByRole('region', { name: 'Plugin Marketplace' });
 	await market.getByRole('button', { name: 'Manage installed plugins' }).click();
-	await expect(market.getByRole('heading', { name: 'Built in 4' })).toBeVisible();
+	const builtinGroup = market.locator('.marketplace-installed-group').filter({
+		has: page.getByRole('heading', { name: 'Built in', exact: true }),
+	});
+	await expect(builtinGroup.locator('.marketplace-installed-count')).toHaveText('4');
 	for (const name of ['Plugin Marketplace', 'Settings', 'Logs', 'Backup and Restore']) {
 		const main = market.getByRole('button', { name: 'Manage ' + name, exact: true });
 		const card = market
@@ -1328,7 +1452,17 @@ test('已安装卡片按清单区分应用与扩展，启用意图独立于运�
 	await expect(extension.getByRole('switch')).toHaveCount(0);
 	await expect(extension.getByText('Extension', { exact: true })).toHaveCount(0);
 	await expect(extension.getByRole('button', { name: 'Open Support' })).toHaveCount(0);
-	await expect(market.getByRole('heading', { name: 'Extensions 1', exact: true })).toBeVisible();
+	const extensionGroup = market.locator('.marketplace-installed-group[data-kind="extension"]');
+	await expect(extensionGroup.getByRole('heading', { name: 'Extensions', exact: true })).toBeVisible();
+	await expect(extensionGroup.locator('.marketplace-installed-count')).toHaveText('1');
+	const toggleExtensions = extensionGroup.getByRole('button', { name: 'Extensions', exact: true });
+	await expect(toggleExtensions).toHaveAttribute('aria-expanded', 'true');
+	await toggleExtensions.press('Space');
+	await expect(toggleExtensions).toHaveAttribute('aria-expanded', 'false');
+	await expect(extension).toBeHidden();
+	await expect(application).toBeVisible();
+	await toggleExtensions.press('Enter');
+	await expect(extension).toBeVisible();
 	const details = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
 	const enable = details.getByRole('switch', { name: 'Enable plugin', exact: true });
 	const close = details.getByRole('button', { name: 'Close application' });
@@ -1734,7 +1868,10 @@ for (const later of [false, true]) {
 			catalogGate.resolve();
 		}
 		await market.getByRole('button', { name: 'View Counter' }).click();
-		await page.getByRole('button', { name: 'Preview installation' }).click();
+		await page
+			.getByRole('dialog', { name: 'Plugin details' })
+			.getByRole('button', { name: 'Install', exact: true })
+			.click();
 		const dialog = page.getByRole('dialog', { name: 'Plugin installation' });
 		const currentStage = dialog.locator('[aria-current="step"]');
 

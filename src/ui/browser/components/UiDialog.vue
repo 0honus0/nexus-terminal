@@ -50,6 +50,10 @@
 		escapeKeyDown: [event: KeyboardEvent];
 	}>();
 	const element = shallowRef<HTMLElement>();
+	const portalTarget = computed(() => {
+		const fullscreen = open.value && document.fullscreenElement;
+		return fullscreen instanceof HTMLElement ? fullscreen : undefined;
+	});
 	const geometry = useDialogGeometry(props, open, element, (cause) => emit('storageError', cause));
 	defineSlots<{
 		title?: (props: { title: string }) => VNodeChild;
@@ -75,7 +79,7 @@
 
 <template>
 	<DialogRoot :open="open" :modal="props.modal" @update:open="updateOpen">
-		<DialogPortal>
+		<DialogPortal :to="portalTarget">
 			<UiTransition preset="fade"
 				><DialogOverlay
 					v-if="props.modal && open"
@@ -126,6 +130,7 @@
 									</div>
 									<DialogClose v-if="props.showClose" as-child
 										><UiButton
+											class="ui-dialog__close"
 											appearance="ghost"
 											icon-only
 											:disabled="props.closeDisabled"
@@ -169,6 +174,12 @@
 		backdrop-filter: var(--ui-dialog-overlay-filter, blur(7px));
 	}
 	.ui-dialog {
+		--_dialog-section-padding: clamp(10px, calc(var(--ui-dialog-padding, 26px) - 10px), 16px);
+		--_dialog-surface: var(--ui-dialog-background, var(--ui-surface));
+		--_dialog-divider: color-mix(in srgb, var(--ui-border) 76%, var(--_dialog-surface));
+		--_dialog-header: color-mix(in srgb, var(--ui-primary) 12%, var(--_dialog-surface));
+		--_dialog-footer: color-mix(in srgb, var(--ui-background) 56%, var(--_dialog-surface));
+
 		position: fixed;
 		top: 50%;
 		left: 50%;
@@ -179,11 +190,16 @@
 		max-height: calc(100dvh - 48px);
 		padding: 0;
 		transform: translate(-50%, -50%);
-		border: 1px solid var(--ui-dialog-border, var(--ui-border));
+		border: 1px solid var(--ui-dialog-border, var(--_dialog-edge, var(--ui-border)));
 		border-radius: var(--ui-dialog-radius, 24px);
-		background: var(--ui-dialog-background, var(--ui-surface));
+		background: var(--_dialog-surface);
 		color: var(--ui-dialog-text, var(--ui-text));
-		box-shadow: var(--ui-dialog-shadow, 0 28px 100px #18142f35);
+		box-shadow: var(--ui-dialog-shadow, var(--_dialog-elevation, 0 8px 24px #18142f1a, 0 28px 72px #18142f33));
+	}
+	:where([data-ui-mode='dark']:not([data-ui-theme-mode='light']), [data-ui-theme-mode='dark']) .ui-dialog {
+		--_dialog-edge: color-mix(in srgb, var(--ui-text) 23%, var(--ui-border));
+		--_dialog-divider: color-mix(in srgb, var(--ui-text) 13%, var(--ui-border));
+		--_dialog-elevation: 0 8px 24px #0005, 0 28px 72px #0009;
 	}
 	.ui-dialog__surface {
 		display: flex;
@@ -217,10 +233,23 @@
 	.ui-dialog__header {
 		display: flex;
 		flex-shrink: 0;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
 		gap: 18px;
-		padding: var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px) 18px;
+		padding: var(--_dialog-section-padding) var(--ui-dialog-padding, 26px);
+		background: linear-gradient(
+			110deg,
+			var(--_dialog-header),
+			color-mix(in srgb, var(--ui-primary) 4%, var(--_dialog-surface))
+		);
+		box-shadow: inset 0 -1px var(--_dialog-divider);
+	}
+	.ui-dialog__close {
+		--ui-button-background: color-mix(in srgb, var(--_dialog-surface) 72%, transparent);
+		--ui-button-border: var(--_dialog-divider);
+		--ui-button-hover-background: var(--_dialog-surface);
+		--ui-button-hover-border: var(--ui-border);
+		--ui-button-text: var(--ui-muted);
 	}
 	.ui-dialog__heading {
 		min-width: 0;
@@ -233,7 +262,7 @@
 		cursor: grabbing;
 	}
 	.ui-dialog__title {
-		margin: 3px 0 0;
+		margin: 0;
 		font-size: var(--ui-dialog-title-font-size, 19px);
 		font-weight: 650;
 		line-height: 1.5;
@@ -249,7 +278,10 @@
 	}
 	.ui-dialog__body {
 		min-height: 0;
-		padding: 0 var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px);
+		padding: 12px var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px);
+	}
+	.ui-dialog__body:where(:has(+ .ui-dialog__footer)) {
+		padding-block-end: var(--_dialog-section-padding);
 	}
 	.ui-dialog[data-geometry] .ui-dialog__body {
 		flex: 1 1 auto;
@@ -258,8 +290,13 @@
 		display: flex;
 		flex-shrink: 0;
 		flex-wrap: wrap;
+		align-items: center;
+		align-content: center;
+		min-block-size: calc(var(--ui-dialog-footer-min-content-height, 0px) + 2 * var(--_dialog-section-padding));
 		gap: var(--ui-dialog-footer-gap, 12px);
-		padding: 0 var(--ui-dialog-padding, 26px) var(--ui-dialog-padding, 26px);
+		padding: var(--_dialog-section-padding) var(--ui-dialog-padding, 26px);
+		background: var(--_dialog-footer);
+		box-shadow: inset 0 1px var(--_dialog-divider);
 	}
 	.ui-dialog__footer > :deep(*) {
 		flex: 1 1 0;

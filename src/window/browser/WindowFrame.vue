@@ -255,12 +255,18 @@
 		display: flex;
 		flex-direction: column;
 		pointer-events: auto;
-		border: 1px solid var(--ui-border);
+		border: 1px solid var(--_window-border, var(--ui-border));
 		border-radius: 20px;
 		/* 活动窗口已有 is-focused 边框与阴影，焦点交接不叠加浏览器默认外框。 */
 		outline: none;
 		background: var(--ui-surface);
-		box-shadow: 0 16px 54px #15132d18;
+		box-shadow: 0 16px 54px var(--_window-shadow, #15132d18);
+	}
+	:where([data-ui-mode='dark']:not([data-ui-theme-mode='light']), [data-ui-theme-mode='dark']) .application-window {
+		--_window-border: color-mix(in srgb, var(--ui-text) 22%, var(--ui-border));
+		--_window-focused-border: color-mix(in srgb, var(--ui-primary) 32%, var(--_window-border));
+		--_window-shadow: #0007;
+		--_window-focused-shadow: #0009;
 	}
 	.application-window__surface {
 		display: flex;
@@ -272,17 +278,21 @@
 		border-radius: inherit;
 	}
 	.application-window.is-focused {
+		border-color: var(--_window-focused-border, var(--ui-border));
 		box-shadow:
-			0 24px 80px #17132d2b,
+			0 24px 80px var(--_window-focused-shadow, #17132d2b),
 			0 0 0 1px color-mix(in srgb, var(--ui-primary) 12%, transparent);
 	}
 	.application-window__titlebar {
+		--_titlebar-height: var(--ui-window-titlebar-height, 44px);
+		--_titlebar-safe-top: 0px;
+		--ui-button-height: min(36px, calc(var(--_titlebar-height) - 6px));
 		display: flex;
 		flex-shrink: 0;
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-		min-height: 52px;
+		height: calc(var(--_titlebar-height) + var(--_titlebar-safe-top));
 		padding: 0 10px 0 20px;
 		background: var(--ui-window-header, light-dark(#eeebf2ee, #282431));
 		border-bottom: 1px solid var(--ui-border);
@@ -290,14 +300,14 @@
 		touch-action: none;
 	}
 	.application-window__titlebar:has(.window-tabs) {
-		min-height: 46px;
+		--ui-button-height: min(32px, calc(var(--_titlebar-height) - 10px));
 		align-items: stretch;
 		gap: 8px;
-		padding: 7px 10px 4px 10px;
+		padding: calc(4px + var(--_titlebar-safe-top)) 10px 3px;
 		background: linear-gradient(
 			to top,
-			var(--ui-surface) 4px,
-			var(--ui-window-header, light-dark(#e8e4f0, #1f1c29)) 4px
+			var(--ui-surface) 3px,
+			var(--ui-window-header, light-dark(#e8e4f0, #1f1c29)) 3px
 		);
 		border-bottom: 0;
 	}
@@ -334,21 +344,16 @@
 		box-shadow: none;
 	}
 	.is-compact .application-window__titlebar {
-		min-height: calc(52px + env(safe-area-inset-top));
+		--_titlebar-safe-top: env(safe-area-inset-top);
 		padding-top: env(safe-area-inset-top);
 		padding-left: max(14px, env(safe-area-inset-left));
 		padding-right: max(10px, env(safe-area-inset-right));
 	}
 	.is-compact .application-window__titlebar:has(.window-tabs) {
-		min-height: calc(46px + env(safe-area-inset-top));
-		padding-top: calc(7px + env(safe-area-inset-top));
-		padding-bottom: 4px;
+		padding-top: calc(4px + var(--_titlebar-safe-top));
 		padding-left: max(10px, env(safe-area-inset-left));
 	}
 	.is-compact .application-window__body {
 		padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-	}
-	.is-compact .application-window__controls {
-		--ui-button-height: 36px;
 	}
 </style>

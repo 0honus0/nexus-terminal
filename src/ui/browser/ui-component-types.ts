@@ -200,8 +200,8 @@ export interface UiDropdownMenuProps {
 	items: readonly UiMenuItem[];
 	disabled?: boolean;
 	align?: 'start' | 'center' | 'end';
-	/** 默认直接展开；旧 drop 模式同样直接展开，显式 fade 仍可使用。 */
-	transition?: 'none' | 'fade' | 'drop';
+	/** 默认直接展开。 */
+	transition?: 'none' | 'fade';
 }
 
 /** 通用静态列表项，业务操作放在 actions 插槽，不将整行伪装成按钮。 */

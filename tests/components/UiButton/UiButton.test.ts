@@ -22,7 +22,7 @@ it.each([false, true])(
 
 				default: () => h(content),
 
-				trailing: '<span>↗</span>',
+				trailing: '<span>…</span>',
 			},
 		});
 		try {
@@ -30,7 +30,7 @@ it.each([false, true])(
 			await wrapper.trigger('click');
 			await wrapper.setProps({ loading: true });
 			expect(wrapper.get('.ui-button__content').element).toBe(original);
-			expect(wrapper.text()).toBe('Save↗');
+			expect(wrapper.text()).toBe('Save…');
 			expect(unmounted).not.toHaveBeenCalled();
 			expect(wrapper.attributes('aria-busy')).toBe('true');
 			expect(wrapper.get('.ui-button__loader').attributes('aria-hidden')).toBe('true');
@@ -50,7 +50,7 @@ it.each([false, true])(
 it('replaces only the leading icon and keeps the label and trailing content mounted', async () => {
 	const wrapper = mount(UiButton, {
 		props: { loadingAnimation: 'spinner' },
-		slots: { leading: '<svg />', default: '<span>Enable</span>', trailing: '<span>↗</span>' },
+		slots: { leading: '<svg />', default: '<span>Enable</span>', trailing: '<span>…</span>' },
 	});
 	try {
 		const icon = wrapper.get('svg').element;
@@ -58,7 +58,7 @@ it('replaces only the leading icon and keeps the label and trailing content moun
 		await wrapper.setProps({ loading: true });
 		expect(wrapper.get('svg').element).toBe(icon);
 		expect(wrapper.get('.ui-button__content > span:nth-child(2)').element).toBe(label);
-		expect(wrapper.text()).toBe('Enable↗');
+		expect(wrapper.text()).toBe('Enable…');
 		expect(wrapper.find('.ui-button__leading .ui-button__spinner').exists()).toBe(true);
 		expect(wrapper.find('.ui-button > .ui-button__loader').exists()).toBe(false);
 		await wrapper.setProps({ loading: false });

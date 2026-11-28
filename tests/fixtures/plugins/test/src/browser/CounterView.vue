@@ -57,7 +57,7 @@
 				{
 					id: 'layout',
 					label: 'Fixture layout',
-					menuTransition: 'drop',
+					menuTransition: 'none',
 					items: [{ id: 'edit', label: 'Edit layout' }],
 				},
 				{

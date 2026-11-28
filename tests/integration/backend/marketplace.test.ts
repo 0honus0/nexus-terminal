@@ -28,7 +28,7 @@ import {
 } from '../../../src/marketplace/marketplace-http-types.js';
 import { MarketplaceInstallPlanSchema } from '../../../src/marketplace/marketplace-install-types.js';
 import { planMarketplaceInstall } from '../../../src/marketplace/node/marketplace-install-planner.js';
-import { MarketplaceStorage } from '../../../src/marketplace/node/marketplace-storage.js';
+import { marketplaceMigrations, MarketplaceStorage } from '../../../src/marketplace/node/marketplace-storage.js';
 import {
 	MarketplaceOperationSchema,
 	MarketplaceOperationsSchema,
@@ -42,7 +42,7 @@ import type { PluginManifest } from '../../../src/plugin/plugin-manifest-types.j
 import { readPluginRuntime } from './plugin-test-host.js';
 import { StateMessageSchema } from '../../../src/state/state-ws-types.js';
 
-async function setup(t: TestContext) {
+async function setup(t: TestContext, { initializeOnly = false } = {}) {
 	const directory = await mkdtemp(join(tmpdir(), 'nexus-marketplace-'));
 	const options = { dataDirectory: join(directory, 'data'), logLevel: 'fatal' } as const;
 	let app = new App(options);
@@ -54,8 +54,10 @@ async function setup(t: TestContext) {
 		}
 	});
 	await app.initialize();
-	await app.startBuiltinPlugins();
-	await app.startExternalPlugins();
+	if (!initializeOnly) {
+		await app.startBuiltinPlugins();
+		await app.startExternalPlugins();
+	}
 
 	return {
 		directory,
@@ -73,6 +75,48 @@ async function setup(t: TestContext) {
 		},
 	};
 }
+
+test('商城补齐早期安装表的仓库字段并保留现有记录', async (t) => {
+	const { app } = await setup(t, { initializeOnly: true });
+	const database = app.services.get('database');
+	const migrations = await marketplaceMigrations.getMigrations();
+	const signal = new AbortController().signal;
+	await database.migratePlugin(
+		MarketplacePluginId,
+		{
+			async getMigrations() {
+				return {
+					'001_plugins': {
+						async up(db) {
+							await migrations['001_plugins'].up(db);
+							await db.schema.alterTable('plugins').dropColumn('repositoryId').execute();
+						},
+					},
+					'002_repositories': migrations['002_repositories'],
+				};
+			},
+		},
+		signal,
+	);
+	const table = pluginTablePrefix(MarketplacePluginId) + 'plugins';
+	const pluginId = '@example/retained-marketplace-row';
+	await database.withClient((db) =>
+		sql`insert into ${sql.table(table)} (pluginId, version, directory, source) values (${pluginId}, '1.0.0', 'fixture', 'local')`.execute(
+			db,
+		),
+	);
+	await database.migratePlugin(MarketplacePluginId, marketplaceMigrations, signal);
+	const rows = await database.withClient((db) =>
+		sql<{
+			pluginId: string;
+			repositoryId: string | null;
+		}>`select pluginId, repositoryId from ${sql.table(table)}`.execute(db),
+	);
+	assert.deepEqual(
+		rows.rows.map(({ pluginId, repositoryId }) => ({ pluginId, repositoryId })),
+		[{ pluginId, repositoryId: null }],
+	);
+});
 
 async function writePlugin(
 	directory: string,

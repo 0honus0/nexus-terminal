@@ -74,8 +74,7 @@ export function planBackupPackages(
 				throw new CodedError('BACKUP_PLUGIN_SOURCE_UNAVAILABLE');
 
 			present.set(pluginId, record);
-			// 旧归档只有所属插件版本。现有机器仍按原流程暂停和恢复。
-			dependsOn = saved?.dependsOn ?? {};
+			dependsOn = manifest.nexus.dependsOn ?? {};
 		} else {
 			// 归档中的 URL 只匹配目标已登记的来源，不能自行新增仓库或下载地址。
 			const repository = repositories.find(({ url }) => url === saved?.repositoryUrl);

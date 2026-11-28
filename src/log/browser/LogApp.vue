@@ -101,7 +101,12 @@
 				:description="t(history.entries.value.length ? 'logViewer.noMatchesHint' : 'logViewer.emptyHint')"
 			/>
 			<ol v-else class="log-list">
-				<li v-for="{ entry, message, severity, tone } in entries" :key="entry.id" class="log-row">
+				<li
+					v-for="{ entry, message, severity, tone } in entries"
+					:key="entry.id"
+					class="log-row"
+					:data-tone="tone"
+				>
 					<details>
 						<summary v-selectable-action :aria-label="`${t('logViewer.details')}: ${message}`">
 							<div class="log-row__meta">
@@ -114,7 +119,9 @@
 								}}</time>
 							</div>
 							<div class="log-row__message">
-								<span>{{ message }}</span><ChevronDown :size="15" aria-hidden="true" />
+								<span>{{ message }}</span><span class="log-row__disclosure" aria-hidden="true"
+									><ChevronDown :size="15"
+								/></span>
 							</div>
 						</summary>
 						<dl class="log-details" data-ui-selection="text">
@@ -178,9 +185,14 @@
 		width: 44px;
 		height: 44px;
 		flex: none;
-		border-radius: 14px;
+		border: 1px solid color-mix(in srgb, var(--ui-primary) 19%, var(--ui-border));
+		border-radius: 12px;
 		color: var(--ui-primary);
-		background: color-mix(in srgb, var(--ui-primary) 10%, transparent);
+		background: linear-gradient(
+			155deg,
+			color-mix(in srgb, var(--ui-primary) 16%, var(--ui-surface)),
+			var(--ui-surface)
+		);
 	}
 	h2 {
 		margin: 0;
@@ -194,10 +206,12 @@
 		color: var(--ui-muted);
 	}
 	.log-count {
-		min-width: 9ch;
-		text-align: end;
 		flex: none;
-		font-size: 12px;
+		padding: 4px 9px;
+		border: 1px solid var(--ui-border);
+		border-radius: 7px;
+		background: color-mix(in srgb, var(--ui-text) 3%, var(--ui-surface));
+		font-size: 11px;
 		font-variant-numeric: tabular-nums;
 		color: var(--ui-muted);
 	}
@@ -209,22 +223,49 @@
 		min-height: 0;
 		overscroll-behavior: contain;
 		border-top: 1px solid var(--ui-border);
+		background: color-mix(in srgb, var(--ui-text) 3%, var(--ui-surface));
 	}
 	.log-list {
 		margin: 0;
-		padding: 0 24px;
+		padding: 8px 24px 16px;
 		list-style: none;
 	}
 	.log-row {
-		border-bottom: 1px solid var(--ui-border);
+		--log-accent: var(--ui-muted);
+		border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 78%, var(--ui-surface));
+	}
+	.log-row[data-tone='primary'] {
+		--log-accent: var(--ui-primary);
+	}
+	.log-row[data-tone='warning'] {
+		--log-accent: var(--ui-warning);
+	}
+	.log-row[data-tone='danger'] {
+		--log-accent: var(--ui-danger);
 	}
 	.log-row:last-child {
 		border-bottom: 0;
 	}
 	summary {
-		padding: 16px 0;
+		position: relative;
+		padding-block: 12px;
+		padding-inline: 17px 12px;
+		border-radius: 7px;
 		list-style: none;
 		cursor: pointer;
+	}
+	summary::before {
+		content: '';
+		position: absolute;
+		inset-block: 14px;
+		inset-inline-start: 0;
+		width: 2px;
+		border-radius: 2px;
+		background: color-mix(in srgb, var(--log-accent) 68%, transparent);
+	}
+	summary:hover,
+	details[open] summary {
+		background-color: color-mix(in srgb, var(--log-accent) 5%, var(--ui-surface));
 	}
 	summary::-webkit-details-marker {
 		display: none;
@@ -248,6 +289,7 @@
 		white-space: nowrap;
 		color: var(--ui-muted);
 		font-size: 11px;
+		font-family: var(--ui-font-mono, ui-monospace, monospace);
 	}
 	time {
 		flex: none;
@@ -257,29 +299,38 @@
 	}
 	.log-row__message {
 		display: flex;
-		align-items: start;
+		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
-		margin-top: 9px;
+		margin-top: 6px;
 		font-size: 13px;
 		line-height: 1.7;
 		overflow-wrap: anywhere;
 	}
-	.log-row__message svg {
+	.log-row__disclosure {
+		display: grid;
+		place-items: center;
 		flex: none;
-		margin-top: 4px;
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
 		color: var(--ui-muted);
 	}
-	details[open] .log-row__message svg {
+	summary:hover .log-row__disclosure,
+	details[open] .log-row__disclosure {
+		background: color-mix(in srgb, var(--log-accent) 9%, transparent);
+	}
+	details[open] .log-row__disclosure svg {
 		transform: rotate(180deg);
 	}
 	.log-details {
 		display: grid;
 		gap: 12px;
-		margin: 0 0 16px;
+		margin: 6px 12px 12px 17px;
 		padding: 14px;
-		border-radius: 12px;
-		background: color-mix(in srgb, var(--ui-muted) 6%, transparent);
+		border: 1px solid var(--ui-border);
+		border-radius: 8px;
+		background: var(--ui-surface);
 		font-size: 12px;
 		line-height: 1.6;
 	}
@@ -294,6 +345,7 @@
 	dd {
 		margin: 0;
 		overflow-wrap: anywhere;
+		font-family: var(--ui-font-mono, ui-monospace, monospace);
 	}
 	pre {
 		margin: 0;
@@ -314,7 +366,7 @@
 			gap: 8px;
 		}
 		.log-list {
-			padding: 0 16px;
+			padding: 6px 12px 12px;
 		}
 		.log-details > div {
 			grid-template-columns: minmax(0, 1fr);

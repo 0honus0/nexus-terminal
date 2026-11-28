@@ -510,6 +510,7 @@ test('已安装插件的加载与撤销，以及内置设置和备份恢复', as
 			animationSpeed: 1.3,
 			escapeAction: 'close',
 			wallpaper: 'silk',
+			windowTitlebarSize: 'standard',
 		});
 		const secondTab = await page.context().newPage();
 		try {
@@ -822,7 +823,11 @@ test('插件市场加载真实仓库，刷新失败保留目录，编辑和移�
 
 		async function showVersion(expected: string) {
 			await discover.click();
-			await expect(initial.getByText('v' + expected)).toBeVisible();
+			await initial.click();
+			const details = page.getByRole('dialog', { name: 'Plugin details', exact: true });
+			await expect(details.getByRole('combobox', { name: 'Version and source' })).toContainText(expected + ' ·');
+			await details.getByRole('button', { name: 'Close application', exact: true }).click();
+			await expect(details).toHaveCount(0);
 			await manage.click();
 		}
 
@@ -987,7 +992,10 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	await discover.click();
 	const listing = market.getByRole('button', { name: 'View Lifecycle Fixture', exact: true });
 	await listing.click();
-	await page.getByRole('button', { name: 'Preview installation', exact: true }).click();
+	await page
+		.getByRole('dialog', { name: 'Plugin details' })
+		.getByRole('button', { name: 'Install', exact: true })
+		.click();
 	const plan = page.getByRole('dialog', { name: 'Plugin installation' });
 	await expect(plan.getByText(dependency, { exact: false })).toBeVisible();
 	expect(downloads).toEqual([]);
@@ -999,17 +1007,16 @@ test('marketplace installs, updates and uninstalls actual packages with retained
 	await expect(card).toContainText('1.0.0');
 	await expect(card.getByRole('status')).toHaveText('Available');
 	await discover.click();
-	await listing.focus();
-	await listing.press('Enter');
-	const discoveryDetail = page.getByRole('dialog', { name: 'Plugin details', exact: true });
-	await discoveryDetail
-		.getByRole('button', { name: 'Manage installed plugin', exact: true })
-		.click({ timeout: 5000 });
+	await expect(listing).toHaveCount(0);
+	await manage.click();
+	const manageCard = card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true });
+	await manageCard.focus();
+	await manageCard.press('Enter');
 	const management = page.getByRole('dialog', { name: 'Manage installed plugin', exact: true });
 	await expect(management).toBeVisible();
 	await management.getByRole('button', { name: 'Close application', exact: true }).click();
 	await expect(management).toHaveCount(0);
-	await expect(card.getByRole('button', { name: 'Manage Lifecycle Fixture', exact: true })).toBeFocused();
+	await expect(manageCard).toBeFocused();
 	await market.getByRole('searchbox', { name: 'Search plugins' }).fill('');
 	expect(downloads).toHaveLength(2);
 	const table = pluginTablePrefix(id) + 'records';

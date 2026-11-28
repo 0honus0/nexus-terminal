@@ -588,6 +588,22 @@
 	[data-profile='compact'] .application-tile strong {
 		font-size: clamp(11px, 13cqi, 12px);
 	}
+	@container (max-height: 82px) {
+		.application-tile :deep(.ui-action-card__content) {
+			gap: 2px;
+			padding: 2px;
+		}
+		.application-tile__icon,
+		[data-profile='compact'] .application-tile__icon {
+			width: clamp(12px, 42cqh, 24px);
+			border-radius: 7px;
+		}
+	}
+	@container (max-height: 56px) {
+		.application-tile strong {
+			-webkit-line-clamp: 1;
+		}
+	}
 	.desktop-widget {
 		width: 100%;
 		height: 100%;

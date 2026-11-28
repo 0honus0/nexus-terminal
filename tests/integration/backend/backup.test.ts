@@ -268,6 +268,7 @@ test('恢复普通外键时允许前向引用，无效引用回滚，并拦截�
 
 	const archive = (child: string, code: string, markerRows = [{ id: 'existing' }]) =>
 		backup.parse({
+			packages: [],
 			entries: [[{ id: 'child', parent: child }], [{ id: 'parent', code }], markerRows].map((rows, index) => ({
 				pluginId,
 				pluginVersion: '1.0.0',
@@ -277,11 +278,12 @@ test('恢复普通外键时允许前向引用，无效引用回滚，并拦截�
 		});
 
 	const valid = archive('parent', 'original');
+	assert.throws(() => backup.parse({ entries: valid.entries }));
 	await backup.preview(valid, scope);
 	await backup.restore(valid, scope);
 	const invalid = archive('missing', 'updated');
 	await assert.rejects(backup.restore(invalid, scope), /FOREIGN KEY constraint failed/u);
-	assert.deepEqual(await backup.export(scope), valid);
+	assert.deepEqual(await backup.export(scope), { entries: valid.entries });
 
 	await database.withClient((db) => sql`insert into ${retained} values ('local', 'original')`.execute(db));
 	const cascade = archive('parent', 'updated');
@@ -290,7 +292,7 @@ test('恢复普通外键时允许前向引用，无效引用回滚，并拦截�
 	const triggered = archive('parent', 'original', []);
 	await assert.rejects(backup.preview(triggered, scope), { code: 'BACKUP_RESTORE_TRIGGER_UNSAFE' });
 	await assert.rejects(backup.restore(triggered, scope), { code: 'BACKUP_RESTORE_TRIGGER_UNSAFE' });
-	assert.deepEqual(await backup.export(scope), valid);
+	assert.deepEqual(await backup.export(scope), { entries: valid.entries });
 
 	// 即使归档会先删除子行，执行也遵循预览对原始引用关系的整批检查。
 	const retainedTable: BackupTable = {
@@ -301,6 +303,7 @@ test('恢复普通外键时允许前向引用，无效引用回滚，并拦截�
 	};
 	await backup.register(pluginId, '1.0.0', [...definitions, retainedTable], scope.signal);
 	const removesReference = backup.parse({
+		packages: [],
 		entries: [{ pluginId, pluginVersion: '1.0.0', table: retainedTable, rows: [] }, ...cascade.entries],
 	});
 	await assert.rejects(backup.preview(removesReference, scope), { code: 'BACKUP_RESTORE_RELATIONSHIP_UNSAFE' });

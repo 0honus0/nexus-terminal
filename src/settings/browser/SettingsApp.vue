@@ -30,7 +30,7 @@
 		UiSwitch,
 	} from '../../ui/browser/ui-components-api.js';
 	import { useUiThemes } from '../../ui/browser/ui-theme-api.js';
-	import { AnimationSpeedSchema, type DesktopWallpaper } from '../settings-types.js';
+	import { AnimationSpeedSchema, WindowTitlebarSizeSchema, type DesktopWallpaper } from '../settings-types.js';
 	import type { SettingsPreferencesApi } from './settings-preferences-api.js';
 
 	const { auth, preferences, log, minimized } = defineProps<{
@@ -208,6 +208,32 @@
 			<div class="settings-rows">
 				<UiFormRow
 					class="settings-compact-control"
+					:label="t('desktop.windowTitlebarSize')"
+					:icon="Monitor"
+					v-slot="field"
+				>
+					<UiSelect
+						:id="field.id"
+						:aria-describedby="field.describedby"
+						:aria-label="t('desktop.windowTitlebarSize')"
+						:model-value="state.windowTitlebarSize"
+						:options="
+							WindowTitlebarSizeSchema.options.map((value) => ({
+								value,
+								label: t('desktop.windowTitlebarSizes.' + value),
+							}))
+						"
+						@update:model-value="
+							(value) => {
+								const size = WindowTitlebarSizeSchema.safeParse(value);
+								if (size.success) preferences.update({ windowTitlebarSize: size.data });
+							}
+						"
+					/>
+				</UiFormRow>
+				<div class="settings-row-divider" aria-hidden="true" />
+				<UiFormRow
+					class="settings-compact-control"
 					:label="t('desktop.escapeAction')"
 					:icon="Keyboard"
 					v-slot="field"
@@ -333,11 +359,32 @@
 		gap: 14px;
 	}
 	.settings-card {
-		padding: 18px 20px;
+		--settings-card-inline: 20px;
+		--settings-card-bottom: 18px;
+		--ui-section-title-size: 17px;
+		--ui-section-icon-color: var(--ui-primary);
+
+		padding: 0 var(--settings-card-inline) var(--settings-card-bottom);
 		border: 1px solid color-mix(in srgb, var(--ui-border) 78%, transparent);
 		border-radius: 16px;
 		background: color-mix(in srgb, var(--ui-surface) 92%, transparent);
 		box-shadow: 0 2px 10px color-mix(in srgb, #241b35 4%, transparent);
+	}
+	.settings-card :deep(.ui-section__header) {
+		margin-inline: calc(-1 * var(--settings-card-inline));
+		padding: 10px var(--settings-card-inline);
+		border-block-end: 1px solid var(--ui-border);
+		border-radius: 15px 15px 0 0;
+		background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-surface));
+	}
+	.settings-card :deep(.ui-section__heading h2) {
+		font-weight: 680;
+	}
+	.settings-card :deep(.ui-section__heading h2 > svg) {
+		box-sizing: content-box;
+		padding: 6px;
+		border-radius: 8px;
+		background: color-mix(in srgb, var(--ui-primary) 12%, transparent);
 	}
 	.settings-rows {
 		display: grid;
@@ -591,7 +638,8 @@
 	}
 	@container (max-width: 460px) {
 		.settings-card {
-			padding: 14px 15px;
+			--settings-card-inline: 15px;
+			--settings-card-bottom: 14px;
 		}
 		.account-fields {
 			grid-template-columns: minmax(0, 1fr);

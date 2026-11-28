@@ -20,9 +20,7 @@ const BoundsSchema = z.strictObject({
 
 const ProfilePlacementsSchema = z.record(z.string(), BoundsSchema).optional();
 
-const PlacementsSchema = z
-	.object({ compact: ProfilePlacementsSchema, medium: ProfilePlacementsSchema, wide: ProfilePlacementsSchema })
-	.transform(({ compact, medium, wide }) => ({ compact, wide: { ...medium, ...wide } }));
+const PlacementsSchema = z.object({ compact: ProfilePlacementsSchema, wide: ProfilePlacementsSchema });
 
 export type WindowBounds = z.infer<typeof BoundsSchema>;
 

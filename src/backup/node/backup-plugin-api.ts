@@ -161,7 +161,7 @@ export class BackupPlugin implements BuiltinPlugin {
 					try {
 						const marketplace = await this.#marketplace.planBackup(
 							ownersOf(archive.entries).filter(({ pluginId }) => !this.#data.isHostOwner(pluginId)),
-							archive.packages ?? [],
+							archive.packages,
 							signal,
 						);
 						const installs = marketplace.installs.map(({ step }) => ({
@@ -224,7 +224,7 @@ export class BackupPlugin implements BuiltinPlugin {
 						.then(() =>
 							this.#marketplace.restoreBackup(
 								owners,
-								archive.packages ?? [],
+								archive.packages,
 								plan.marketplace,
 								(signal) => this.#data.restore(archive, { signal, onDispose: context.onDispose }),
 								context.signal,

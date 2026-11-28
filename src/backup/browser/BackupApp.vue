@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { Archive, Download, ShieldCheck, Upload } from '@lucide/vue';
+	import { Archive, Database, Download, FileJson, Package, ShieldCheck, Upload } from '@lucide/vue';
 	import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { z } from 'zod';
@@ -30,11 +30,21 @@
 		log: Pick<LogApi, 'report'>;
 		state?: Pick<StateClient, 'subscribe'>;
 	}>();
-	const { t } = useI18n({ useScope: 'global' });
+	const { t, locale } = useI18n({ useScope: 'global' });
 	const lifetime = new AbortController();
 	const password = ref('');
 	const restorePassword = ref('');
 	const file = shallowRef<File>();
+	const fileSize = computed(() => {
+		if (!file.value) return '';
+		const bytes = file.value.size;
+		const unit = bytes < 1024 ? 'byte' : bytes < 1024 ** 2 ? 'kilobyte' : 'megabyte';
+		return new Intl.NumberFormat(locale.value, {
+			style: 'unit',
+			unit,
+			maximumFractionDigits: 1,
+		}).format(bytes / (unit === 'byte' ? 1 : unit === 'kilobyte' ? 1024 : 1024 ** 2));
+	});
 	const plan = shallowRef<{ preview: z.infer<typeof BackupPlanSchema>; archive: z.infer<typeof BackupFileSchema> }>();
 	const job = shallowRef<z.infer<typeof BackupStatusSchema> | null>(null);
 	const loading = ref<'export' | 'inspect' | 'restore'>();
@@ -185,6 +195,7 @@
 		</header>
 		<div class="nexus-backup__sections">
 			<UiSection
+				class="nexus-backup__panel nexus-backup__panel--export"
 				appearance="panel"
 				:title="t('backup.tile.export')"
 				:aria-label="t('backup.tile.export')"
@@ -213,15 +224,26 @@
 				</UiField>
 			</UiSection>
 			<UiSection
+				class="nexus-backup__panel"
 				appearance="panel"
 				:title="t('backup.tile.import')"
 				:aria-label="t('backup.tile.import')"
 				:icon="Upload"
 			>
-				<label class="nexus-backup__file" :data-disabled="busy || undefined">
-					<Upload :size="22" aria-hidden="true" /><span :title="file?.name">{{
-						file?.name ?? t('backup.file')
-					}}</span>
+				<label
+					class="nexus-backup__file"
+					:data-disabled="busy || undefined"
+					:data-selected="!!file || undefined"
+				>
+					<span class="nexus-backup__file-icon" aria-hidden="true"><FileJson :size="19" /></span>
+					<span class="nexus-backup__file-details">
+						<strong :title="file?.name">{{ file?.name ?? t('backup.file') }}</strong>
+						<span>{{ file ? fileSize : '.json' }}</span>
+					</span>
+					<span class="nexus-backup__file-action" :title="file ? t('backup.replaceFile') : undefined">
+						<Upload :size="16" aria-hidden="true" />
+						<span v-if="file">{{ t('backup.replaceFile') }}</span>
+					</span>
 					<input
 						type="file"
 						name="backup-file"
@@ -264,21 +286,23 @@
 		>
 			<template v-if="plan">
 				<UiSection v-if="plan.preview.installs.length" :title="t('backup.installPlugins')">
-					<UiList>
+					<UiList class="backup-dialog__items">
 						<UiListItem
 							v-for="{ pluginId, version, repository } in plan.preview.installs"
 							:key="pluginId"
 							:title="pluginId"
 							:description="version + ' · ' + repository"
+							:icon="Package"
 						/>
 					</UiList>
 				</UiSection>
-				<UiList
+				<UiList class="backup-dialog__items"
 					><UiListItem
 						v-for="entry in plan.preview.tables"
 						:key="entry.pluginId + ':' + entry.table"
 						:title="entry.table"
 						:description="t('backup.rows', { pluginId: entry.pluginId, count: entry.rows })"
+						:icon="Database"
 				/></UiList>
 			</template>
 			<template v-if="plan" #footer>

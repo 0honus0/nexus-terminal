@@ -1,5 +1,5 @@
 <script setup lang="ts">
-	import { Package, RotateCw, Search } from '@lucide/vue';
+	import { AppWindow, Blocks, CircleHelp, Database, Package, Puzzle, RotateCw, Search } from '@lucide/vue';
 	import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Component } from 'vue';
 	import { useI18n } from 'vue-i18n';
 	import type { LogApi } from '../../log/browser/log-api.js';
@@ -93,6 +93,7 @@
 	const root = ref<HTMLElement>();
 	const catalog = shallowRef<readonly MarketplaceCatalogPlugin[]>();
 	const repositories = shallowRef<readonly MarketplaceRepository[]>([]);
+	const installedGroupOpen = ref({ application: true, extension: true, unknown: true, builtin: true });
 	const selectedId = ref<string>();
 	const detailOpen = ref(false);
 	const planOpen = ref(false);
@@ -256,8 +257,15 @@
 	}
 
 	const installedGroups = computed(() =>
-		(['application', 'extension', null] as const).map((kind) => ({
+		(
+			[
+				{ kind: 'application', icon: AppWindow },
+				{ kind: 'extension', icon: Puzzle },
+				{ kind: null, icon: CircleHelp },
+			] as const
+		).map(({ kind, icon }) => ({
 			kind,
+			icon,
 			items: results.value?.filter(({ item }) => item.kind === kind) ?? [],
 		})),
 	);
@@ -610,6 +618,7 @@
 	function refresh(): void {
 		void discover(true);
 		if (managing.value) refreshManagement();
+		else if (installed === undefined) emit('refresh');
 	}
 
 	function setManaging(next: boolean): void {
@@ -650,8 +659,7 @@
 							:aria-pressed="managing"
 							@click="setManaging(true)"
 						>
-							<span>{{ t('marketplace.installed') }}</span>
-							<span class="marketplace-nav__count">{{ n(installed?.length ?? 0) }}</span>
+							{{ t('marketplace.installed') }}
 						</button>
 					</div>
 					<UiButton
@@ -669,10 +677,9 @@
 			<MarketplaceDiscover
 				v-if="!managing"
 				:plugins="catalog ?? []"
-				:installed="installed ?? []"
-				:updates="updates"
+				:installed="installed"
 				:query="query"
-				:refreshing="refreshing"
+				:refreshing="refreshing || (loading && installed === undefined)"
 				:failed="catalogFailed"
 				@inspect="inspect"
 			/>
@@ -684,17 +691,18 @@
 						:title="t(query.trim() ? 'marketplace.noMatchingPlugins' : 'marketplaceTile.empty')"
 					/>
 					<template v-for="group in installedGroups" :key="group.kind ?? 'unknown'">
-						<section
+						<UiSection
 							v-if="group.items.length"
+							v-model:open="installedGroupOpen[group.kind ?? 'unknown']"
 							class="marketplace-installed-group"
 							:data-kind="group.kind ?? 'unknown'"
+							:title="t('marketplace.installedGroup.' + (group.kind ?? 'unknown'))"
+							:icon="group.icon"
+							collapsible
 						>
-							<header class="marketplace-installed-group__heading">
-								<h3>
-									{{ t('marketplace.installedGroup.' + (group.kind ?? 'unknown')) }}
-									<span>{{ n(group.items.length) }}</span>
-								</h3>
-							</header>
+							<template #actions>
+								<span class="marketplace-installed-count">{{ n(group.items.length) }}</span>
+							</template>
 							<ul class="marketplace-installed-cards">
 								<MarketplaceInstalledCard
 									v-for="{ item, name, entries, status, update } in group.items"
@@ -714,14 +722,19 @@
 									@update="update && preview(update)"
 								/>
 							</ul>
-						</section>
+						</UiSection>
 					</template>
-					<section v-if="builtinResults.length" class="marketplace-installed-group">
-						<header class="marketplace-installed-group__heading">
-							<h3>
-								{{ t('marketplace.builtin') }} <span>{{ n(builtinResults.length) }}</span>
-							</h3>
-						</header>
+					<UiSection
+						v-if="builtinResults.length"
+						v-model:open="installedGroupOpen.builtin"
+						class="marketplace-installed-group"
+						:title="t('marketplace.builtin')"
+						:icon="Blocks"
+						collapsible
+					>
+						<template #actions>
+							<span class="marketplace-installed-count">{{ n(builtinResults.length) }}</span>
+						</template>
 						<ul class="marketplace-installed-cards">
 							<MarketplaceInstalledCard
 								v-for="item in builtinResults"
@@ -741,17 +754,43 @@
 								@open="emit('openApplication', item.key)"
 							/>
 						</ul>
-					</section>
+					</UiSection>
 				</div>
-				<div class="marketplace-management-section">
-					<MarketplaceRepositories
-						:api="api"
-						:repositories="repositories"
-						:minimized="minimized"
-						:log="log"
-						@changed="discover"
-					/>
-				</div>
+				<UiSection
+					v-if="retained.length"
+					class="marketplace-management-section"
+					:title="t('marketplace.retainedData')"
+					:icon="Database"
+				>
+					<UiList>
+						<UiListItem
+							v-for="item in retained"
+							:key="item.pluginId"
+							:title="item.pluginId"
+							:description="item.version"
+						>
+							<template #actions>
+								<UiButton
+									tone="danger"
+									:disabled="activeIds.has(item.pluginId)"
+									@click="
+										clearTarget = item;
+										clearOpen = true;
+									"
+								>
+									{{ t('marketplace.clearData') }}
+								</UiButton>
+							</template>
+						</UiListItem>
+					</UiList>
+				</UiSection>
+				<MarketplaceRepositories
+					:api="api"
+					:repositories="repositories"
+					:minimized="minimized"
+					:log="log"
+					@changed="discover"
+				/>
 				<UiSection
 					v-if="attempts.length"
 					class="marketplace-management-section"
@@ -777,33 +816,6 @@
 									@click="dismissAttempt(target.pluginId)"
 									>{{ t('marketplace.dismissAttempt') }}</UiButton
 								>
-							</template>
-						</UiListItem>
-					</UiList>
-				</UiSection>
-				<UiSection
-					v-if="retained.length"
-					class="marketplace-management-section"
-					:title="t('marketplace.retainedData')"
-				>
-					<UiList>
-						<UiListItem
-							v-for="item in retained"
-							:key="item.pluginId"
-							:title="item.pluginId"
-							:description="item.version"
-						>
-							<template #actions>
-								<UiButton
-									tone="danger"
-									:disabled="activeIds.has(item.pluginId)"
-									@click="
-										clearTarget = item;
-										clearOpen = true;
-									"
-								>
-									{{ t('marketplace.clearData') }}
-								</UiButton>
 							</template>
 						</UiListItem>
 					</UiList>
@@ -1198,7 +1210,6 @@
 	.marketplace-nav__item {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
 		height: 30px;
 		padding: 0 12px;
 		border: 0;
@@ -1223,20 +1234,6 @@
 		color: var(--ui-primary);
 		font-weight: 600;
 		box-shadow: 0 1px 4px color-mix(in srgb, #241b35 10%, transparent);
-	}
-	.marketplace-nav__count {
-		padding: 1px 6px;
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--ui-text) 6%, transparent);
-		color: var(--ui-muted);
-		font-size: 11px;
-		font-weight: 550;
-		font-variant-numeric: tabular-nums;
-		line-height: 15px;
-	}
-	.marketplace-nav__item[aria-pressed='true'] .marketplace-nav__count {
-		background: color-mix(in srgb, var(--ui-primary) 13%, transparent);
-		color: var(--ui-primary);
 	}
 	.marketplace-actions {
 		display: flex;
@@ -1316,10 +1313,6 @@
 		--ui-dialog-width: 460px;
 		--ui-dialog-radius: 16px;
 		--ui-dialog-padding: 20px;
-	}
-	:global(.marketplace-uninstall-dialog .ui-dialog__footer) {
-		padding-block: 12px 16px;
-		border-block-start: 1px solid var(--ui-border);
 	}
 	.marketplace-uninstall {
 		display: grid;
@@ -1437,27 +1430,24 @@
 	.marketplace-installed-group + .marketplace-installed-group {
 		margin-top: 22px;
 	}
-	.marketplace-installed-group__heading {
-		margin-bottom: 10px;
+	.marketplace-installed-group {
+		--ui-layout-gap: 10px;
+		--ui-section-icon-color: var(--ui-muted);
+	}
+	.marketplace-installed-group :deep(.ui-section__header) {
 		padding-inline: 2px;
 	}
-	.marketplace-installed-group__heading > h3 {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		margin: 0;
-		color: var(--ui-text);
-		font-size: 14.5px;
+	.marketplace-installed-count {
+		box-sizing: border-box;
+		min-inline-size: 26px;
+		padding: 3px 7px;
+		border-radius: 6px;
+		font-size: 12px;
 		font-weight: 600;
-	}
-	.marketplace-installed-group__heading > h3 > span {
-		font-size: 10.5px;
-		font-weight: 550;
 		font-variant-numeric: tabular-nums;
 		color: var(--ui-muted);
 		background: color-mix(in srgb, var(--ui-text) 6%, transparent);
-		border-radius: 6px;
-		padding: 2px 6px;
+		text-align: center;
 	}
 	.marketplace-installed-cards {
 		display: grid;

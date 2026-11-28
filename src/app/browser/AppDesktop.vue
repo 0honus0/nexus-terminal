@@ -23,6 +23,7 @@
 	import type { PluginRuntimeInfo } from '../../plugin/plugin-state-types.js';
 	import { SettingsApp, SettingsTile } from '../../settings/browser/settings-api.js';
 	import type { SettingsPreferencesApi } from '../../settings/browser/settings-preferences-api.js';
+	import { WindowTitlebarHeights } from '../../settings/settings-types.js';
 	import type { AuthApi } from '../../auth/browser/auth-api.js';
 
 	const { contributions, log, signingOut, state, pluginRuntime, pluginsReady, preferences, auth, windowLauncher } =
@@ -89,7 +90,10 @@
 			icon: Archive,
 			color: 'var(--ui-app-steel)',
 			tileSize: { w: 2, h: 1 },
-			size: { width: 920, height: 760 },
+
+			get size() {
+				return { width: 680, height: 528 + WindowTitlebarHeights[settings.value.windowTitlebarSize] };
+			},
 		},
 	];
 	const marketplaceBuiltins = computed(() =>
@@ -217,6 +221,7 @@
 		:log="log"
 		:escape-action="settings.escapeAction"
 		:window-launcher="windowLauncher"
+		:style="{ '--ui-window-titlebar-height': WindowTitlebarHeights[settings.windowTitlebarSize] + 'px' }"
 	>
 		<template #tile="{ application, size, open }">
 			<MarketplaceTile

@@ -24,7 +24,7 @@ const CellSchema = z.union([
 ]);
 
 const ArchiveSchema = z.strictObject({
-	packages: z.array(BackupPackageSchema).optional(),
+	packages: z.array(BackupPackageSchema),
 	entries: z.array(
 		z.strictObject({
 			pluginId: z.string(),
@@ -36,6 +36,8 @@ const ArchiveSchema = z.strictObject({
 });
 
 type Archive = z.infer<typeof ArchiveSchema>;
+
+type ArchiveData = Pick<Archive, 'entries'>;
 
 type ArchiveEntry = Archive['entries'][number];
 
@@ -176,7 +178,7 @@ export class BackupDataApi {
 		return this.#storage.clearPluginData(pluginId, signal);
 	}
 
-	export(scope: PluginScopeApi): Promise<Archive> {
+	export(scope: PluginScopeApi): Promise<ArchiveData> {
 		return this.#database.withClient((client) =>
 			client
 				.$extendTables<BackupTables>()
@@ -220,8 +222,8 @@ export class BackupDataApi {
 
 	parse(data: unknown): Archive {
 		const archive = ArchiveSchema.parse(data);
-		const packages = new Map(archive.packages?.map((item) => [item.pluginId, item]));
-		if (packages.size !== (archive.packages?.length ?? 0)) throw new CodedError('BACKUP_DUPLICATE_PACKAGE');
+		const packages = new Map(archive.packages.map((item) => [item.pluginId, item]));
+		if (packages.size !== archive.packages.length) throw new CodedError('BACKUP_DUPLICATE_PACKAGE');
 		const versions = new Map<string, string>();
 		const seen = new Set<string>();
 		for (const { pluginId, pluginVersion, table, rows } of archive.entries) {
@@ -309,7 +311,7 @@ export class BackupDataApi {
 	}
 
 	/** 预览与实际恢复都在首次写入前检查整批变更。恢复会在当前事务内重新生成计划。 */
-	async #prepareRestore(db: Connection, archive: Archive, scope: PluginScopeApi) {
+	async #prepareRestore(db: Connection, archive: ArchiveData, scope: PluginScopeApi) {
 		const mutations = await this.#plan(db, archive, scope);
 		const guards = await loadWriteGuards(db, mutations);
 		for (const mutation of mutations) {
@@ -319,7 +321,7 @@ export class BackupDataApi {
 		return { mutations, guards };
 	}
 
-	async #plan(db: Connection, archive: Archive, scope: PluginScopeApi): Promise<Mutation[]> {
+	async #plan(db: Connection, archive: ArchiveData, scope: PluginScopeApi): Promise<Mutation[]> {
 		const mutations: Mutation[] = [];
 		for (const entry of archive.entries) {
 			const { pluginId, table, rows } = entry;

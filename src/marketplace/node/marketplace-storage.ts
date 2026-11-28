@@ -56,6 +56,7 @@ export const marketplaceMigrations: MigrationProvider = {
 						.addColumn('version', 'text', (column) => column.notNull())
 						.addColumn('directory', 'text', (column) => column.notNull())
 						.addColumn('source', 'text', (column) => column.notNull())
+						.addColumn('repositoryId', 'text')
 						.addColumn('enabled', 'integer', (column) => column.notNull().defaultTo(0))
 						.execute();
 				},
@@ -73,7 +74,10 @@ export const marketplaceMigrations: MigrationProvider = {
 			},
 			'003_managed_packages': {
 				async up(db) {
-					await db.schema.alterTable(table).addColumn('repositoryId', 'text').execute();
+					// Installations that already ran the original 001 step still need this column.
+					const installed = (await db.introspection.getTables()).find(({ name }) => name === table);
+					if (!installed?.columns.some(({ name }) => name === 'repositoryId'))
+						await db.schema.alterTable(table).addColumn('repositoryId', 'text').execute();
 					await db.schema
 						.createTable(retained)
 						.addColumn('pluginId', 'text', (column) => column.primaryKey())

@@ -366,7 +366,7 @@
 		background: none;
 		border: 0;
 		color: inherit;
-		padding: 6px 12px;
+		padding: 0 12px;
 		font: inherit;
 		font-size: 13px;
 		line-height: 18px;
@@ -376,8 +376,6 @@
 		cursor: pointer;
 	}
 	.window-tab:has([data-state='active']) .window-tab__trigger {
-		padding-top: 8px;
-		padding-bottom: 9px;
 		font-weight: 560;
 	}
 	.window-tab:has(> [data-ui='button']) .window-tab__trigger {
